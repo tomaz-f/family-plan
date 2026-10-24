@@ -197,6 +197,14 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activeTabInitial]);
 
+  useEffect(() => {
+    setSelectedTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    setSelectedLang(language);
+  }, [language]);
+
   if (!isOpen) return null;
 
   const primaryUrl = state.networkInfo?.primaryUrl || window.location.origin;

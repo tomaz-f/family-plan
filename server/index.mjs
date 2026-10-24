@@ -318,7 +318,7 @@ app.put('/api/settings', async (req, res) => {
     if (typeof language === 'string' && (language === 'en' || language === 'pt-BR')) {
       setSetting('language', language);
     }
-    if (typeof theme === 'string' && ['light', 'dark', 'tokyo-night'].includes(theme)) {
+    if (typeof theme === 'string' && ['light', 'dark', 'tokyo-night', 'oled'].includes(theme)) {
       setSetting('theme', theme);
     }
     if (typeof initialBalance === 'number' && !Number.isNaN(initialBalance)) {

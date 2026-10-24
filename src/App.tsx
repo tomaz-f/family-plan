@@ -496,6 +496,40 @@ export const App: React.FC = () => {
     tankCapacity?: number;
     targetCurrentBalance?: number;
   }) => {
+    // Immediate optimistic update for responsive UI (theme, language, familyName, etc.)
+    if (payload.theme) {
+      document.documentElement.setAttribute('data-theme', payload.theme);
+      try {
+        localStorage.setItem('familyplan_theme', payload.theme);
+      } catch {}
+    }
+
+    let nextInitial = payload.initialBalance ?? state.settings.initialBalance;
+    if (typeof payload.targetCurrentBalance === 'number') {
+      let inc = 0;
+      let exp = 0;
+      for (const tx of state.transactions) {
+        if (tx.status === 'unpaid' || tx.cardId) continue;
+        if (tx.type === 'income') inc += tx.amount;
+        else exp += tx.amount;
+      }
+      nextInitial = payload.targetCurrentBalance - inc + exp;
+    }
+
+    const optimisticState: AppState = {
+      ...state,
+      settings: {
+        ...state.settings,
+        familyName: payload.familyName ?? state.settings.familyName,
+        currency: payload.currency ?? state.settings.currency,
+        language: payload.language ?? state.settings.language,
+        theme: payload.theme ?? state.settings.theme,
+        tankCapacity: payload.tankCapacity ?? state.settings.tankCapacity,
+        initialBalance: nextInitial,
+      },
+    };
+    saveStateToCache(optimisticState);
+
     try {
       const res = await fetch('/api/settings', {
         method: 'PUT',
@@ -506,29 +540,7 @@ export const App: React.FC = () => {
       const data: AppState = await res.json();
       saveStateToCache(data);
     } catch {
-      let nextInitial = payload.initialBalance ?? state.settings.initialBalance;
-      if (typeof payload.targetCurrentBalance === 'number') {
-        let inc = 0;
-        let exp = 0;
-        for (const tx of state.transactions) {
-          if (tx.status === 'unpaid' || tx.cardId) continue;
-          if (tx.type === 'income') inc += tx.amount;
-          else exp += tx.amount;
-        }
-        nextInitial = payload.targetCurrentBalance - inc + exp;
-      }
-      saveStateToCache({
-        ...state,
-        settings: {
-          ...state.settings,
-          familyName: payload.familyName ?? state.settings.familyName,
-          currency: payload.currency ?? state.settings.currency,
-          language: payload.language ?? state.settings.language,
-          theme: payload.theme ?? state.settings.theme,
-          tankCapacity: payload.tankCapacity ?? state.settings.tankCapacity,
-          initialBalance: nextInitial,
-        },
-      });
+      // Optimistic state is already applied and cached
     }
   };
 
