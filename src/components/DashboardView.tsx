@@ -15,6 +15,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   Clock,
+  Layers,
+  CreditCard as CreditCardIcon,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -31,8 +33,9 @@ import {
   Area,
   Legend,
 } from 'recharts';
-import { AppLanguage, AppTheme, Category, Transaction, TransactionType } from '../types';
+import { AppLanguage, AppTheme, Category, CreditCard, Transaction, TransactionType } from '../types';
 import {
+  computeCardFirstInvoiceMonth,
   formatCurrency,
   formatMonthLabel,
   formatShortDate,
@@ -49,6 +52,7 @@ interface DashboardViewProps {
   theme: AppTheme;
   initialBalance?: number;
   categories: Category[];
+  creditCards?: CreditCard[];
   transactions: Transaction[];
   onOpenAddModal: (type: TransactionType) => void;
   onOpenEditModal: (tx: Transaction) => void;
@@ -65,6 +69,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   theme,
   initialBalance = 0,
   categories,
+  creditCards = [],
   transactions,
   onOpenAddModal,
   onOpenEditModal,
@@ -209,6 +214,114 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return list;
   }, [monthTransactions, categoryMap, monthStats.expense, language]);
 
+  // Monthly Commitment with Installments (exact logic from ReportsView installment tracker)
+  const installmentCommitment = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        monthlyAmount: number;
+        totalInstallments: number;
+        paidCount: number;
+        unpaidCount: number;
+      }
+    >();
+
+    const instTransactions = transactions.filter(
+      (tx) => tx.type === 'expense' && tx.installmentTotal && tx.installmentTotal > 1
+    );
+
+    for (const tx of instTransactions) {
+      const groupKey =
+        tx.recurringId ||
+        `${tx.description.trim().toLowerCase()}__${tx.categoryId}__${tx.installmentTotal}`;
+      const existing = groups.get(groupKey);
+      const isPaid = (tx.status ?? 'paid') === 'paid';
+      const totNum = tx.installmentTotal || 2;
+
+      if (!existing) {
+        groups.set(groupKey, {
+          monthlyAmount: tx.amount,
+          totalInstallments: totNum,
+          paidCount: isPaid ? 1 : 0,
+          unpaidCount: isPaid ? 0 : 1,
+        });
+      } else {
+        if (isPaid) {
+          existing.paidCount += 1;
+        } else {
+          existing.unpaidCount += 1;
+        }
+        if (totNum > existing.totalInstallments) {
+          existing.totalInstallments = totNum;
+        }
+      }
+    }
+
+    let commitment = 0;
+    for (const plan of groups.values()) {
+      const remaining =
+        plan.unpaidCount > 0
+          ? plan.unpaidCount
+          : Math.max(0, plan.totalInstallments - plan.paidCount);
+      if (remaining > 0) {
+        commitment += plan.monthlyAmount;
+      }
+    }
+
+    return commitment;
+  }, [transactions]);
+
+  // Total Open/Pending Credit Card Invoices for selectedMonth
+  const openInvoicesTotal = useMemo(() => {
+    let total = 0;
+    const handledTxIds = new Set<string>();
+
+    if (creditCards && creditCards.length > 0) {
+      for (const card of creditCards) {
+        const currentSettledKey = `${card.id}__${selectedMonth}`;
+        const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === currentSettledKey);
+        const isSettled = Boolean(settlementTx && settlementTx.status === 'paid');
+
+        if (!isSettled) {
+          if (settlementTx && settlementTx.status === 'unpaid') {
+            total += settlementTx.amount;
+            handledTxIds.add(settlementTx.id);
+          } else {
+            const cardTxs = transactions.filter((tx) => tx.cardId === card.id);
+            for (const tx of cardTxs) {
+              const invMonth =
+                tx.invoiceMonth ||
+                computeCardFirstInvoiceMonth(tx.purchaseDate || tx.date, card.closingDay).invoiceMonth;
+              if (invMonth === selectedMonth) {
+                total += tx.amount || 0;
+                handledTxIds.add(tx.id);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    for (const tx of monthTransactions) {
+      if (handledTxIds.has(tx.id)) continue;
+      if (tx.status === 'unpaid' && tx.type === 'expense') {
+        const cat = categoryMap.get(tx.categoryId);
+        const isCardCat =
+          cat &&
+          (cat.icon === 'CreditCard' ||
+            cat.name.toLowerCase().includes('fatura') ||
+            cat.name.toLowerCase().includes('crédito') ||
+            cat.name.toLowerCase().includes('credit'));
+        const isCardDesc = tx.description.toLowerCase().includes('fatura');
+        if (isCardCat || isCardDesc || tx.cardId) {
+          total += tx.amount || 0;
+        }
+      }
+    }
+
+    return total;
+  }, [creditCards, transactions, monthTransactions, selectedMonth, categoryMap]);
+
   // 6-Month Cash Flow Data ending at selectedMonth (Paid only)
   const sixMonthTrend = useMemo(() => {
     const months: string[] = [];
@@ -314,8 +427,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* SELECTED MONTH KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* PRIMARY KPI CARDS: ENTRADAS & DESPESAS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Monthly Inputs */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-center gap-1.5 mb-2">
@@ -363,62 +476,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Monthly Net Balance */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.monthlyNetFlow}
-            </span>
-            <div
-              className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                monthStats.net >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'
-              }`}
-            >
-              {monthStats.net >= 0 ? <TrendingUp size={17} /> : <TrendingDown size={17} />}
-            </div>
-          </div>
-          <p
-            className={`text-2xl font-extrabold ${
-              monthStats.net >= 0 ? 'text-slate-900' : 'text-rose-500'
-            }`}
-          >
-            {monthStats.net >= 0 ? '+' : ''}
-            {formatCurrency(monthStats.net, currency)}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {monthStats.net >= 0 ? t.surplusAdded : t.spentMoreThanInputs}
-          </p>
-        </div>
-
-        {/* Savings Rate */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.monthlyKeptSaved}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-500 flex items-center justify-center">
-              <PieChartIcon size={17} />
-            </div>
-          </div>
-          <p className="text-2xl font-extrabold text-slate-900">
-            {monthStats.income > 0 ? `${monthStats.savingsRate.toFixed(1)}%` : '—'}
-          </p>
-          <div className="w-full h-2 rounded-full bg-slate-100 mt-2 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                monthStats.savingsRate >= 20
-                  ? 'bg-emerald-500'
-                  : monthStats.savingsRate >= 0
-                  ? 'bg-amber-500'
-                  : 'bg-rose-500'
-              }`}
-              style={{
-                width: `${Math.min(100, Math.max(0, monthStats.savingsRate))}%`,
-              }}
-            />
           </div>
         </div>
       </div>
@@ -556,6 +613,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Bar dataKey="Expenses" fill="#f43f5e" radius={[6, 6, 0, 0]} maxBarSize={32} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* SECONDARY KPI CARDS: PARCELAMENTOS & FATURAS EM ABERTO */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Comprometimento com Parcelamentos */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-center gap-1.5 mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Parcelamentos
+            </span>
+            <div className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+              <Layers size={13} strokeWidth={2.5} />
+            </div>
+          </div>
+          <div className="text-center my-auto py-2">
+            <p className="text-2xl font-black text-rose-500 tracking-tight">
+              {installmentCommitment > 0
+                ? `-${formatCurrency(installmentCommitment, currency)}`
+                : formatCurrency(0, currency)}
+            </p>
+          </div>
+        </div>
+
+        {/* Total de Faturas em Aberto */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-center gap-1.5 mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              FATURAS EM ABERTO
+            </span>
+            <div className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+              <CreditCardIcon size={13} strokeWidth={2.5} />
+            </div>
+          </div>
+          <div className="text-center my-auto py-2">
+            <p className="text-2xl font-black text-amber-500 dark:text-amber-400 tracking-tight">
+              {openInvoicesTotal > 0
+                ? `-${formatCurrency(openInvoicesTotal, currency)}`
+                : formatCurrency(0, currency)}
+            </p>
           </div>
         </div>
       </div>

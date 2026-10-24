@@ -946,6 +946,7 @@ export const App: React.FC = () => {
               theme={theme}
               initialBalance={state.settings.initialBalance}
               categories={state.categories}
+              creditCards={state.creditCards || []}
               transactions={state.transactions}
               onOpenAddModal={handleOpenAddModal}
               onOpenEditModal={handleOpenEditModal}
