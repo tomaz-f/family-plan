@@ -1,0 +1,225 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* =========================================================
+   DARK THEME
+   ========================================================= */
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] .app-shell {
+  background-color: #0b1120 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .bg-white {
+  background-color: #1e293b !important;
+}
+
+html[data-theme="dark"] .bg-white\/95 {
+  background-color: rgba(15, 23, 42, 0.92) !important;
+}
+
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-slate-50\/70,
+html[data-theme="dark"] .bg-slate-100,
+html[data-theme="dark"] .bg-slate-100\/80 {
+  background-color: #0f172a !important;
+}
+
+html[data-theme="dark"] .bg-slate-200,
+html[data-theme="dark"] .bg-slate-200\/80 {
+  background-color: #334155 !important;
+}
+
+html[data-theme="dark"] .hover\:bg-slate-50:hover,
+html[data-theme="dark"] .hover\:bg-slate-50\/70:hover,
+html[data-theme="dark"] .hover\:bg-slate-50\/80:hover,
+html[data-theme="dark"] .hover\:bg-slate-100:hover {
+  background-color: #334155 !important;
+}
+
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-slate-200\/60,
+html[data-theme="dark"] .border-slate-200\/70,
+html[data-theme="dark"] .border-slate-200\/80,
+html[data-theme="dark"] .border-slate-200\/90,
+html[data-theme="dark"] .border-slate-300 {
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .text-slate-900,
+html[data-theme="dark"] .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] input:not([type="checkbox"]),
+html[data-theme="dark"] select {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .bg-slate-900 {
+  background-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .hover\:bg-slate-800:hover {
+  background-color: #2563eb !important;
+}
+
+html[data-theme="dark"] .bg-indigo-50,
+html[data-theme="dark"] .bg-indigo-50\/40,
+html[data-theme="dark"] .bg-indigo-50\/30 {
+  background-color: rgba(99, 102, 241, 0.14) !important;
+  color: #e0e7ff !important;
+}
+
+/* =========================================================
+   TOKYO NIGHT THEME (#1a1b26 / #24283b / #c0caf5 / #7aa2f7)
+   ========================================================= */
+html[data-theme="tokyo-night"] {
+  color-scheme: dark;
+}
+
+html[data-theme="tokyo-night"] body,
+html[data-theme="tokyo-night"] .app-shell {
+  background-color: #1a1b26 !important;
+  color: #c0caf5 !important;
+}
+
+html[data-theme="tokyo-night"] .hero-card {
+  background: linear-gradient(135deg, #1f2335 0%, #24283b 55%, #16161e 100%) !important;
+  border-color: #3b4261 !important;
+}
+
+html[data-theme="tokyo-night"] .bg-white {
+  background-color: #24283b !important;
+}
+
+html[data-theme="tokyo-night"] .bg-white\/95 {
+  background-color: rgba(26, 27, 38, 0.92) !important;
+}
+
+html[data-theme="tokyo-night"] .bg-slate-50,
+html[data-theme="tokyo-night"] .bg-slate-50\/70,
+html[data-theme="tokyo-night"] .bg-slate-100,
+html[data-theme="tokyo-night"] .bg-slate-100\/80 {
+  background-color: #1f2335 !important;
+}
+
+html[data-theme="tokyo-night"] .bg-slate-200,
+html[data-theme="tokyo-night"] .bg-slate-200\/80 {
+  background-color: #292e42 !important;
+}
+
+html[data-theme="tokyo-night"] .hover\:bg-slate-50:hover,
+html[data-theme="tokyo-night"] .hover\:bg-slate-50\/70:hover,
+html[data-theme="tokyo-night"] .hover\:bg-slate-50\/80:hover,
+html[data-theme="tokyo-night"] .hover\:bg-slate-100:hover {
+  background-color: #292e42 !important;
+}
+
+html[data-theme="tokyo-night"] .border-slate-100,
+html[data-theme="tokyo-night"] .border-slate-200,
+html[data-theme="tokyo-night"] .border-slate-200\/60,
+html[data-theme="tokyo-night"] .border-slate-200\/70,
+html[data-theme="tokyo-night"] .border-slate-200\/80,
+html[data-theme="tokyo-night"] .border-slate-200\/90,
+html[data-theme="tokyo-night"] .border-slate-300 {
+  border-color: #3b4261 !important;
+}
+
+html[data-theme="tokyo-night"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #292e42 !important;
+}
+
+html[data-theme="tokyo-night"] .text-slate-900,
+html[data-theme="tokyo-night"] .text-slate-800 {
+  color: #c0caf5 !important;
+}
+
+html[data-theme="tokyo-night"] .text-slate-700,
+html[data-theme="tokyo-night"] .text-slate-600 {
+  color: #a9b1d6 !important;
+}
+
+html[data-theme="tokyo-night"] .text-slate-500,
+html[data-theme="tokyo-night"] .text-slate-400 {
+  color: #787c99 !important;
+}
+
+html[data-theme="tokyo-night"] input:not([type="checkbox"]),
+html[data-theme="tokyo-night"] select {
+  background-color: #1a1b26 !important;
+  border-color: #3b4261 !important;
+  color: #c0caf5 !important;
+}
+
+html[data-theme="tokyo-night"] .bg-slate-900 {
+  background-color: #7aa2f7 !important;
+  color: #1a1b26 !important;
+}
+
+html[data-theme="tokyo-night"] .hover\:bg-slate-800:hover {
+  background-color: #89ddff !important;
+  color: #1a1b26 !important;
+}
+
+html[data-theme="tokyo-night"] .text-emerald-500,
+html[data-theme="tokyo-night"] .text-emerald-600 {
+  color: #73daca !important;
+}
+
+html[data-theme="tokyo-night"] .text-rose-500,
+html[data-theme="tokyo-night"] .text-rose-600 {
+  color: #f7768e !important;
+}
+
+html[data-theme="tokyo-night"] .text-indigo-500,
+html[data-theme="tokyo-night"] .text-indigo-600 {
+  color: #bb9af7 !important;
+}
+
+html[data-theme="tokyo-night"] .bg-indigo-50,
+html[data-theme="tokyo-night"] .bg-indigo-50\/40,
+html[data-theme="tokyo-night"] .bg-indigo-50\/30 {
+  background-color: rgba(187, 154, 247, 0.14) !important;
+  border-color: rgba(187, 154, 247, 0.35) !important;
+  color: #c0caf5 !important;
+}
+
+@media print {
+  html[data-theme="dark"] body,
+  html[data-theme="tokyo-night"] body,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+}
