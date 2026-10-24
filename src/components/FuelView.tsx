@@ -97,14 +97,50 @@ export const FuelView: React.FC<FuelViewProps> = ({
   // Tank size inline input
   const [tankInput, setTankInput] = useState(String(tankCapacity || 50));
 
-  const gridStroke = theme === 'tokyo-night' ? '#292e42' : theme === 'dark' ? '#334155' : '#f1f5f9';
-  const axisTickColor = theme === 'tokyo-night' ? '#787c99' : theme === 'dark' ? '#94a3b8' : '#64748b';
+  const gridStroke =
+    theme === 'oled'
+      ? '#1c1e24'
+      : theme === 'tokyo-night'
+      ? '#292e42'
+      : theme === 'dark'
+      ? '#334155'
+      : '#f1f5f9';
+  const axisTickColor =
+    theme === 'oled'
+      ? '#8E929B'
+      : theme === 'tokyo-night'
+      ? '#787c99'
+      : theme === 'dark'
+      ? '#94a3b8'
+      : '#64748b';
   const tooltipStyle = useMemo(
     () => ({
       borderRadius: '12px',
-      border: `1px solid ${theme === 'tokyo-night' ? '#3b4261' : theme === 'dark' ? '#334155' : '#e2e8f0'}`,
-      backgroundColor: theme === 'tokyo-night' ? '#1f2335' : theme === 'dark' ? '#0f172a' : '#ffffff',
-      color: theme === 'tokyo-night' ? '#c0caf5' : theme === 'dark' ? '#f8fafc' : '#0f172a',
+      border: `1px solid ${
+        theme === 'oled'
+          ? '#212328'
+          : theme === 'tokyo-night'
+          ? '#3b4261'
+          : theme === 'dark'
+          ? '#334155'
+          : '#e2e8f0'
+      }`,
+      backgroundColor:
+        theme === 'oled'
+          ? '#141518'
+          : theme === 'tokyo-night'
+          ? '#1f2335'
+          : theme === 'dark'
+          ? '#0f172a'
+          : '#ffffff',
+      color:
+        theme === 'oled'
+          ? '#F4F5F7'
+          : theme === 'tokyo-night'
+          ? '#c0caf5'
+          : theme === 'dark'
+          ? '#f8fafc'
+          : '#0f172a',
       fontSize: '12px',
     }),
     [theme]

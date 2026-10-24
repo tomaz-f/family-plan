@@ -23,6 +23,7 @@ import {
   Languages,
   Landmark,
   SlidersHorizontal,
+  Contrast,
 } from 'lucide-react';
 import { AppLanguage, AppState, AppTheme, Category, TransactionType } from '../types';
 import { CURRENCIES, formatCurrency } from '../utils/format';
@@ -687,7 +688,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
                   {t.appThemeLabel}
                 </label>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -734,6 +735,23 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                   >
                     <Sparkles size={15} />
                     {t.themeTokyo}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTheme('oled');
+                      onUpdateSettings({ theme: 'oled' });
+                    }}
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                      selectedTheme === 'oled'
+                        ? 'border-blue-500 bg-[#000000] text-white shadow-sm ring-1 ring-blue-500/60'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                    title={t.themeOled}
+                  >
+                    <Contrast size={15} className="text-blue-400" />
+                    <span>OLED</span>
                   </button>
                 </div>
               </div>

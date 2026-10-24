@@ -113,7 +113,10 @@ export const App: React.FC = () => {
 
   const language: AppLanguage = state.settings.language === 'en' ? 'en' : 'pt-BR';
   const theme: AppTheme =
-    state.settings.theme === 'dark' || state.settings.theme === 'tokyo-night' || state.settings.theme === 'light'
+    state.settings.theme === 'dark' ||
+    state.settings.theme === 'tokyo-night' ||
+    state.settings.theme === 'light' ||
+    state.settings.theme === 'oled'
       ? state.settings.theme
       : 'tokyo-night';
 
@@ -121,6 +124,9 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('familyplan_theme', theme);
+    } catch {}
   }, [theme]);
 
   const saveStateToCache = useCallback((nextState: AppState) => {
@@ -527,7 +533,7 @@ export const App: React.FC = () => {
   };
 
   const handleCycleTheme = () => {
-    const order: AppTheme[] = ['light', 'dark', 'tokyo-night'];
+    const order: AppTheme[] = ['light', 'dark', 'tokyo-night', 'oled'];
     const next = order[(order.indexOf(theme) + 1) % order.length];
     handleUpdateSettings({ theme: next });
   };
@@ -866,7 +872,13 @@ export const App: React.FC = () => {
   };
 
   const themeBadgeLabel =
-    theme === 'tokyo-night' ? t.themeTokyo : theme === 'dark' ? t.themeDark : t.themeLight;
+    theme === 'oled'
+      ? t.themeOled
+      : theme === 'tokyo-night'
+      ? t.themeTokyo
+      : theme === 'dark'
+      ? t.themeDark
+      : t.themeLight;
 
   return (
     <div className="app-shell min-h-screen flex flex-col bg-slate-50 text-slate-900 pb-24 transition-colors">

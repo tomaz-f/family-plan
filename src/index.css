@@ -215,9 +215,222 @@ html[data-theme="tokyo-night"] .bg-indigo-50\/30 {
   color: #c0caf5 !important;
 }
 
+/* =========================================================
+   OLED TRUE BLACK THEME (Cockpit Automotivo Minimalista)
+   #000000 puro, ardósia/grafite neutro (#111215 / #141518)
+   bordas sutis (#212328), acentos cobalto/royal (#2563eb / #3b82f6)
+   ========================================================= */
+html[data-theme="oled"] {
+  color-scheme: dark;
+}
+
+html[data-theme="oled"] body,
+html[data-theme="oled"] .app-shell {
+  background-color: #000000 !important;
+  color: #F4F5F7 !important;
+}
+
+/* Header fixo & Barra de navegação inferior */
+html[data-theme="oled"] header {
+  background-color: rgba(0, 0, 0, 0.95) !important;
+  border-color: #1c1e24 !important;
+}
+
+html[data-theme="oled"] .fixed.bottom-0 {
+  background-color: rgba(0, 0, 0, 0.95) !important;
+  border-color: #1c1e24 !important;
+}
+
+html[data-theme="oled"] .fixed.bottom-0 button.text-slate-900 {
+  color: #3b82f6 !important;
+}
+
+html[data-theme="oled"] .fixed.bottom-0 button.text-slate-400 {
+  color: #8E929B !important;
+}
+
+/* Card Principal de Saldo (Hero Card) */
+html[data-theme="oled"] .hero-card {
+  background: #111215 !important;
+  border-color: #212328 !important;
+  box-shadow: none !important;
+}
+
+/* Cards e superfícies gerais */
+html[data-theme="oled"] .bg-white {
+  background-color: #141518 !important;
+}
+
+html[data-theme="oled"] .bg-white\/95 {
+  background-color: rgba(20, 21, 24, 0.95) !important;
+}
+
+/* Superfícies secundárias, pills e fundos neutros */
+html[data-theme="oled"] .bg-slate-50,
+html[data-theme="oled"] .bg-slate-50\/70,
+html[data-theme="oled"] .bg-slate-100,
+html[data-theme="oled"] .bg-slate-100\/80,
+html[data-theme="oled"] .bg-slate-100\/90 {
+  background-color: #111215 !important;
+}
+
+html[data-theme="oled"] .bg-slate-200,
+html[data-theme="oled"] .bg-slate-200\/80 {
+  background-color: #1c1e24 !important;
+}
+
+html[data-theme="oled"] .bg-slate-800,
+html[data-theme="oled"] .bg-slate-800\/40,
+html[data-theme="oled"] .bg-slate-800\/50,
+html[data-theme="oled"] .bg-slate-800\/60,
+html[data-theme="oled"] .bg-slate-800\/70,
+html[data-theme="oled"] .bg-slate-800\/80,
+html[data-theme="oled"] .bg-slate-800\/90 {
+  background-color: #111215 !important;
+}
+
+html[data-theme="oled"] div.bg-slate-900,
+html[data-theme="oled"] .bg-slate-900\/60,
+html[data-theme="oled"] .bg-slate-900\/80,
+html[data-theme="oled"] .bg-slate-900\/90 {
+  background-color: #141518 !important;
+}
+
+/* Estados de Hover em botões e linhas */
+html[data-theme="oled"] .hover\:bg-slate-50:hover,
+html[data-theme="oled"] .hover\:bg-slate-50\/70:hover,
+html[data-theme="oled"] .hover\:bg-slate-50\/80:hover,
+html[data-theme="oled"] .hover\:bg-slate-100:hover,
+html[data-theme="oled"] .hover\:bg-slate-200:hover,
+html[data-theme="oled"] .hover\:bg-slate-800\/70:hover,
+html[data-theme="oled"] .hover\:bg-slate-800\/80:hover,
+html[data-theme="oled"] .hover\:bg-slate-800:hover {
+  background-color: #1c1e24 !important;
+}
+
+/* Bordas sutis de delimitação sem peso */
+html[data-theme="oled"] .border-slate-100,
+html[data-theme="oled"] .border-slate-200,
+html[data-theme="oled"] .border-slate-200\/50,
+html[data-theme="oled"] .border-slate-200\/60,
+html[data-theme="oled"] .border-slate-200\/70,
+html[data-theme="oled"] .border-slate-200\/80,
+html[data-theme="oled"] .border-slate-200\/90,
+html[data-theme="oled"] .border-slate-300,
+html[data-theme="oled"] .border-slate-700,
+html[data-theme="oled"] .border-slate-700\/40,
+html[data-theme="oled"] .border-slate-700\/50,
+html[data-theme="oled"] .border-slate-700\/60,
+html[data-theme="oled"] .border-slate-700\/80,
+html[data-theme="oled"] .border-slate-800,
+html[data-theme="oled"] .border-slate-800\/40,
+html[data-theme="oled"] .border-slate-800\/60,
+html[data-theme="oled"] .border-slate-800\/70,
+html[data-theme="oled"] .border-slate-800\/80,
+html[data-theme="oled"] .border-slate-800\/90 {
+  border-color: #212328 !important;
+}
+
+html[data-theme="oled"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="oled"] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1c1e24 !important;
+}
+
+/* Tipografia de alto contraste */
+html[data-theme="oled"] .text-slate-900,
+html[data-theme="oled"] .text-slate-800 {
+  color: #FFFFFF !important;
+}
+
+html[data-theme="oled"] .text-slate-700,
+html[data-theme="oled"] .text-slate-600 {
+  color: #D1D5DB !important;
+}
+
+html[data-theme="oled"] .text-slate-500,
+html[data-theme="oled"] .text-slate-400 {
+  color: #8E929B !important;
+}
+
+html[data-theme="oled"] .text-slate-300 {
+  color: #A0A5B1 !important;
+}
+
+/* Inputs, Selects e Caixas de Texto */
+html[data-theme="oled"] input:not([type="checkbox"]),
+html[data-theme="oled"] select,
+html[data-theme="oled"] textarea {
+  background-color: #0b0c0e !important;
+  border-color: #212328 !important;
+  color: #FFFFFF !important;
+}
+
+html[data-theme="oled"] input:focus,
+html[data-theme="oled"] select:focus,
+html[data-theme="oled"] textarea:focus {
+  border-color: #2563eb !important;
+  outline: none !important;
+}
+
+/* Botões primários com acento automotivo azul royal elétrico */
+html[data-theme="oled"] button.bg-slate-900,
+html[data-theme="oled"] button.bg-indigo-600 {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="oled"] button.bg-slate-900:hover,
+html[data-theme="oled"] button.bg-indigo-600:hover {
+  background-color: #1d4ed8 !important;
+}
+
+/* Valores Financeiros: Verde Menta Limpo e Coral Elegante */
+html[data-theme="oled"] .text-emerald-500,
+html[data-theme="oled"] .text-emerald-600 {
+  color: #10b981 !important;
+}
+
+html[data-theme="oled"] .text-rose-500,
+html[data-theme="oled"] .text-rose-600 {
+  color: #f43f5e !important;
+}
+
+html[data-theme="oled"] .text-indigo-500,
+html[data-theme="oled"] .text-indigo-400 {
+  color: #60a5fa !important;
+}
+
+/* Badges e Pílulas */
+html[data-theme="oled"] .bg-indigo-50,
+html[data-theme="oled"] .bg-indigo-50\/40,
+html[data-theme="oled"] .bg-indigo-50\/30 {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+  border-color: rgba(37, 99, 235, 0.28) !important;
+  color: #93c5fd !important;
+}
+
+html[data-theme="oled"] .bg-indigo-500\/10,
+html[data-theme="oled"] .bg-indigo-500\/20 {
+  background-color: rgba(37, 99, 235, 0.15) !important;
+  color: #93c5fd !important;
+}
+
+html[data-theme="oled"] .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+html[data-theme="oled"] .bg-amber-500\/10 {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+html[data-theme="oled"] .bg-rose-500\/10 {
+  background-color: rgba(244, 63, 94, 0.12) !important;
+}
+
 @media print {
   html[data-theme="dark"] body,
   html[data-theme="tokyo-night"] body,
+  html[data-theme="oled"] body,
   body {
     background: #ffffff !important;
     color: #0f172a !important;

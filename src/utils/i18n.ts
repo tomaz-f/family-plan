@@ -49,6 +49,7 @@ export const TRANSLATIONS = {
     themeLight: 'Light',
     themeDark: 'Dark',
     themeTokyo: 'Tokyo Night',
+    themeOled: 'OLED (True Black)',
 
     // Dashboard Hero
     currentBankBalance: 'Current Bank Account Balance',
@@ -610,6 +611,7 @@ export const TRANSLATIONS = {
     themeLight: 'Claro',
     themeDark: 'Escuro',
     themeTokyo: 'Tokyo Night',
+    themeOled: 'OLED (Preto Puro)',
 
     // Dashboard Hero
     currentBankBalance: 'Saldo Atual na Conta Bancária',

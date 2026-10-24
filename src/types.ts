@@ -1,6 +1,6 @@
 export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'paid' | 'unpaid';
-export type AppTheme = 'light' | 'dark' | 'tokyo-night';
+export type AppTheme = 'light' | 'dark' | 'tokyo-night' | 'oled';
 export type AppLanguage = 'en' | 'pt-BR';
 export type FuelType = 'gasoline' | 'ethanol';
 
