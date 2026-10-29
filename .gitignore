@@ -30,6 +30,7 @@ yarn-error.log*
 
 # Personal files & statements
 *.pdf
+familyplan-backup-*.json
 
 # Operating System & IDE files
 .DS_Store

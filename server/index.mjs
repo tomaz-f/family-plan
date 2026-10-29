@@ -3,13 +3,17 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+// FAMILYPLAN_DATA_DIR allows running against an isolated database (e.g. automated tests)
+const DATA_DIR = process.env.FAMILYPLAN_DATA_DIR
+  ? path.resolve(process.env.FAMILYPLAN_DATA_DIR)
+  : path.join(ROOT_DIR, 'data');
 const DB_PATH = path.join(DATA_DIR, 'familyplan.db');
 const PORT = Number(process.env.PORT || 3456);
 const isDev = process.argv.includes('--dev');
@@ -286,13 +290,144 @@ async function getFullState() {
       primaryUrl,
       lanUrls,
       qrCodeDataUrl,
-      dbPath: DB_PATH,
+      // Relative path only: never expose the absolute filesystem path / OS username to clients
+      dbPath: DB_PATH.startsWith(ROOT_DIR) ? path.relative(ROOT_DIR, DB_PATH) : path.basename(DB_PATH),
     },
   };
 }
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.disable('x-powered-by');
+
+// =========================================================
+// SECURITY MIDDLEWARE (transparent to legitimate users)
+// =========================================================
+
+// --- 1. Host header allow-list (blocks DNS rebinding attacks) ---
+// Rebinding requires an attacker-controlled DOMAIN NAME, so IP literals are always safe.
+const MACHINE_NAME = os.hostname().toLowerCase();
+const EXTRA_ALLOWED_HOSTS = String(process.env.ALLOWED_HOSTS || '')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
+function parseHostname(hostValue) {
+  const h = String(hostValue || '').trim().toLowerCase();
+  if (!h) return '';
+  if (h.startsWith('[')) {
+    const end = h.indexOf(']');
+    return end > 0 ? h.slice(1, end) : '';
+  }
+  return h.split(':')[0];
+}
+
+function isAllowedHostname(name) {
+  if (!name) return false;
+  if (name === 'localhost' || name.endsWith('.localhost')) return true;
+  if (IPV4_RE.test(name)) return true; // LAN / Tailscale / loopback IPs
+  if (name.includes(':')) return true; // IPv6 literal
+  if (name === MACHINE_NAME || name === `${MACHINE_NAME}.local` || name === `${MACHINE_NAME}.lan`) return true;
+  if (name.endsWith('.ts.net')) return true; // Tailscale MagicDNS
+  return EXTRA_ALLOWED_HOSTS.includes(name);
+}
+
+app.use((req, res, next) => {
+  if (!isAllowedHostname(parseHostname(req.headers.host))) {
+    return res.status(403).type('text/plain').send('Forbidden host');
+  }
+  next();
+});
+
+// --- 2. Security headers ---
+function computeInlineScriptHashes() {
+  try {
+    const html = fs.readFileSync(path.join(ROOT_DIR, 'dist', 'index.html'), 'utf8');
+    const hashes = [];
+    const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+    let m;
+    while ((m = re.exec(html))) {
+      if (m[1].trim()) {
+        hashes.push(`'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+      }
+    }
+    return hashes;
+  } catch {
+    return [];
+  }
+}
+
+const CSP = [
+  "default-src 'self'",
+  `script-src 'self' ${computeInlineScriptHashes().join(' ')}`.trim(),
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  // Vite dev server relies on inline/HMR scripts, so CSP is enforced only in production
+  if (!isDev) res.setHeader('Content-Security-Policy', CSP);
+  next();
+});
+
+// --- 3. Anti-CSRF guard for state-changing API calls ---
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+app.use('/api', (req, res, next) => {
+  if (SAFE_METHODS.has(req.method)) return next();
+
+  // Modern browsers label cross-site requests explicitly
+  if (req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'Cross-site request blocked' });
+  }
+
+  // When the browser sends an Origin, it must be this same server
+  const origin = req.get('origin');
+  if (origin) {
+    let originUrl;
+    try {
+      originUrl = new URL(origin);
+    } catch {
+      return res.status(403).json({ error: 'Invalid origin' });
+    }
+    const sameHost = originUrl.host.toLowerCase() === String(req.headers.host || '').toLowerCase();
+    // Legacy standalone Vite dev server (port 5173) proxies /api to this server
+    const viteDevProxy = originUrl.port === '5173' && isAllowedHostname(originUrl.hostname.toLowerCase());
+    if (!sameHost && !viteDevProxy) {
+      return res.status(403).json({ error: 'Cross-origin request blocked' });
+    }
+  }
+
+  // Body-carrying methods must be JSON: cross-site "simple" requests (forms, no-cors fetch)
+  // cannot send application/json without a CORS preflight, which this server never grants.
+  if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && !req.is('application/json')) {
+    return res.status(415).json({ error: 'Content-Type must be application/json' });
+  }
+  next();
+});
+
+// --- 4. Body size limits (large limit only for full backup import) ---
+app.use('/api/import', express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' }));
+
+// --- 5. Generic error responses (no stack traces / filesystem paths to clients) ---
+function sendServerError(res, err) {
+  console.error('[FamilyPlan API error]', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
 
 // GET full application state
 app.get('/api/state', async (_req, res) => {
@@ -300,7 +435,7 @@ app.get('/api/state', async (_req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -345,7 +480,7 @@ app.put('/api/settings', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -432,7 +567,7 @@ app.post('/api/transactions', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -580,7 +715,7 @@ app.put('/api/transactions/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -615,7 +750,7 @@ app.patch('/api/transactions/:id/status', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -672,7 +807,7 @@ app.delete('/api/transactions/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -713,7 +848,7 @@ app.post('/api/cards', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -739,7 +874,7 @@ app.put('/api/cards/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -751,7 +886,7 @@ app.delete('/api/cards/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -840,7 +975,7 @@ app.post('/api/cards/:id/pay-invoice', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -861,7 +996,7 @@ app.post('/api/categories', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -884,7 +1019,7 @@ app.put('/api/categories/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -895,7 +1030,7 @@ app.delete('/api/categories/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -935,7 +1070,7 @@ app.post('/api/recurring', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -964,7 +1099,7 @@ app.put('/api/recurring/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -975,7 +1110,7 @@ app.delete('/api/recurring/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -1060,7 +1195,7 @@ app.post('/api/fuel', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -1118,7 +1253,7 @@ app.put('/api/fuel/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -1136,7 +1271,7 @@ app.delete('/api/fuel/:id', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -1200,7 +1335,7 @@ app.post('/api/recurring/:id/apply', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -1254,140 +1389,237 @@ app.post('/api/recurring/apply-all', async (req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
+
+// =========================================================
+// INPUT SANITIZERS for bulk endpoints (sync / backup import)
+// Invalid records are skipped instead of corrupting balances.
+// =========================================================
+const ALLOWED_THEMES = ['light', 'dark', 'tokyo-night', 'oled'];
+const ALLOWED_LANGUAGES = ['en', 'pt-BR'];
+const DATE_PREFIX_RE = /^\d{4}-\d{2}-\d{2}/;
+const COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+const ICON_RE = /^[A-Za-z0-9]{1,40}$/;
+
+function cleanText(value, maxLen, fallback = '') {
+  if (value === null || value === undefined) return fallback;
+  return String(value).trim().slice(0, maxLen);
+}
+
+function isValidId(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 128;
+}
+
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function optionalInt(value, min, max) {
+  const n = finiteNumber(value);
+  if (n === null || !Number.isInteger(n) || n < min || n > max) return null;
+  return n;
+}
+
+function isValidDate(value) {
+  return typeof value === 'string' && value.length <= 30 && DATE_PREFIX_RE.test(value);
+}
+
+function sanitizeTransactionRecord(tx) {
+  if (!tx || typeof tx !== 'object' || !isValidId(tx.id)) return null;
+  const amount = finiteNumber(tx.amount);
+  if (amount === null) return null;
+  if (!isValidDate(tx.date)) return null;
+  if (!isValidId(tx.categoryId)) return null;
+  return {
+    id: tx.id,
+    type: tx.type === 'income' ? 'income' : 'expense',
+    status: tx.status === 'unpaid' ? 'unpaid' : 'paid',
+    amount,
+    description: cleanText(tx.description, 500),
+    categoryId: tx.categoryId,
+    date: tx.date,
+    notes: cleanText(tx.notes, 2000),
+    recurringId: isValidId(tx.recurringId) ? tx.recurringId : null,
+    dueDay: optionalInt(tx.dueDay, 1, 31),
+    installmentCurrent: optionalInt(tx.installmentCurrent, 1, 1000),
+    installmentTotal: optionalInt(tx.installmentTotal, 1, 1000),
+    createdAt: cleanText(tx.createdAt, 40) || new Date().toISOString(),
+  };
+}
 
 // POST sync offline transactions from mobile devices
 app.post('/api/sync', async (req, res) => {
   try {
-    const { pendingTransactions = [] } = req.body;
+    const { pendingTransactions = [] } = req.body || {};
     const insertTx = db.prepare(
       `INSERT OR REPLACE INTO transactions (id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, createdAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
-    for (const tx of pendingTransactions) {
-      if (!tx || !tx.id) continue;
+    for (const raw of Array.isArray(pendingTransactions) ? pendingTransactions : []) {
+      const tx = sanitizeTransactionRecord(raw);
+      if (!tx) continue;
       insertTx.run(
         tx.id,
-        tx.type === 'income' ? 'income' : 'expense',
-        tx.status === 'unpaid' ? 'unpaid' : 'paid',
-        Number(tx.amount),
-        String(tx.description || '').trim(),
-        String(tx.categoryId),
-        String(tx.date),
-        String(tx.notes || '').trim(),
-        tx.recurringId || null,
-        tx.dueDay ? Number(tx.dueDay) : null,
-        tx.installmentCurrent ? Number(tx.installmentCurrent) : null,
-        tx.installmentTotal ? Number(tx.installmentTotal) : null,
-        tx.createdAt || new Date().toISOString()
+        tx.type,
+        tx.status,
+        tx.amount,
+        tx.description,
+        tx.categoryId,
+        tx.date,
+        tx.notes,
+        tx.recurringId,
+        tx.dueDay,
+        tx.installmentCurrent,
+        tx.installmentTotal,
+        tx.createdAt
       );
     }
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
-// POST import full backup JSON
+// POST import full backup JSON (validated + atomic: all-or-nothing)
 app.post('/api/import', async (req, res) => {
   try {
-    const { settings, categories, transactions, recurringTemplates, fuelLogs, mode = 'merge' } = req.body;
+    const { settings, categories, transactions, recurringTemplates, fuelLogs, mode = 'merge' } = req.body || {};
 
-    if (mode === 'replace') {
-      db.exec('DELETE FROM transactions; DELETE FROM recurring_templates; DELETE FROM fuel_logs;');
-    }
-
-    if (settings) {
-      if (typeof settings.familyName === 'string') setSetting('familyName', settings.familyName);
-      if (typeof settings.currency === 'string') setSetting('currency', settings.currency);
-      if (typeof settings.language === 'string') setSetting('language', settings.language);
-      if (typeof settings.theme === 'string') setSetting('theme', settings.theme);
-      if (typeof settings.initialBalance === 'number') setSetting('initialBalance', settings.initialBalance);
-      if (typeof settings.tankCapacity === 'number') setSetting('tankCapacity', settings.tankCapacity);
-    }
-
-    if (Array.isArray(categories)) {
-      const insertCat = db.prepare(
-        'INSERT OR REPLACE INTO categories (id, name, type, color, icon, isDefault) VALUES (?, ?, ?, ?, ?, ?)'
-      );
-      for (const c of categories) {
-        insertCat.run(c.id, c.name, c.type, c.color, c.icon, c.isDefault ? 1 : 0);
+    db.exec('BEGIN');
+    try {
+      if (mode === 'replace') {
+        db.exec('DELETE FROM transactions; DELETE FROM recurring_templates; DELETE FROM fuel_logs;');
       }
-    }
 
-    if (Array.isArray(transactions)) {
-      const insertTx = db.prepare(
-        `INSERT OR REPLACE INTO transactions (id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-      for (const tx of transactions) {
-        insertTx.run(
-          tx.id,
-          tx.type,
-          tx.status === 'unpaid' ? 'unpaid' : 'paid',
-          Number(tx.amount),
-          tx.description,
-          tx.categoryId,
-          tx.date,
-          tx.notes || '',
-          tx.recurringId || null,
-          tx.dueDay ? Number(tx.dueDay) : null,
-          tx.installmentCurrent ? Number(tx.installmentCurrent) : null,
-          tx.installmentTotal ? Number(tx.installmentTotal) : null,
-          tx.createdAt || new Date().toISOString()
+      if (settings && typeof settings === 'object') {
+        if (typeof settings.familyName === 'string' && settings.familyName.trim()) {
+          setSetting('familyName', cleanText(settings.familyName, 100));
+        }
+        if (typeof settings.currency === 'string' && settings.currency.trim()) {
+          setSetting('currency', cleanText(settings.currency, 10));
+        }
+        if (ALLOWED_LANGUAGES.includes(settings.language)) setSetting('language', settings.language);
+        if (ALLOWED_THEMES.includes(settings.theme)) setSetting('theme', settings.theme);
+        const ib = finiteNumber(settings.initialBalance);
+        if (typeof settings.initialBalance === 'number' && ib !== null) setSetting('initialBalance', ib.toFixed(2));
+        const tc = finiteNumber(settings.tankCapacity);
+        if (typeof settings.tankCapacity === 'number' && tc !== null && tc > 0) setSetting('tankCapacity', tc);
+      }
+
+      if (Array.isArray(categories)) {
+        const insertCat = db.prepare(
+          'INSERT OR REPLACE INTO categories (id, name, type, color, icon, isDefault) VALUES (?, ?, ?, ?, ?, ?)'
         );
+        for (const c of categories) {
+          if (!c || typeof c !== 'object' || !isValidId(c.id)) continue;
+          if (c.type !== 'income' && c.type !== 'expense') continue;
+          const name = cleanText(c.name, 100);
+          if (!name) continue;
+          insertCat.run(
+            c.id,
+            name,
+            c.type,
+            typeof c.color === 'string' && COLOR_RE.test(c.color) ? c.color : '#64748b',
+            typeof c.icon === 'string' && ICON_RE.test(c.icon) ? c.icon : 'Tag',
+            c.isDefault ? 1 : 0
+          );
+        }
       }
-    }
 
-    if (Array.isArray(recurringTemplates)) {
-      const insertRec = db.prepare(
-        `INSERT OR REPLACE INTO recurring_templates (id, type, amount, description, categoryId, dayOfMonth, active, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-      for (const r of recurringTemplates) {
-        insertRec.run(
-          r.id,
-          r.type,
-          Number(r.amount),
-          r.description,
-          r.categoryId,
-          Number(r.dayOfMonth || 1),
-          r.active ? 1 : 0,
-          r.createdAt || new Date().toISOString()
+      if (Array.isArray(transactions)) {
+        const insertTx = db.prepare(
+          `INSERT OR REPLACE INTO transactions (id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, createdAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         );
+        for (const raw of transactions) {
+          if (!raw || (raw.type !== 'income' && raw.type !== 'expense')) continue;
+          const tx = sanitizeTransactionRecord(raw);
+          if (!tx) continue;
+          insertTx.run(
+            tx.id,
+            tx.type,
+            tx.status,
+            tx.amount,
+            tx.description,
+            tx.categoryId,
+            tx.date,
+            tx.notes,
+            tx.recurringId,
+            tx.dueDay,
+            tx.installmentCurrent,
+            tx.installmentTotal,
+            tx.createdAt
+          );
+        }
       }
-    }
 
-    if (Array.isArray(fuelLogs)) {
-      const insertFuel = db.prepare(
-        `INSERT OR REPLACE INTO fuel_logs (id, date, odometer, pricePerLiter, totalCost, liters, fuelType, stationName, isFullTank, transactionId, notes, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-      for (const f of fuelLogs) {
-        insertFuel.run(
-          f.id,
-          f.date,
-          Number(f.odometer),
-          Number(f.pricePerLiter),
-          Number(f.totalCost),
-          Number(f.liters),
-          f.fuelType === 'ethanol' ? 'ethanol' : 'gasoline',
-          f.stationName || '',
-          f.isFullTank ? 1 : 0,
-          f.transactionId || `tx-fuel-${f.id}`,
-          f.notes || '',
-          f.createdAt || new Date().toISOString()
+      if (Array.isArray(recurringTemplates)) {
+        const insertRec = db.prepare(
+          `INSERT OR REPLACE INTO recurring_templates (id, type, amount, description, categoryId, dayOfMonth, active, createdAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
         );
+        for (const r of recurringTemplates) {
+          if (!r || typeof r !== 'object' || !isValidId(r.id) || !isValidId(r.categoryId)) continue;
+          if (r.type !== 'income' && r.type !== 'expense') continue;
+          const amount = finiteNumber(r.amount);
+          if (amount === null) continue;
+          insertRec.run(
+            r.id,
+            r.type,
+            amount,
+            cleanText(r.description, 500),
+            r.categoryId,
+            optionalInt(r.dayOfMonth, 1, 31) ?? 1,
+            r.active ? 1 : 0,
+            cleanText(r.createdAt, 40) || new Date().toISOString()
+          );
+        }
       }
+
+      if (Array.isArray(fuelLogs)) {
+        const insertFuel = db.prepare(
+          `INSERT OR REPLACE INTO fuel_logs (id, date, odometer, pricePerLiter, totalCost, liters, fuelType, stationName, isFullTank, transactionId, notes, createdAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        for (const f of fuelLogs) {
+          if (!f || typeof f !== 'object' || !isValidId(f.id) || !isValidDate(f.date)) continue;
+          const odometer = finiteNumber(f.odometer);
+          const pricePerLiter = finiteNumber(f.pricePerLiter);
+          const totalCost = finiteNumber(f.totalCost);
+          const liters = finiteNumber(f.liters);
+          if (odometer === null || pricePerLiter === null || totalCost === null || liters === null) continue;
+          insertFuel.run(
+            f.id,
+            f.date,
+            odometer,
+            pricePerLiter,
+            totalCost,
+            liters,
+            f.fuelType === 'ethanol' ? 'ethanol' : 'gasoline',
+            cleanText(f.stationName, 100),
+            f.isFullTank ? 1 : 0,
+            isValidId(f.transactionId) ? f.transactionId : `tx-fuel-${f.id}`,
+            cleanText(f.notes, 2000),
+            cleanText(f.createdAt, 40) || new Date().toISOString()
+          );
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (innerErr) {
+      db.exec('ROLLBACK');
+      throw innerErr;
     }
 
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -1399,7 +1631,7 @@ app.post('/api/reset', async (_req, res) => {
     const state = await getFullState();
     res.json(state);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    sendServerError(res, err);
   }
 });
 
@@ -1429,6 +1661,22 @@ async function startServer() {
       });
     }
   }
+
+  // Final error handler: never leak stack traces or filesystem paths to clients
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, _req, res, _next) => {
+    if (err?.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+    if (err?.type === 'entity.too.large') {
+      return res.status(413).json({ error: 'Request body too large' });
+    }
+    console.error('[FamilyPlan error]', err);
+    if (res.headersSent) return;
+    res.status(err?.status && err.status >= 400 && err.status < 600 ? err.status : 500).json({
+      error: 'Internal server error',
+    });
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     const lanUrls = getLocalNetworkAddresses();

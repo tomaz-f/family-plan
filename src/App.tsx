@@ -680,7 +680,12 @@ export const App: React.FC = () => {
 
   const handleResetAccount = async () => {
     try {
-      const res = await fetch('/api/reset', { method: 'POST' });
+      // JSON content-type is required by the server's anti-CSRF guard
+      const res = await fetch('/api/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
       if (res.ok) {
         localStorage.removeItem(STORAGE_PENDING_TX_KEY);
         setPendingOfflineTx([]);
