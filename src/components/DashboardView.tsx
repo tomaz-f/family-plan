@@ -802,84 +802,119 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {monthTransactions.slice(0, 6).map((tx) => {
                   const cat = categoryMap.get(tx.categoryId);
                   const isUnpaid = tx.status === 'unpaid';
+                  const cardObj = tx.cardId ? creditCards.find((c) => c.id === tx.cardId) : null;
                   return (
                     <div
                       key={tx.id}
-                      className="flex items-center justify-between py-2.5 gap-3 group"
+                      className="flex items-center justify-between p-2.5 sm:p-3 hover:bg-slate-50/70 transition-colors gap-2 sm:gap-3"
                     >
-                      <div
-                        className={`flex items-center gap-3 min-w-0 transition-opacity ${
-                          isUnpaid ? 'opacity-65' : 'opacity-100'
-                        }`}
-                      >
+                      {/* Left: Category Icon with custom category color + Clean Info */}
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                         <CategoryIcon
                           icon={cat?.icon || 'Tag'}
                           color={cat?.color || '#64748b'}
                           size={16}
                           badgeSize="md"
                         />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-semibold text-slate-900 truncate">
-                              {tx.description}
-                            </p>
-                            {isUnpaid && (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30 text-[9px] font-extrabold uppercase">
-                                <Clock size={9} />
-                                {t.pendingBadge}
-                              </span>
+
+                        {/* Text info */}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
+                            {tx.description}
+                          </p>
+
+                          {/* Subtitle / Details: Neutral typography */}
+                          <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
+                            <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
+                              {getCategoryDisplayName(cat, language)}
+                            </span>
+                            <span>•</span>
+                            <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
+
+                            {cardObj && (
+                              <>
+                                <span>•</span>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                                  <CreditCardIcon size={9} />
+                                  <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
+                                </span>
+                              </>
                             )}
+
                             {tx.installmentTotal && tx.installmentTotal > 1 && (
-                              <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-500 text-[10px] font-bold">
-                                {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                              </span>
+                              <>
+                                <span>•</span>
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                                  {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                                </span>
+                              </>
+                            )}
+
+                            {isUnpaid && (
+                              <>
+                                <span>•</span>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
+                                  <Clock size={9} />
+                                  <span>{t.pendingBadge}</span>
+                                </span>
+                              </>
+                            )}
+
+                            {tx.dueDay && !cardObj && !tx.installmentTotal && (
+                              <>
+                                <span>•</span>
+                                <span className="text-[10px] text-slate-400">
+                                  {t.dueDayBadge(tx.dueDay)}
+                                </span>
+                              </>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 truncate">
-                            {getCategoryDisplayName(cat, language)} • {formatShortDate(tx.date, language)}
-                            {tx.dueDay ? ` • ${t.dueDayBadge(tx.dueDay)}` : ''}
-                          </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      {/* Right: Semantic Value + Minimal Quick Action Buttons */}
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        {/* Exclusive semantic color for financial value */}
                         <span
-                          className={`text-sm font-bold ${
-                            isUnpaid
-                              ? 'opacity-65 text-amber-500'
-                              : tx.type === 'income'
-                              ? 'text-emerald-500'
-                              : 'text-rose-500'
+                          className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
+                            tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
                           }`}
                         >
                           {tx.type === 'income' ? '+' : '-'}
                           {formatCurrency(tx.amount, currency)}
                         </span>
-                        <div className="flex items-center gap-1">
+
+                        {/* Minimalist discreet action buttons */}
+                        <div className="flex items-center gap-0.5">
+                          {/* Status toggle (pago / pendente) */}
                           <button
                             type="button"
                             onClick={() => onToggleTransactionStatus(tx)}
-                            className={`p-1.5 rounded-lg border transition-colors ${
-                              isUnpaid
-                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-500 hover:text-emerald-500'
-                                : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-500 hover:text-amber-500'
-                            }`}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                             title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
                           >
-                            {isUnpaid ? <ThumbsDown size={13} /> : <ThumbsUp size={13} />}
+                            {isUnpaid ? (
+                              <Clock size={14} className="text-amber-500" />
+                            ) : (
+                              <ThumbsUp size={14} className="text-slate-400 hover:text-slate-600" />
+                            )}
                           </button>
+
+                          {/* Edit */}
                           <button
                             type="button"
                             onClick={() => onOpenEditModal(tx)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                             title={t.editTooltip}
                           >
                             <Pencil size={14} />
                           </button>
+
+                          {/* Delete */}
                           <button
                             type="button"
                             onClick={() => onDeleteTransaction(tx.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
                             title={t.deleteTooltip}
                           >
                             <Trash2 size={14} />

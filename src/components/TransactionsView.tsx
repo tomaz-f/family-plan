@@ -1,18 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import {
   Search,
-  Filter,
+  SlidersHorizontal,
+  X,
   Download,
   Pencil,
   Trash2,
-  Plus,
-  Minus,
-  Repeat,
-  Layers,
-  ThumbsUp,
-  ThumbsDown,
   Clock,
+  ThumbsUp,
   CreditCard as CreditCardIcon,
+  Repeat,
+  RotateCcw,
 } from 'lucide-react';
 import { AppLanguage, Category, CreditCard, Transaction, TransactionType } from '../types';
 import {
@@ -20,8 +18,6 @@ import {
   formatCurrency,
   formatMonthLabel,
   formatShortDate,
-  formatShortMonthLabel,
-  shiftMonth,
 } from '../utils/format';
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
@@ -46,7 +42,6 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   categories,
   creditCards = [],
   transactions,
-  onOpenAddModal,
   onOpenEditModal,
   onDeleteTransaction,
   onToggleTransactionStatus,
@@ -58,8 +53,28 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'>('date-desc');
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState<boolean>(false);
 
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+
+  // Count active non-default filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (scope === 'all') count++;
+    if (typeFilter !== 'all') count++;
+    if (statusFilter !== 'all') count++;
+    if (categoryFilter !== 'all') count++;
+    if (sortBy !== 'date-desc') count++;
+    return count;
+  }, [scope, typeFilter, statusFilter, categoryFilter, sortBy]);
+
+  const handleResetFilters = () => {
+    setScope('month');
+    setTypeFilter('all');
+    setStatusFilter('all');
+    setCategoryFilter('all');
+    setSortBy('date-desc');
+  };
 
   const filteredTransactions = useMemo(() => {
     return transactions
@@ -112,210 +127,194 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     };
   }, [filteredTransactions]);
 
-  return (
-    <div className="space-y-5">
-      {/* Header & Quick Add */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-        <div>
-          <h1 className="text-lg font-bold text-slate-900">{t.historyTitle}</h1>
-          <p className="text-xs text-slate-500">
-            {scope === 'month'
-              ? t.showingRecordsMonth(summary.count, formatMonthLabel(selectedMonth, language))
-              : t.showingRecordsAll(summary.count)}
-          </p>
-        </div>
+  const selectedCategoryObj = categoryFilter !== 'all' ? categoryMap.get(categoryFilter) : null;
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              exportTransactionsToCSV(
-                filteredTransactions,
-                categories,
-                `familyplan-${scope === 'month' ? selectedMonth : 'all-time'}.csv`,
-                language
-              )
-            }
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold"
-          >
-            <Download size={14} />
-            {t.exportCsv}
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenAddModal('income')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
-          >
-            <Plus size={15} strokeWidth={2.5} />
-            {t.addInputShort}
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenAddModal('expense')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold"
-          >
-            <Minus size={15} strokeWidth={2.5} />
-            {t.addExpenseShort}
-          </button>
+  return (
+    <div className="space-y-3.5">
+      {/* 1. COMPACT SUMMARY BAR (Topo do Extrato: 4 Números Essenciais Lado a Lado) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 shadow-2xs">
+        <div className="grid grid-cols-4 divide-x divide-slate-100">
+          {/* Entradas */}
+          <div className="px-1 sm:px-3 text-center min-w-0">
+            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
+              {t.inputsLabel}
+            </span>
+            <span className="text-xs sm:text-base font-extrabold text-emerald-500 truncate block mt-0.5">
+              +{formatCurrency(summary.income, currency)}
+            </span>
+          </div>
+
+          {/* Saídas */}
+          <div className="px-1 sm:px-3 text-center min-w-0">
+            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
+              {t.expensesLabel}
+            </span>
+            <span className="text-xs sm:text-base font-extrabold text-rose-500 truncate block mt-0.5">
+              -{formatCurrency(summary.expense, currency)}
+            </span>
+          </div>
+
+          {/* Pendentes */}
+          <div className="px-1 sm:px-3 text-center min-w-0">
+            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
+              {t.pendingBadge}
+            </span>
+            <span className="text-xs sm:text-base font-semibold text-slate-500 truncate block mt-0.5">
+              {formatCurrency(summary.pendingAmount, currency)}
+            </span>
+          </div>
+
+          {/* Saldo Correspondente */}
+          <div className="px-1 sm:px-3 text-center min-w-0">
+            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
+              {t.netLabel}
+            </span>
+            <span
+              className={`text-xs sm:text-base font-extrabold truncate block mt-0.5 ${
+                summary.net >= 0 ? 'text-slate-900' : 'text-rose-500'
+              }`}
+            >
+              {summary.net >= 0 ? '+' : ''}
+              {formatCurrency(summary.net, currency)}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Filters Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {/* Search */}
-          <div className="relative lg:col-span-2">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder={t.searchPlaceholder}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-            />
-          </div>
+      {/* 2. SLIM TOOLBAR: Busca Minimalista + Botão de Filtros */}
+      <div className="flex items-center gap-2">
+        {/* Campo de Busca Compacto */}
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder={language === 'pt-BR' ? 'Pesquisar...' : 'Search...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+              title={language === 'pt-BR' ? 'Limpar busca' : 'Clear search'}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
 
-          {/* Scope: Selected Month vs All Time */}
-          <div className="flex rounded-xl bg-slate-100 p-1">
+        {/* Botão de Filtros (Abre Bottom Sheet) */}
+        <button
+          type="button"
+          onClick={() => setIsFilterSheetOpen(true)}
+          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-all shrink-0 ${
+            activeFilterCount > 0
+              ? 'border-blue-500 bg-blue-500/10 text-blue-500 shadow-xs'
+              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          <SlidersHorizontal size={14} />
+          <span>{t.filtersBtn}</span>
+          {activeFilterCount > 0 && (
+            <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Active Filter Pills (quando houver filtros aplicados) */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+          {scope === 'all' && (
             <button
               type="button"
               onClick={() => setScope('month')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
-                scope === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
-              }`}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
             >
-              {formatMonthLabel(selectedMonth, language)}
+              <span>{t.allTime}</span>
+              <X size={11} className="text-slate-400" />
             </button>
+          )}
+
+          {typeFilter !== 'all' && (
             <button
               type="button"
-              onClick={() => setScope('all')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
-                scope === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
-              }`}
+              onClick={() => setTypeFilter('all')}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
             >
-              {t.allTime}
+              <span>{typeFilter === 'income' ? t.filterInputsOnly : t.filterExpensesOnly}</span>
+              <X size={11} className="text-slate-400" />
             </button>
-          </div>
+          )}
 
-          {/* Category Filter */}
-          <div className="relative">
-            <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+          {statusFilter !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter('all')}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
             >
-              <option value="all">{t.allCategories}</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.type === 'income' ? t.inputPrefix : t.expensePrefix}
-                  {getCategoryDisplayName(cat, language)}
-                </option>
-              ))}
-            </select>
-          </div>
+              <span>{statusFilter === 'paid' ? t.filterPaidOnly : t.filterPendingOnly}</span>
+              <X size={11} className="text-slate-400" />
+            </button>
+          )}
 
-          {/* Sort */}
-          <div>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+          {selectedCategoryObj && (
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('all')}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
             >
-              <option value="date-desc">{t.sortNewest}</option>
-              <option value="date-asc">{t.sortOldest}</option>
-              <option value="amount-desc">{t.sortHighest}</option>
-              <option value="amount-asc">{t.sortLowest}</option>
-            </select>
-          </div>
-        </div>
+              <span>{getCategoryDisplayName(selectedCategoryObj, language)}</span>
+              <X size={11} className="text-slate-400" />
+            </button>
+          )}
 
-        {/* Type & Status Pills & Filtered Totals */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(['all', 'expense', 'income'] as const).map((typeOpt) => (
-              <button
-                key={typeOpt}
-                type="button"
-                onClick={() => setTypeFilter(typeOpt)}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
-                  typeFilter === typeOpt
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {typeOpt === 'all'
-                  ? t.filterAllEntries
-                  : typeOpt === 'income'
-                  ? t.filterInputsOnly
-                  : t.filterExpensesOnly}
-              </button>
-            ))}
-
-            <span className="text-slate-300 mx-1">|</span>
-
-            {(['all', 'paid', 'unpaid'] as const).map((stOpt) => (
-              <button
-                key={stOpt}
-                type="button"
-                onClick={() => setStatusFilter(stOpt)}
-                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
-                  statusFilter === stOpt
-                    ? stOpt === 'unpaid'
-                      ? 'bg-amber-500 text-slate-950'
-                      : 'bg-indigo-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {stOpt === 'all'
-                  ? t.filterAllEntries
-                  : stOpt === 'paid'
-                  ? t.filterPaidOnly
-                  : t.filterPendingOnly}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="text-slate-600">
-              {t.inputsLabel}: <strong className="text-emerald-500">+{formatCurrency(summary.income, currency)}</strong>
-            </span>
-            <span className="text-slate-600">
-              {t.expensesLabel}: <strong className="text-rose-500">-{formatCurrency(summary.expense, currency)}</strong>
-            </span>
-            {summary.pendingCount > 0 && (
-              <span className="text-amber-500">
-                {t.pendingSummaryLabel} ({summary.pendingCount}):{' '}
-                <strong>{formatCurrency(summary.pendingAmount, currency)}</strong>
+          {sortBy !== 'date-desc' && (
+            <button
+              type="button"
+              onClick={() => setSortBy('date-desc')}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
+            >
+              <span>
+                {sortBy === 'date-asc'
+                  ? t.sortOldest
+                  : sortBy === 'amount-desc'
+                  ? t.sortHighest
+                  : t.sortLowest}
               </span>
-            )}
-            <span className="text-slate-600">
-              {t.netLabel}:{' '}
-              <strong className={summary.net >= 0 ? 'text-slate-900' : 'text-rose-500'}>
-                {summary.net >= 0 ? '+' : ''}
-                {formatCurrency(summary.net, currency)}
-              </strong>
-            </span>
-          </div>
-        </div>
-      </div>
+              <X size={11} className="text-slate-400" />
+            </button>
+          )}
 
-      {/* Transactions List */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 px-1 shrink-0 ml-1"
+          >
+            {t.clearFiltersBtn}
+          </button>
+        </div>
+      )}
+
+      {/* 3. CLEAN TRANSACTIONS LIST: Visual Neutro e Elegante */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
         {filteredTransactions.length === 0 ? (
-          <div className="py-16 text-center space-y-3">
-            <p className="text-sm font-semibold text-slate-600">{t.noMatchingEntries}</p>
-            <p className="text-xs text-slate-400">{t.noMatchingDesc}</p>
-            <div className="flex items-center justify-center gap-2 pt-1">
+          <div className="py-14 text-center space-y-2 px-4">
+            <p className="text-xs sm:text-sm font-semibold text-slate-600">{t.noMatchingEntries}</p>
+            <p className="text-[11px] sm:text-xs text-slate-400">{t.noMatchingDesc}</p>
+            {activeFilterCount > 0 && (
               <button
                 type="button"
-                onClick={() => onOpenAddModal('expense')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-semibold"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 mt-2"
               >
-                <Plus size={14} />
-                {t.addExpenseShort}
+                <RotateCcw size={12} />
+                <span>{t.clearFiltersBtn}</span>
               </button>
-            </div>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -323,145 +322,128 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               const cat = categoryMap.get(tx.categoryId);
               const isUnpaid = tx.status === 'unpaid';
               const cardObj = tx.cardId ? creditCards.find((c) => c.id === tx.cardId) : null;
+
               return (
                 <div
                   key={tx.id}
-                  className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-slate-50/70 transition-all gap-3 ${
-                    isUnpaid ? 'bg-amber-500/5' : ''
-                  }`}
+                  className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50/70 transition-colors gap-2 sm:gap-3"
                 >
-                  <div
-                    className={`flex items-start sm:items-center gap-3.5 min-w-0 transition-opacity ${
-                      isUnpaid ? 'opacity-65' : 'opacity-100'
-                    }`}
-                  >
+                  {/* Left: Category Icon with custom category color + Clean Info */}
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                    {/* Category Icon with category color tint & vibrant icon drawing */}
                     <CategoryIcon
                       icon={cat?.icon || 'Tag'}
                       color={cat?.color || '#64748b'}
-                      size={18}
-                      badgeSize="lg"
+                      size={16}
+                      badgeSize="md"
                     />
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p
-                          className={`text-sm font-bold ${
-                            isUnpaid ? 'text-slate-500' : 'text-slate-900'
-                          }`}
-                        >
-                          {tx.description}
-                        </p>
-                        {cardObj && (
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-xs"
-                            style={{ backgroundColor: cardObj.color || '#6366f1' }}
-                          >
-                            <CreditCardIcon size={10} />
-                            {cardObj.name}
-                            {tx.invoiceMonth && ` (${formatShortMonthLabel(tx.invoiceMonth, language)})`}
-                          </span>
-                        )}
-                        {isUnpaid && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30 text-[10px] font-extrabold uppercase tracking-wide">
-                            <Clock size={10} />
-                            {t.pendingBadge}
-                          </span>
-                        )}
-                        {tx.installmentTotal && tx.installmentTotal > 1 ? (
-                          <>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-500 text-[10px] font-bold">
-                              <Layers size={10} />
-                              {t.installmentBadge(tx.installmentCurrent || 1, tx.installmentTotal)}
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-500 text-[10px] font-semibold">
-                              {t.endsInBadge(
-                                formatShortMonthLabel(
-                                  shiftMonth(
-                                    tx.date.slice(0, 7),
-                                    Math.max(0, tx.installmentTotal - (tx.installmentCurrent || 1))
-                                  ),
-                                  language
-                                )
-                              )}
-                            </span>
-                          </>
-                        ) : tx.recurringId ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 text-[10px] font-semibold">
-                            <Repeat size={10} />
-                            {t.recurringBadge}
-                          </span>
-                        ) : null}
-                        {tx.dueDay && (
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                            {t.dueDayBadge(tx.dueDay)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                        <span
-                          className="font-semibold"
-                          style={{ color: cat?.color || '#64748b' }}
-                        >
+
+                    {/* Text info */}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
+                        {tx.description}
+                      </p>
+
+                      {/* Subtitle / Details: Neutral typography */}
+                      <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
+                        <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
                           {getCategoryDisplayName(cat, language)}
                         </span>
                         <span>•</span>
-                        <span>{formatShortDate(tx.date, language)}</span>
+                        <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
+
+                        {cardObj && (
+                          <>
+                            <span>•</span>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                              <CreditCardIcon size={9} />
+                              <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
+                            </span>
+                          </>
+                        )}
+
+                        {tx.installmentTotal && tx.installmentTotal > 1 && (
+                          <>
+                            <span>•</span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                              {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                            </span>
+                          </>
+                        )}
+
+                        {isUnpaid && (
+                          <>
+                            <span>•</span>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
+                              <Clock size={9} />
+                              <span>{t.pendingBadge}</span>
+                            </span>
+                          </>
+                        )}
+
+                        {tx.recurringId && !tx.installmentTotal && (
+                          <>
+                            <span>•</span>
+                            <Repeat size={10} className="text-slate-400" />
+                          </>
+                        )}
+
                         {tx.notes && (
                           <>
                             <span>•</span>
-                            <span className="italic text-slate-400">{tx.notes}</span>
+                            <span className="italic truncate max-w-[90px] sm:max-w-[180px]">{tx.notes}</span>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3.5 pl-14 sm:pl-0 shrink-0">
+                  {/* Right: Semantic Value + Minimal Quick Action Buttons */}
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                    {/* Exclusive semantic color for financial value */}
                     <span
-                      className={`text-base font-extrabold transition-opacity ${
-                        isUnpaid
-                          ? 'opacity-60 text-amber-500'
-                          : tx.type === 'income'
-                          ? 'text-emerald-500'
-                          : 'text-rose-500'
+                      className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
+                        tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
                       }`}
                     >
                       {tx.type === 'income' ? '+' : '-'}
                       {formatCurrency(tx.amount, currency)}
                     </span>
 
-                    <div className="flex items-center gap-1">
-                      {/* Interactive Paid / Unpaid ThumbsUp / ThumbsDown Status Toggle Button */}
+                    {/* Minimalist discreet action buttons */}
+                    <div className="flex items-center gap-0.5">
+                      {/* Status toggle (pago / pendente) */}
                       <button
                         type="button"
                         onClick={() => onToggleTransactionStatus(tx)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                          isUnpaid
-                            ? 'bg-amber-500/15 border-amber-500/30 text-amber-500 hover:bg-emerald-500/20 hover:border-emerald-500/40 hover:text-emerald-500'
-                            : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-500 hover:bg-amber-500/15 hover:border-amber-500/30 hover:text-amber-500'
-                        }`}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                         title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
                       >
-                        {isUnpaid ? <ThumbsDown size={14} /> : <ThumbsUp size={14} />}
-                        <span className="hidden md:inline">
-                          {isUnpaid ? t.pendingBadge : t.paidBadge}
-                        </span>
+                        {isUnpaid ? (
+                          <Clock size={14} className="text-amber-500" />
+                        ) : (
+                          <ThumbsUp size={14} className="text-slate-400 hover:text-slate-600" />
+                        )}
                       </button>
 
+                      {/* Edit */}
                       <button
                         type="button"
                         onClick={() => onOpenEditModal(tx)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                         title={t.editTooltip}
                       >
-                        <Pencil size={15} />
+                        <Pencil size={14} />
                       </button>
+
+                      {/* Delete */}
                       <button
                         type="button"
                         onClick={() => onDeleteTransaction(tx.id)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
                         title={t.deleteTooltip}
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -471,6 +453,204 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* 4. BOTTOM SHEET MODAL (Opções de Período, Categorias, Status e Ordenação) */}
+      {isFilterSheetOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
+          {/* Backdrop Click Dismiss */}
+          <div
+            className="fixed inset-0"
+            onClick={() => setIsFilterSheetOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Bottom Sheet Card */}
+          <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl p-4 sm:p-5 space-y-4 max-h-[85vh] overflow-y-auto z-10 animate-in slide-in-from-bottom duration-200">
+            {/* Sheet pull bar (mobile only) */}
+            <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto sm:hidden -mt-1 mb-2" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={16} className="text-slate-700" />
+                <h3 className="text-sm font-bold text-slate-900">{t.filterSheetTitle}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+                  >
+                    {t.clearFiltersBtn}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsFilterSheetOpen(false)}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Section: Período */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                {language === 'pt-BR' ? 'Período' : 'Period'}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScope('month')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                    scope === 'month'
+                      ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {formatMonthLabel(selectedMonth, language)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScope('all')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                    scope === 'all'
+                      ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {t.allTime}
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Section: Tipo */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                {language === 'pt-BR' ? 'Tipo de Lançamento' : 'Type'}
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['all', 'income', 'expense'] as const).map((tp) => (
+                  <button
+                    key={tp}
+                    type="button"
+                    onClick={() => setTypeFilter(tp)}
+                    className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
+                      typeFilter === tp
+                        ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {tp === 'all'
+                      ? t.filterAllEntries
+                      : tp === 'income'
+                      ? t.filterInputsOnly
+                      : t.filterExpensesOnly}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Filter Section: Status */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                {language === 'pt-BR' ? 'Status de Pagamento' : 'Payment Status'}
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['all', 'paid', 'unpaid'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setStatusFilter(st)}
+                    className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
+                      statusFilter === st
+                        ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {st === 'all'
+                      ? t.filterAllEntries
+                      : st === 'paid'
+                      ? t.filterPaidOnly
+                      : t.filterPendingOnly}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Filter Section: Categoria */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                {language === 'pt-BR' ? 'Categoria' : 'Category'}
+              </label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+              >
+                <option value="all">{t.allCategories}</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.type === 'income' ? t.inputPrefix : t.expensePrefix}
+                    {getCategoryDisplayName(cat, language)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filter Section: Ordenação */}
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                {language === 'pt-BR' ? 'Ordenar por' : 'Sort by'}
+              </label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+              >
+                <option value="date-desc">{t.sortNewest}</option>
+                <option value="date-asc">{t.sortOldest}</option>
+                <option value="amount-desc">{t.sortHighest}</option>
+                <option value="amount-asc">{t.sortLowest}</option>
+              </select>
+            </div>
+
+            {/* Exportar CSV (utilitário discreto) */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() =>
+                  exportTransactionsToCSV(
+                    filteredTransactions,
+                    categories,
+                    `familyplan-${scope === 'month' ? selectedMonth : 'all-time'}.csv`,
+                    language
+                  )
+                }
+                className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <Download size={13} />
+                <span>
+                  {t.exportCsv} ({filteredTransactions.length})
+                </span>
+              </button>
+            </div>
+
+            {/* Primary Dismiss Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setIsFilterSheetOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-900 text-white text-xs sm:text-sm font-bold hover:bg-slate-800 transition-colors shadow-xs"
+              >
+                {t.viewFilteredCount(filteredTransactions.length)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
