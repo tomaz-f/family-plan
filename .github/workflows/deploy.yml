@@ -36,8 +36,6 @@ jobs:
         env:
           VITE_TURSO_DB_URL: ${{ secrets.TURSO_DB_URL }}
           VITE_TURSO_TOKEN: ${{ secrets.TURSO_TOKEN }}
-          TURSO_DB_URL: ${{ secrets.TURSO_DB_URL }}
-          TURSO_TOKEN: ${{ secrets.TURSO_TOKEN }}
           turso_db_url: ${{ secrets.TURSO_DB_URL }}
           turso_token: ${{ secrets.TURSO_TOKEN }}
         run: npm run build
