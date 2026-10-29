@@ -5,6 +5,17 @@ const KEY_CHARSET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 export function getStoredMasterKey(): string | null {
   try {
+    if (typeof window !== 'undefined' && window.location) {
+      const params = new URLSearchParams(window.location.search);
+      const queryKey = params.get('key') || params.get('masterKey');
+      if (queryKey) {
+        const sanitized = sanitizeMasterKey(queryKey);
+        if (sanitized) {
+          localStorage.setItem(STORAGE_MASTER_KEY, sanitized);
+          return sanitized;
+        }
+      }
+    }
     const raw = localStorage.getItem(STORAGE_MASTER_KEY);
     return raw ? sanitizeMasterKey(raw) : null;
   } catch {

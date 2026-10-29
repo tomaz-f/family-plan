@@ -46,6 +46,17 @@ const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 export function getStoredFamilyId(): string | null {
   try {
+    if (typeof window !== 'undefined' && window.location) {
+      const params = new URLSearchParams(window.location.search);
+      const queryVal = params.get('code') || params.get('family') || params.get('familyId');
+      if (queryVal) {
+        const sanitized = sanitizeFamilyCode(queryVal);
+        if (sanitized) {
+          localStorage.setItem(STORAGE_FAMILY_KEY, sanitized);
+          return sanitized;
+        }
+      }
+    }
     const val = localStorage.getItem(STORAGE_FAMILY_KEY);
     return val ? sanitizeFamilyCode(val) : null;
   } catch {
