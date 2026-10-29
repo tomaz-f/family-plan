@@ -24,6 +24,10 @@ import {
   Landmark,
   SlidersHorizontal,
   Contrast,
+  KeyRound,
+  Lock,
+  LogOut,
+  ShieldCheck,
 } from 'lucide-react';
 import { AppLanguage, AppState, AppTheme, Category, TransactionType } from '../types';
 import { CURRENCIES, formatCurrency } from '../utils/format';
@@ -46,6 +50,9 @@ interface MobileSyncModalProps {
   isOnlineWithServer: boolean;
   pendingOfflineCount: number;
   currentBankBalance?: number;
+  familyId?: string | null;
+  masterKey?: string | null;
+  onLeaveFamily?: () => void;
   onOpenBalanceModal?: () => void;
   onClose: () => void;
   onUpdateSettings: (payload: {
@@ -88,6 +95,9 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   isOnlineWithServer,
   pendingOfflineCount,
   currentBankBalance,
+  familyId,
+  masterKey,
+  onLeaveFamily,
   onOpenBalanceModal,
   onClose,
   onUpdateSettings,
@@ -100,6 +110,48 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   const t = TRANSLATIONS[language];
   const [tab, setTab] = useState<'mobile' | 'settings' | 'categories' | 'export' | 'backup'>(activeTabInitial);
   const [copied, setCopied] = useState(false);
+  const [familyCodeCopied, setFamilyCodeCopied] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
+  const handleCopyFamilyCode = async (code: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(code);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = code;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setFamilyCodeCopied(true);
+      setTimeout(() => setFamilyCodeCopied(false), 2500);
+    } catch {
+      // ignore
+    }
+  };
+
+  const [masterKeyCopied, setMasterKeyCopied] = useState(false);
+
+  const handleCopyMasterKey = async (key: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(key);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = key;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setMasterKeyCopied(true);
+      setTimeout(() => setMasterKeyCopied(false), 2500);
+    } catch {
+      // ignore
+    }
+  };
 
   // Export filter states
   const currentYearStr = String(new Date().getFullYear());
@@ -621,6 +673,131 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
 
           {tab === 'settings' && (
             <form onSubmit={handleSaveSettings} className="space-y-4">
+              {/* Zero-Knowledge Family Security & Pairing Section */}
+              {familyId && (
+                <div className="p-4 rounded-2xl bg-[#111215] border border-[#22242a] space-y-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                      <ShieldCheck size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                        {language === 'pt-BR' ? 'Segurança e Pareamento Familiar' : 'Family Security & Pairing'}
+                      </h4>
+                      <p className="text-[11px] text-[#8E929B]">
+                        {language === 'pt-BR'
+                          ? 'Criptografia de ponta a ponta (AES-256) ativa'
+                          : 'End-to-end encryption (AES-256) active'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Pairing Code */}
+                  <div className="p-3 rounded-xl bg-[#0a0a0c] border border-[#22242a] flex items-center justify-between">
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-semibold text-[#8E929B] uppercase tracking-wider">
+                        {language === 'pt-BR' ? 'Código de Pareamento' : 'Pairing Code'}
+                      </span>
+                      <span className="font-mono text-sm font-bold tracking-wider text-white">
+                        {familyId}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyFamilyCode(familyId)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1c1e24] hover:bg-[#252830] active:scale-95 text-xs font-medium text-neutral-300 hover:text-white transition-all border border-[#2a2c34] shrink-0 ml-2"
+                    >
+                      {familyCodeCopied ? (
+                        <>
+                          <Check size={13} className="text-emerald-400" />
+                          <span className="text-emerald-400 font-semibold">Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={13} />
+                          <span>Copiar</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Master Security Key */}
+                  {masterKey && (
+                    <div className="p-3 rounded-xl bg-[#0a0a0c] border border-amber-500/25 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <span className="block text-[10px] font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                          <Lock size={11} />
+                          {language === 'pt-BR' ? 'Chave Mestre de Segurança' : 'Master Security Key'}
+                        </span>
+                        <span className="font-mono text-xs sm:text-sm font-bold tracking-widest text-amber-200">
+                          {masterKey}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMasterKey(masterKey)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/30 hover:bg-amber-950/50 active:scale-95 text-xs font-medium text-amber-300 hover:text-white transition-all border border-amber-500/30 shrink-0 ml-2"
+                      >
+                        {masterKeyCopied ? (
+                          <>
+                            <Check size={13} className="text-emerald-400" />
+                            <span className="text-emerald-400 font-semibold">Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={13} />
+                            <span>Copiar</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Highly Readable "Sair da Família" Button */}
+                  {onLeaveFamily && (
+                    <div className="pt-1">
+                      {!showLeaveConfirm ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowLeaveConfirm(true)}
+                          className="w-full py-2.5 px-3 rounded-xl bg-red-950/25 hover:bg-red-900/40 border border-red-800/40 text-red-300 hover:text-red-200 text-xs font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                        >
+                          <LogOut size={14} />
+                          <span>{language === 'pt-BR' ? 'Sair da Família (Desconectar este dispositivo)' : 'Leave Family (Disconnect device)'}</span>
+                        </button>
+                      ) : (
+                        <div className="w-full p-3 rounded-xl bg-red-950/50 border border-red-800/60 space-y-2.5 animate-fadeIn">
+                          <p className="text-xs text-red-200 font-medium leading-relaxed">
+                            {language === 'pt-BR'
+                              ? 'Tem certeza? Isso limpará o código de pareamento e a chave mestre deste aparelho.'
+                              : 'Are you sure? This will clear the pairing code and master key from this device.'}
+                          </p>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowLeaveConfirm(false)}
+                              className="px-3 py-1.5 rounded-lg bg-transparent hover:bg-white/10 text-neutral-300 text-xs font-medium"
+                            >
+                              {language === 'pt-BR' ? 'Cancelar' : 'Cancel'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onLeaveFamily();
+                                onClose();
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold active:scale-95 shadow-sm"
+                            >
+                              {language === 'pt-BR' ? 'Sim, desconectar' : 'Yes, disconnect'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
                   {t.familyAccountTitleLabel}

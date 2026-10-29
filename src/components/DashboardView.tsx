@@ -806,7 +806,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   return (
                     <div
                       key={tx.id}
-                      className="flex items-center justify-between p-2.5 sm:p-3 hover:bg-slate-50/70 transition-colors gap-2 sm:gap-3"
+                      className="flex items-center justify-between p-2.5 sm:p-3 hover:bg-slate-50/70 active:bg-slate-100/60 transition-colors gap-2 sm:gap-3 rounded-xl select-none"
                     >
                       {/* Left: Category Icon with custom category color + Clean Info */}
                       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -890,7 +890,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onToggleTransactionStatus(tx)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
                             title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
                           >
                             {isUnpaid ? (
@@ -904,7 +904,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onOpenEditModal(tx)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
                             title={t.editTooltip}
                           >
                             <Pencil size={14} />
@@ -914,7 +914,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onDeleteTransaction(tx.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 active:scale-90 active:opacity-75 transition-all"
                             title={t.deleteTooltip}
                           >
                             <Trash2 size={14} />

@@ -3,10 +3,45 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    -webkit-tap-highlight-color: transparent;
+  *, *::before, *::after {
+    -webkit-tap-highlight-color: transparent !important;
+    touch-action: manipulation;
   }
+
+  html, body {
+    overscroll-behavior-y: none;
+    -webkit-text-size-adjust: 100%;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Desativa seleção acidental de textos em elementos de toque, botões, cards e barras de navegação */
+  button, a, input[type="button"], input[type="submit"], [role="button"], .app-shell, header, nav, .hero-card {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Permite seleção de texto apenas em campos de entrada e textos editáveis */
+  input, textarea, [contenteditable="true"], .select-all {
+    user-select: auto;
+    -webkit-user-select: auto;
+  }
+}
+
+/* Suporte global a Safe Areas para smartphones (Notch e Barra de Gestos do iOS e Android) */
+header {
+  padding-top: env(safe-area-inset-top, 0px) !important;
+}
+
+.fixed.bottom-0 {
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Feedback tátil e resposta ativa imediata em botões e controles clicáveis */
+button:active:not(:disabled),
+[role="button"]:active:not([aria-disabled="true"]) {
+  transform: scale(0.97);
+  opacity: 0.82;
+  transition: transform 0.08s ease, opacity 0.08s ease;
 }
 
 /* =========================================================

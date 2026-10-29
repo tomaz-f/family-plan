@@ -209,7 +209,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         <button
           type="button"
           onClick={() => setIsFilterSheetOpen(true)}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-all shrink-0 ${
+          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-all shrink-0 active:scale-95 active:opacity-85 ${
             activeFilterCount > 0
               ? 'border-blue-500 bg-blue-500/10 text-blue-500 shadow-xs'
               : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
@@ -326,7 +326,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               return (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50/70 transition-colors gap-2 sm:gap-3"
+                  className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50/70 active:bg-slate-100/60 transition-colors gap-2 sm:gap-3 select-none"
                 >
                   {/* Left: Category Icon with custom category color + Clean Info */}
                   <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -416,7 +416,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onToggleTransactionStatus(tx)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
                         title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
                       >
                         {isUnpaid ? (
@@ -430,7 +430,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenEditModal(tx)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
                         title={t.editTooltip}
                       >
                         <Pencil size={14} />
@@ -440,7 +440,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onDeleteTransaction(tx.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 active:scale-90 active:opacity-75 transition-all"
                         title={t.deleteTooltip}
                       >
                         <Trash2 size={14} />

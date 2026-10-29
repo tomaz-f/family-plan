@@ -41,6 +41,21 @@ import { TransactionModal } from './components/TransactionModal';
 import { BalanceModal } from './components/BalanceModal';
 import { MobileSyncModal } from './components/MobileSyncModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { FamilyOnboardingScreen } from './components/FamilyOnboardingScreen';
+import {
+  getStoredFamilyId,
+  clearStoredFamilyId,
+  getStoredMasterKey,
+  clearStoredMasterKey,
+  apiFetch,
+  decryptFullState,
+  encryptTransaction,
+  encryptCategory,
+  encryptCreditCard,
+  encryptFuelLog,
+  encryptRecurringTemplate,
+  encryptPayload,
+} from './services/tursoService';
 import {
   SeriesConfirmModal,
   SeriesScope,
@@ -77,9 +92,14 @@ const FALLBACK_STATE: AppState = {
 };
 
 export const App: React.FC = () => {
+  const [familyId, setFamilyId] = useState<string | null>(() => getStoredFamilyId());
+  const [masterKey, setMasterKey] = useState<string | null>(() => getStoredMasterKey());
+
   const [state, setState] = useState<AppState>(() => {
     try {
-      const cached = localStorage.getItem(STORAGE_STATE_KEY);
+      const fid = getStoredFamilyId();
+      const key = fid ? `${STORAGE_STATE_KEY}_${fid}` : STORAGE_STATE_KEY;
+      const cached = localStorage.getItem(key);
       if (cached) return JSON.parse(cached);
     } catch {
       // ignore
@@ -89,7 +109,9 @@ export const App: React.FC = () => {
 
   const [pendingOfflineTx, setPendingOfflineTx] = useState<Transaction[]>(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_PENDING_TX_KEY);
+      const fid = getStoredFamilyId();
+      const key = fid ? `${STORAGE_PENDING_TX_KEY}_${fid}` : STORAGE_PENDING_TX_KEY;
+      const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw);
     } catch {
       // ignore
@@ -129,34 +151,55 @@ export const App: React.FC = () => {
     } catch {}
   }, [theme]);
 
-  const saveStateToCache = useCallback((nextState: AppState) => {
-    setState(nextState);
-    try {
-      localStorage.setItem(STORAGE_STATE_KEY, JSON.stringify(nextState));
-    } catch {
-      // ignore quota errors
-    }
+  const saveStateToCache = useCallback(
+    (nextState: AppState) => {
+      setState(nextState);
+      try {
+        const key = familyId ? `${STORAGE_STATE_KEY}_${familyId}` : STORAGE_STATE_KEY;
+        localStorage.setItem(key, JSON.stringify(nextState));
+      } catch {
+        // ignore quota errors
+      }
+    },
+    [familyId]
+  );
+
+  const handleLeaveFamily = useCallback(() => {
+    clearStoredFamilyId();
+    clearStoredMasterKey();
+    setFamilyId(null);
+    setMasterKey(null);
+    setState(FALLBACK_STATE);
   }, []);
 
   const syncWithServer = useCallback(async () => {
+    if (!familyId) return;
     try {
       let pending: Transaction[] = [];
+      const pendingKey = `${STORAGE_PENDING_TX_KEY}_${familyId}`;
       try {
-        const raw = localStorage.getItem(STORAGE_PENDING_TX_KEY);
+        const raw = localStorage.getItem(pendingKey);
         if (raw) pending = JSON.parse(raw);
       } catch {
         pending = [];
       }
 
       if (pending.length > 0) {
-        const res = await fetch('/api/sync', {
+        let pendingToSend = pending;
+        if (masterKey) {
+          pendingToSend = await Promise.all(
+            pending.map((p) => encryptTransaction(p, masterKey, familyId)) as any
+          );
+        }
+        const res = await apiFetch('/api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pendingTransactions: pending }),
+          body: JSON.stringify({ pendingTransactions: pendingToSend }),
         });
         if (res.ok) {
-          const data: AppState = await res.json();
-          localStorage.removeItem(STORAGE_PENDING_TX_KEY);
+          const rawData: any = await res.json();
+          const data = masterKey ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+          localStorage.removeItem(pendingKey);
           setPendingOfflineTx([]);
           saveStateToCache(data);
           setIsOnlineWithServer(true);
@@ -164,15 +207,16 @@ export const App: React.FC = () => {
         }
       }
 
-      const res = await fetch('/api/state');
+      const res = await apiFetch('/api/state');
       if (!res.ok) throw new Error('Server unreachable');
-      const data: AppState = await res.json();
+      const rawData = await res.json();
+      const data = masterKey ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
       setIsOnlineWithServer(true);
     } catch {
       setIsOnlineWithServer(false);
     }
-  }, [saveStateToCache]);
+  }, [familyId, masterKey, saveStateToCache]);
 
   useEffect(() => {
     syncWithServer();
@@ -328,40 +372,71 @@ export const App: React.FC = () => {
       let updatedState: AppState | null = null;
 
       if (!txData.id && recurringPlan && generatedRecId) {
-        const recRes = await fetch('/api/recurring', {
+        const rawRec = {
+          id: generatedRecId,
+          type: txData.type,
+          amount: txData.amount,
+          description: txData.description,
+          categoryId: txData.categoryId,
+          dayOfMonth: recurringPlan.dayOfMonth,
+          isInstallment: recurringPlan.mode === 'installment',
+          totalInstallments: recurringPlan.totalInstallments,
+          startMonth: recurringPlan.startMonth,
+          active: true,
+        };
+        const recPayload =
+          masterKey && familyId
+            ? await encryptRecurringTemplate(rawRec as any, masterKey, familyId)
+            : rawRec;
+        const recRes = await apiFetch('/api/recurring', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: generatedRecId,
-            type: txData.type,
-            amount: txData.amount,
-            description: txData.description,
-            categoryId: txData.categoryId,
-            dayOfMonth: recurringPlan.dayOfMonth,
-            isInstallment: recurringPlan.mode === 'installment',
-            totalInstallments: recurringPlan.totalInstallments,
-            startMonth: recurringPlan.startMonth,
-            active: true,
-          }),
+          body: JSON.stringify(recPayload),
         });
         if (recRes.ok) {
-          updatedState = await recRes.json();
+          const rawRecState = await recRes.json();
+          updatedState =
+            masterKey && familyId
+              ? await decryptFullState(rawRecState, masterKey, familyId)
+              : rawRecState;
         }
       }
 
       const url = txData.id ? `/api/transactions/${txData.id}` : '/api/transactions';
       const method = txData.id ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+
+      let txPayload: any = {
+        ...fullTx,
+        scope,
+        futureEntries: futureEntries.length > 0 ? futureEntries : undefined,
+      };
+
+      if (masterKey && familyId) {
+        const encFullTx = await encryptTransaction(fullTx, masterKey, familyId);
+        let encFuture: any = undefined;
+        if (futureEntries.length > 0) {
+          encFuture = await Promise.all(
+            futureEntries.map((f) => encryptTransaction(f, masterKey, familyId))
+          );
+        }
+        txPayload = {
+          ...encFullTx,
+          scope,
+          futureEntries: encFuture,
+        };
+      }
+
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...fullTx,
-          scope,
-          futureEntries: futureEntries.length > 0 ? futureEntries : undefined,
-        }),
+        body: JSON.stringify(txPayload),
       });
       if (!res.ok) throw new Error('Failed');
-      updatedState = await res.json();
+      const rawResState = await res.json();
+      updatedState =
+        masterKey && familyId
+          ? await decryptFullState(rawResState, masterKey, familyId)
+          : rawResState;
 
       if (updatedState) {
         saveStateToCache(updatedState);
@@ -438,26 +513,31 @@ export const App: React.FC = () => {
     });
 
     try {
-      const res = await fetch(`/api/transactions/${tx.id}/status`, {
+      const res = await apiFetch(`/api/transactions/${tx.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
       });
       if (!res.ok) throw new Error('Failed');
-      const data: AppState = await res.json();
+      const rawData: AppState = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
     } catch {
       const nextPending = [...pendingOfflineTx.filter((p) => p.id !== updatedTx.id), updatedTx];
       setPendingOfflineTx(nextPending);
-      localStorage.setItem(STORAGE_PENDING_TX_KEY, JSON.stringify(nextPending));
+      const pendingKey = familyId ? `${STORAGE_PENDING_TX_KEY}_${familyId}` : STORAGE_PENDING_TX_KEY;
+      localStorage.setItem(pendingKey, JSON.stringify(nextPending));
     }
   };
 
   const executeDeleteTransaction = async (id: string, scope: SeriesScope = 'single') => {
     try {
-      const res = await fetch(`/api/transactions/${id}?scope=${scope}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/transactions/${id}?scope=${scope}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed');
-      const data: AppState = await res.json();
+      const rawData: AppState = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
     } catch {
       const originalTx = state.transactions.find((tx) => tx.id === id);
@@ -531,13 +611,15 @@ export const App: React.FC = () => {
     saveStateToCache(optimisticState);
 
     try {
-      const res = await fetch('/api/settings', {
+      const res = await apiFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Failed');
-      const data: AppState = await res.json();
+      const rawData: AppState = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
     } catch {
       // Optimistic state is already applied and cached
@@ -562,13 +644,18 @@ export const App: React.FC = () => {
     icon: string;
   }) => {
     try {
-      const res = await fetch('/api/categories', {
+      const catPayload =
+        masterKey && familyId ? await encryptCategory(cat as any, masterKey, familyId) : cat;
+      const res = await apiFetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cat),
+        body: JSON.stringify(catPayload),
       });
       if (res.ok) {
-        saveStateToCache(await res.json());
+        const rawData = await res.json();
+        const data =
+          masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+        saveStateToCache(data);
       }
     } catch {
       const newCat = {
@@ -588,13 +675,20 @@ export const App: React.FC = () => {
     cat: { name: string; type: TransactionType; color: string; icon: string }
   ) => {
     try {
-      const res = await fetch(`/api/categories/${id}`, {
+      const catPayload =
+        masterKey && familyId
+          ? await encryptCategory({ id, ...cat } as any, masterKey, familyId)
+          : cat;
+      const res = await apiFetch(`/api/categories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cat),
+        body: JSON.stringify(catPayload),
       });
       if (res.ok) {
-        saveStateToCache(await res.json());
+        const rawData = await res.json();
+        const data =
+          masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+        saveStateToCache(data);
       }
     } catch {
       saveStateToCache({
@@ -606,9 +700,12 @@ export const App: React.FC = () => {
 
   const handleDeleteCategory = async (id: string) => {
     try {
-      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/categories/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        saveStateToCache(await res.json());
+        const rawData = await res.json();
+        const data =
+          masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+        saveStateToCache(data);
       }
     } catch {
       saveStateToCache({
@@ -628,71 +725,95 @@ export const App: React.FC = () => {
     totalInstallments?: number;
     startMonth?: string;
   }) => {
-    const res = await fetch('/api/recurring', {
+    const tplPayload =
+      masterKey && familyId
+        ? await encryptRecurringTemplate(tpl as any, masterKey, familyId)
+        : tpl;
+    const res = await apiFetch('/api/recurring', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tpl),
+      body: JSON.stringify(tplPayload),
     });
     if (res.ok) {
-      saveStateToCache(await res.json());
+      const rawData = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+      saveStateToCache(data);
     }
   };
 
   const handleDeleteRecurring = async (id: string) => {
-    const res = await fetch(`/api/recurring/${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/recurring/${id}`, { method: 'DELETE' });
     if (res.ok) {
-      saveStateToCache(await res.json());
+      const rawData = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+      saveStateToCache(data);
     }
   };
 
   const handleApplySingleRecurring = async (id: string, month: string) => {
-    const res = await fetch(`/api/recurring/${id}/apply`, {
+    const res = await apiFetch(`/api/recurring/${id}/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ month }),
     });
     if (res.ok) {
-      saveStateToCache(await res.json());
+      const rawData = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+      saveStateToCache(data);
     }
   };
 
   const handleApplyAllRecurring = async (month: string) => {
-    const res = await fetch('/api/recurring/apply-all', {
+    const res = await apiFetch('/api/recurring/apply-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ month }),
     });
     if (res.ok) {
-      saveStateToCache(await res.json());
+      const rawData = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+      saveStateToCache(data);
     }
   };
 
   const handleImportBackup = async (backupData: Partial<AppState>, mode: 'merge' | 'replace') => {
-    const res = await fetch('/api/import', {
+    const res = await apiFetch('/api/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...backupData, mode }),
     });
     if (res.ok) {
-      saveStateToCache(await res.json());
+      const rawData = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+      saveStateToCache(data);
     }
   };
 
   const handleResetAccount = async () => {
     try {
       // JSON content-type is required by the server's anti-CSRF guard
-      const res = await fetch('/api/reset', {
+      const res = await apiFetch('/api/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
       if (res.ok) {
-        localStorage.removeItem(STORAGE_PENDING_TX_KEY);
+        const pendingKey = familyId ? `${STORAGE_PENDING_TX_KEY}_${familyId}` : STORAGE_PENDING_TX_KEY;
+        localStorage.removeItem(pendingKey);
         setPendingOfflineTx([]);
-        saveStateToCache(await res.json());
+        const rawData = await res.json();
+        const data =
+          masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+        saveStateToCache(data);
       }
     } catch {
-      localStorage.removeItem(STORAGE_PENDING_TX_KEY);
+      const pendingKey = familyId ? `${STORAGE_PENDING_TX_KEY}_${familyId}` : STORAGE_PENDING_TX_KEY;
+      localStorage.removeItem(pendingKey);
       setPendingOfflineTx([]);
       saveStateToCache({
         ...state,
@@ -720,15 +841,22 @@ export const App: React.FC = () => {
     notes?: string;
   }) => {
     try {
+      const fuelPayload =
+        masterKey && familyId
+          ? await encryptFuelLog(fuelData as any, masterKey, familyId)
+          : fuelData;
       const url = fuelData.id ? `/api/fuel/${fuelData.id}` : '/api/fuel';
       const method = fuelData.id ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fuelData),
+        body: JSON.stringify(fuelPayload),
       });
       if (res.ok) {
-        saveStateToCache(await res.json());
+        const rawData = await res.json();
+        const data =
+          masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+        saveStateToCache(data);
       }
     } catch {
       const fuelId = fuelData.id || `fuel-${Date.now()}`;
@@ -776,9 +904,12 @@ export const App: React.FC = () => {
 
   const handleDeleteFuelLog = async (id: string) => {
     try {
-      const res = await fetch(`/api/fuel/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/fuel/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        saveStateToCache(await res.json());
+        const rawData = await res.json();
+        const data =
+          masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+        saveStateToCache(data);
       }
     } catch {
       const target = (state.fuelLogs || []).find((f) => f.id === id);
@@ -793,15 +924,21 @@ export const App: React.FC = () => {
 
   const handleSaveCard = async (cardData: Partial<CreditCard> & { name: string; totalLimit: number; closingDay: number; dueDay: number }) => {
     try {
+      const cardPayload =
+        masterKey && familyId
+          ? await encryptCreditCard(cardData as any, masterKey, familyId)
+          : cardData;
       const url = cardData.id ? `/api/cards/${cardData.id}` : '/api/cards';
       const method = cardData.id ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cardData),
+        body: JSON.stringify(cardPayload),
       });
       if (!res.ok) throw new Error('Failed');
-      const data: AppState = await res.json();
+      const rawData: AppState = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
     } catch {
       const prevCards = state.creditCards || [];
@@ -829,9 +966,11 @@ export const App: React.FC = () => {
 
   const handleDeleteCard = async (cardId: string) => {
     try {
-      const res = await fetch(`/api/cards/${cardId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/cards/${cardId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed');
-      const data: AppState = await res.json();
+      const rawData: AppState = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
     } catch {
       saveStateToCache({
@@ -843,13 +982,15 @@ export const App: React.FC = () => {
 
   const handlePayCardInvoice = async (cardId: string, invoiceMonth: string) => {
     try {
-      const res = await fetch(`/api/cards/${cardId}/pay-invoice`, {
+      const res = await apiFetch(`/api/cards/${cardId}/pay-invoice`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoiceMonth }),
       });
       if (!res.ok) throw new Error('Failed');
-      const data: AppState = await res.json();
+      const rawData: AppState = await res.json();
+      const data =
+        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
     } catch {
       const card = (state.creditCards || []).find((c) => c.id === cardId);
@@ -897,10 +1038,21 @@ export const App: React.FC = () => {
       ? t.themeDark
       : t.themeLight;
 
+  if (!familyId || !masterKey) {
+    return (
+      <FamilyOnboardingScreen
+        onJoined={(newId, newKey) => {
+          setFamilyId(newId);
+          setMasterKey(newKey);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="app-shell min-h-screen flex flex-col bg-slate-50 text-slate-900 pb-24 transition-colors">
+    <div className="app-shell min-h-screen flex flex-col bg-slate-50 text-slate-900 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] transition-colors">
       {/* TOP NAVIGATION HEADER */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 print:hidden">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 print:hidden pt-[env(safe-area-inset-top,0px)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">
           {/* Brand */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
@@ -924,7 +1076,7 @@ export const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedMonth((m) => shiftMonth(m, -1))}
-                className="p-1 sm:p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+                className="p-1 sm:p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white active:scale-95 transition-all"
                 title={t.prevMonth}
               >
                 <ChevronLeft size={14} />
@@ -932,7 +1084,7 @@ export const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedMonth(getCurrentMonthStr())}
-                className="px-1.5 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold text-slate-800 hover:text-indigo-500 transition-colors min-w-[76px] sm:min-w-[115px] text-center capitalize"
+                className="px-1.5 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold text-slate-800 hover:text-indigo-500 active:scale-95 transition-all min-w-[76px] sm:min-w-[115px] text-center capitalize"
                 title={t.jumpCurrentMonth}
               >
                 <span className="inline sm:hidden">{formatShortMonthLabel(selectedMonth, language)}</span>
@@ -941,7 +1093,7 @@ export const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedMonth((m) => shiftMonth(m, 1))}
-                className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+                className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white active:scale-95 transition-all"
                 title={t.nextMonth}
               >
                 <ChevronRight size={14} />
@@ -955,7 +1107,7 @@ export const App: React.FC = () => {
                 setSyncModalTab('settings');
                 setSyncModalOpen(true);
               }}
-              className="p-2 sm:p-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors shadow-xs shrink-0"
+              className="p-2 sm:p-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 active:opacity-75 transition-all shadow-xs shrink-0"
               title={t.preferencesTooltip}
             >
               <Settings size={17} />
@@ -1052,12 +1204,12 @@ export const App: React.FC = () => {
       </main>
 
       {/* STICKY BOTTOM NAVIGATION BAR */}
-      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 print:hidden">
+      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] print:hidden">
         <div className="grid grid-cols-5 items-center gap-1 max-w-lg mx-auto">
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold ${
+            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'dashboard' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
@@ -1068,7 +1220,7 @@ export const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('transactions')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold ${
+            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'transactions' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
@@ -1079,7 +1231,7 @@ export const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('cards')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold ${
+            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'cards' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
@@ -1090,7 +1242,7 @@ export const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('fuel')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold ${
+            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'fuel' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
@@ -1101,7 +1253,7 @@ export const App: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('reports')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold ${
+            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'reports' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
@@ -1165,6 +1317,9 @@ export const App: React.FC = () => {
         isOnlineWithServer={isOnlineWithServer}
         pendingOfflineCount={pendingOfflineTx.length}
         currentBankBalance={currentBankBalance}
+        familyId={familyId}
+        masterKey={masterKey}
+        onLeaveFamily={handleLeaveFamily}
         onOpenBalanceModal={() => {
           setSyncModalOpen(false);
           setBalanceModalOpen(true);
