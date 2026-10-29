@@ -49,21 +49,23 @@ export async function ensureClientSchema(client: Client): Promise<void> {
       `CREATE TABLE IF NOT EXISTS categories (
         family_id TEXT NOT NULL,
         id TEXT NOT NULL,
-        name TEXT NOT NULL,
+        name TEXT,
         type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
-        color TEXT NOT NULL,
-        icon TEXT NOT NULL,
+        color TEXT,
+        icon TEXT,
         isDefault INTEGER NOT NULL DEFAULT 0,
+        iv TEXT DEFAULT NULL,
         encrypted_data TEXT DEFAULT NULL,
+        payload TEXT DEFAULT NULL,
         PRIMARY KEY (family_id, id)
       )`,
       `CREATE TABLE IF NOT EXISTS transactions (
         family_id TEXT NOT NULL,
         id TEXT NOT NULL,
         type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
-        amount REAL NOT NULL,
-        description TEXT NOT NULL,
-        categoryId TEXT NOT NULL,
+        amount REAL,
+        description TEXT,
+        categoryId TEXT,
         date TEXT NOT NULL,
         notes TEXT DEFAULT '',
         recurringId TEXT DEFAULT NULL,
@@ -76,54 +78,62 @@ export async function ensureClientSchema(client: Client): Promise<void> {
         purchaseDate TEXT DEFAULT NULL,
         settledInvoiceKey TEXT DEFAULT NULL,
         createdAt TEXT NOT NULL,
+        iv TEXT DEFAULT NULL,
         encrypted_data TEXT DEFAULT NULL,
+        payload TEXT DEFAULT NULL,
         PRIMARY KEY (family_id, id)
       )`,
       `CREATE TABLE IF NOT EXISTS recurring_templates (
         family_id TEXT NOT NULL,
         id TEXT NOT NULL,
         type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
-        amount REAL NOT NULL,
-        description TEXT NOT NULL,
-        categoryId TEXT NOT NULL,
+        amount REAL,
+        description TEXT,
+        categoryId TEXT,
         dayOfMonth INTEGER NOT NULL DEFAULT 1,
         active INTEGER NOT NULL DEFAULT 1,
         isInstallment INTEGER NOT NULL DEFAULT 0,
         totalInstallments INTEGER DEFAULT NULL,
         startMonth TEXT DEFAULT NULL,
         createdAt TEXT NOT NULL,
+        iv TEXT DEFAULT NULL,
         encrypted_data TEXT DEFAULT NULL,
+        payload TEXT DEFAULT NULL,
         PRIMARY KEY (family_id, id)
       )`,
       `CREATE TABLE IF NOT EXISTS fuel_logs (
         family_id TEXT NOT NULL,
         id TEXT NOT NULL,
         date TEXT NOT NULL,
-        odometer REAL NOT NULL,
-        pricePerLiter REAL NOT NULL,
-        totalCost REAL NOT NULL,
-        liters REAL NOT NULL,
-        fuelType TEXT NOT NULL CHECK(fuelType IN ('gasoline', 'ethanol')),
+        odometer REAL,
+        pricePerLiter REAL,
+        totalCost REAL,
+        liters REAL,
+        fuelType TEXT CHECK(fuelType IN ('gasoline', 'ethanol')),
         stationName TEXT DEFAULT '',
         isFullTank INTEGER NOT NULL DEFAULT 1,
         transactionId TEXT DEFAULT NULL,
         notes TEXT DEFAULT '',
         createdAt TEXT NOT NULL,
+        iv TEXT DEFAULT NULL,
         encrypted_data TEXT DEFAULT NULL,
+        payload TEXT DEFAULT NULL,
         PRIMARY KEY (family_id, id)
       )`,
       `CREATE TABLE IF NOT EXISTS credit_cards (
         family_id TEXT NOT NULL,
         id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        brand TEXT NOT NULL DEFAULT 'other',
+        name TEXT,
+        brand TEXT DEFAULT 'other',
         last4Digits TEXT DEFAULT '',
-        color TEXT NOT NULL DEFAULT '#8b5cf6',
-        totalLimit REAL NOT NULL DEFAULT 5000,
-        closingDay INTEGER NOT NULL DEFAULT 25,
-        dueDay INTEGER NOT NULL DEFAULT 5,
+        color TEXT DEFAULT '#8b5cf6',
+        totalLimit REAL DEFAULT 0,
+        closingDay INTEGER DEFAULT 25,
+        dueDay INTEGER DEFAULT 5,
         createdAt TEXT NOT NULL,
+        iv TEXT DEFAULT NULL,
         encrypted_data TEXT DEFAULT NULL,
+        payload TEXT DEFAULT NULL,
         PRIMARY KEY (family_id, id)
       )`,
       `CREATE INDEX IF NOT EXISTS idx_tx_family_date ON transactions(family_id, date)`,
@@ -225,18 +235,20 @@ export async function directGetFullState(client: Client, familyId: string): Prom
 
   const categories: Category[] = catRes.rows.map((c: any) => ({
     id: String(c.id),
-    name: String(c.name),
+    name: String(c.name || ''),
     type: c.type === 'income' ? 'income' : 'expense',
     color: String(c.color || '#6366f1'),
     icon: String(c.icon || 'Tag'),
     isDefault: Number(c.isDefault || 0),
-    encrypted_data: c.encrypted_data || null,
+    iv: c.iv ? String(c.iv) : null,
+    payload: c.payload ? String(c.payload) : null,
+    encrypted_data: c.encrypted_data ? String(c.encrypted_data) : (c.iv && c.payload ? `v1:${c.iv}:${c.payload}` : null),
   }));
 
   const transactions: Transaction[] = txRes.rows.map((t: any) => ({
     id: String(t.id),
     type: t.type === 'income' ? 'income' : 'expense',
-    amount: Number(t.amount || 0),
+    amount: t.amount !== null && t.amount !== undefined ? Number(t.amount) : 0,
     description: String(t.description || ''),
     categoryId: String(t.categoryId || ''),
     date: String(t.date),
@@ -251,7 +263,9 @@ export async function directGetFullState(client: Client, familyId: string): Prom
     purchaseDate: t.purchaseDate ? String(t.purchaseDate) : null,
     settledInvoiceKey: t.settledInvoiceKey ? String(t.settledInvoiceKey) : null,
     createdAt: String(t.createdAt),
-    encrypted_data: t.encrypted_data || null,
+    iv: t.iv ? String(t.iv) : (t.encrypted_data && String(t.encrypted_data).startsWith('v1:') ? String(t.encrypted_data).split(':')[1] : null),
+    payload: t.payload ? String(t.payload) : (t.encrypted_data && String(t.encrypted_data).startsWith('v1:') ? String(t.encrypted_data).split(':')[2] : (t.encrypted_data ? String(t.encrypted_data) : null)),
+    encrypted_data: t.encrypted_data ? String(t.encrypted_data) : (t.iv && t.payload ? `v1:${t.iv}:${t.payload}` : null),
   }));
 
   const creditCards: CreditCard[] = cardRes.rows.map((c: any) => ({
@@ -266,7 +280,9 @@ export async function directGetFullState(client: Client, familyId: string): Prom
     dueDay: Number(c.dueDay || 5),
     createdAt: String(c.createdAt),
     updatedAt: String(c.createdAt),
-    encrypted_data: c.encrypted_data || null,
+    iv: c.iv ? String(c.iv) : null,
+    payload: c.payload ? String(c.payload) : null,
+    encrypted_data: c.encrypted_data ? String(c.encrypted_data) : (c.iv && c.payload ? `v1:${c.iv}:${c.payload}` : null),
   }));
 
   const recurringTemplates: RecurringTemplate[] = recRes.rows.map((r: any) => ({
@@ -281,7 +297,9 @@ export async function directGetFullState(client: Client, familyId: string): Prom
     totalInstallments: r.totalInstallments ? Number(r.totalInstallments) : null,
     startMonth: r.startMonth ? String(r.startMonth) : null,
     createdAt: String(r.createdAt),
-    encrypted_data: r.encrypted_data || null,
+    iv: r.iv ? String(r.iv) : null,
+    payload: r.payload ? String(r.payload) : null,
+    encrypted_data: r.encrypted_data ? String(r.encrypted_data) : (r.iv && r.payload ? `v1:${r.iv}:${r.payload}` : null),
   }));
 
   const fuelLogs: FuelLog[] = fuelRes.rows.map((f: any) => ({
@@ -297,7 +315,9 @@ export async function directGetFullState(client: Client, familyId: string): Prom
     transactionId: f.transactionId ? String(f.transactionId) : null,
     notes: String(f.notes || ''),
     createdAt: String(f.createdAt),
-    encrypted_data: f.encrypted_data || null,
+    iv: f.iv ? String(f.iv) : (f.encrypted_data && String(f.encrypted_data).startsWith('v1:') ? String(f.encrypted_data).split(':')[1] : null),
+    payload: f.payload ? String(f.payload) : (f.encrypted_data && String(f.encrypted_data).startsWith('v1:') ? String(f.encrypted_data).split(':')[2] : (f.encrypted_data ? String(f.encrypted_data) : null)),
+    encrypted_data: f.encrypted_data ? String(f.encrypted_data) : (f.iv && f.payload ? `v1:${f.iv}:${f.payload}` : null),
   }));
 
   return {
@@ -319,15 +339,20 @@ export async function directGetFullState(client: Client, familyId: string): Prom
 
 export async function directSaveTransaction(client: Client, familyId: string, txData: any): Promise<AppState> {
   await ensureClientSchema(client);
-  const cleanAmount = txData.encrypted_data ? 0 : Number(txData.amount || 0);
-  const cleanDesc = txData.encrypted_data ? '🔒 Encrypted' : String(txData.description || '').trim();
-  const cleanCatId = txData.encrypted_data ? 'encrypted' : String(txData.categoryId || '');
-  const cleanNotes = txData.encrypted_data ? '' : String(txData.notes || '').trim();
+  const isEncrypted = Boolean(txData.encrypted_data || txData.payload);
+  const cleanAmount = isEncrypted ? null : Number(txData.amount || 0);
+  const cleanDesc = isEncrypted ? null : (txData.description ? String(txData.description).trim() : null);
+  const cleanCatId = isEncrypted ? null : (txData.categoryId ? String(txData.categoryId) : null);
+  const cleanNotes = isEncrypted ? null : (txData.notes ? String(txData.notes).trim() : '');
+
+  const cleanIv = txData.iv || (txData.encrypted_data && txData.encrypted_data.startsWith('v1:') ? txData.encrypted_data.split(':')[1] : null);
+  const cleanPayload = txData.payload || (txData.encrypted_data && txData.encrypted_data.startsWith('v1:') ? txData.encrypted_data.split(':')[2] : (txData.encrypted_data || null));
+  const cleanEncrypted = txData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
 
   await client.execute({
     sql: `INSERT OR REPLACE INTO transactions
-     (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       txData.id,
@@ -347,27 +372,34 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
       txData.purchaseDate || null,
       txData.settledInvoiceKey || null,
       txData.createdAt || new Date().toISOString(),
-      txData.encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
 
   if (Array.isArray(txData.futureEntries)) {
     for (const f of txData.futureEntries) {
       if (!f || !f.date) continue;
+      const fEnc = Boolean(f.encrypted_data || f.payload);
+      const fIv = f.iv || (f.encrypted_data && f.encrypted_data.startsWith('v1:') ? f.encrypted_data.split(':')[1] : null);
+      const fPayload = f.payload || (f.encrypted_data && f.encrypted_data.startsWith('v1:') ? f.encrypted_data.split(':')[2] : (f.encrypted_data || null));
+      const fEncData = f.encrypted_data || (fIv && fPayload ? `v1:${fIv}:${fPayload}` : fPayload);
+
       await client.execute({
         sql: `INSERT OR REPLACE INTO transactions
-         (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, encrypted_data)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           familyId,
           f.id,
           f.type || 'expense',
           f.status || 'unpaid',
-          f.encrypted_data ? 0 : Number(f.amount || 0),
-          f.encrypted_data ? '🔒 Encrypted' : String(f.description || '').trim(),
-          f.encrypted_data ? 'encrypted' : String(f.categoryId || ''),
+          fEnc ? null : Number(f.amount || 0),
+          fEnc ? null : (f.description ? String(f.description).trim() : null),
+          fEnc ? null : (f.categoryId ? String(f.categoryId) : null),
           String(f.date),
-          f.encrypted_data ? '' : String(f.notes || '').trim(),
+          fEnc ? null : String(f.notes || '').trim(),
           f.recurringId || null,
           f.dueDay || null,
           f.installmentCurrent || null,
@@ -377,7 +409,9 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
           f.purchaseDate || null,
           f.settledInvoiceKey || null,
           new Date().toISOString(),
-          f.encrypted_data || null,
+          fIv,
+          fEncData,
+          fPayload,
         ],
       });
     }
@@ -388,12 +422,16 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
 
 export async function directUpdateTransaction(client: Client, familyId: string, id: string, txData: any): Promise<AppState> {
   await ensureClientSchema(client);
-  if (txData.encrypted_data) {
+  const isEncrypted = Boolean(txData.encrypted_data || txData.payload);
+  if (isEncrypted) {
+    const cleanIv = txData.iv || (txData.encrypted_data && txData.encrypted_data.startsWith('v1:') ? txData.encrypted_data.split(':')[1] : null);
+    const cleanPayload = txData.payload || (txData.encrypted_data && txData.encrypted_data.startsWith('v1:') ? txData.encrypted_data.split(':')[2] : (txData.encrypted_data || null));
+    const cleanEncrypted = txData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
     await client.execute({
       sql: `UPDATE transactions
-       SET type = ?, status = ?, date = ?, encrypted_data = ?
+       SET type = ?, status = ?, date = ?, amount = NULL, description = NULL, categoryId = NULL, notes = NULL, iv = ?, encrypted_data = ?, payload = ?
        WHERE family_id = ? AND id = ?`,
-      args: [txData.type || 'expense', txData.status || 'paid', String(txData.date), txData.encrypted_data, familyId, id],
+      args: [txData.type || 'expense', txData.status || 'paid', String(txData.date), cleanIv, cleanEncrypted, cleanPayload, familyId, id],
     });
   } else {
     await client.execute({
@@ -448,19 +486,26 @@ export async function directUpdateSettings(client: Client, familyId: string, pay
 
 export async function directSaveCategory(client: Client, familyId: string, catData: any): Promise<AppState> {
   await ensureClientSchema(client);
+  const isEncrypted = Boolean(catData.encrypted_data || catData.payload);
+  const cleanIv = catData.iv || (catData.encrypted_data && catData.encrypted_data.startsWith('v1:') ? catData.encrypted_data.split(':')[1] : null);
+  const cleanPayload = catData.payload || (catData.encrypted_data && catData.encrypted_data.startsWith('v1:') ? catData.encrypted_data.split(':')[2] : (catData.encrypted_data || null));
+  const cleanEncrypted = catData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await client.execute({
     sql: `INSERT OR REPLACE INTO categories
-     (family_id, id, name, type, color, icon, isDefault, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, name, type, color, icon, isDefault, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       catData.id || `cat-${Date.now()}`,
-      catData.encrypted_data ? '🔒 Encrypted' : String(catData.name || '').trim(),
+      isEncrypted ? null : String(catData.name || '').trim(),
       catData.type === 'income' ? 'income' : 'expense',
-      catData.encrypted_data ? '#6366f1' : String(catData.color || '#6366f1'),
-      catData.encrypted_data ? 'Tag' : String(catData.icon || 'Tag'),
+      isEncrypted ? '#6366f1' : String(catData.color || '#6366f1'),
+      isEncrypted ? 'Tag' : String(catData.icon || 'Tag'),
       catData.isDefault ? 1 : 0,
-      catData.encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
   return directGetFullState(client, familyId);
@@ -477,22 +522,29 @@ export async function directDeleteCategory(client: Client, familyId: string, id:
 
 export async function directSaveCard(client: Client, familyId: string, cardData: any): Promise<AppState> {
   await ensureClientSchema(client);
+  const isEncrypted = Boolean(cardData.encrypted_data || cardData.payload);
+  const cleanIv = cardData.iv || (cardData.encrypted_data && cardData.encrypted_data.startsWith('v1:') ? cardData.encrypted_data.split(':')[1] : null);
+  const cleanPayload = cardData.payload || (cardData.encrypted_data && cardData.encrypted_data.startsWith('v1:') ? cardData.encrypted_data.split(':')[2] : (cardData.encrypted_data || null));
+  const cleanEncrypted = cardData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await client.execute({
     sql: `INSERT OR REPLACE INTO credit_cards
-     (family_id, id, name, brand, last4Digits, color, totalLimit, closingDay, dueDay, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, name, brand, last4Digits, color, totalLimit, closingDay, dueDay, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       cardData.id || `card-${Date.now()}`,
-      cardData.encrypted_data ? '🔒 Encrypted' : String(cardData.name || 'Cartão').trim(),
-      cardData.encrypted_data ? 'other' : String(cardData.brand || 'other'),
-      cardData.encrypted_data ? '' : String(cardData.lastDigits || cardData.last4Digits || '').slice(-4),
-      cardData.encrypted_data ? '#8b5cf6' : String(cardData.color || '#8b5cf6'),
-      cardData.encrypted_data ? 0 : Number(cardData.totalLimit || 0),
-      cardData.encrypted_data ? 25 : Number(cardData.closingDay || 25),
-      cardData.encrypted_data ? 5 : Number(cardData.dueDay || 5),
+      isEncrypted ? null : String(cardData.name || 'Cartão').trim(),
+      isEncrypted ? 'other' : String(cardData.brand || 'other'),
+      isEncrypted ? '' : String(cardData.lastDigits || cardData.last4Digits || '').slice(-4),
+      isEncrypted ? '#8b5cf6' : String(cardData.color || '#8b5cf6'),
+      isEncrypted ? 0 : Number(cardData.totalLimit || 0),
+      isEncrypted ? 25 : Number(cardData.closingDay || 25),
+      isEncrypted ? 5 : Number(cardData.dueDay || 5),
       new Date().toISOString(),
-      cardData.encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
   return directGetFullState(client, familyId);
@@ -513,58 +565,113 @@ export async function directDeleteCard(client: Client, familyId: string, id: str
 
 export async function directSaveFuel(client: Client, familyId: string, fuelData: any): Promise<AppState> {
   await ensureClientSchema(client);
+  const fuelId = fuelData.id || `fuel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const cleanDate = String(fuelData.date || new Date().toISOString().slice(0, 10));
+  const entryCreated = fuelData.createdAt || new Date().toISOString();
+  const txId = fuelData.transactionId || (fuelData.transaction && fuelData.transaction.id) || `tx-fuel-${fuelId}`;
+
+  const isEncrypted = Boolean(fuelData.encrypted_data || fuelData.payload);
+  const cleanIv = fuelData.iv || (fuelData.encrypted_data && fuelData.encrypted_data.startsWith('v1:') ? fuelData.encrypted_data.split(':')[1] : null);
+  const cleanPayload = fuelData.payload || (fuelData.encrypted_data && fuelData.encrypted_data.startsWith('v1:') ? fuelData.encrypted_data.split(':')[2] : (fuelData.encrypted_data || null));
+  const cleanEncrypted = fuelData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await client.execute({
     sql: `INSERT OR REPLACE INTO fuel_logs
-     (family_id, id, date, odometer, pricePerLiter, totalCost, liters, fuelType, stationName, isFullTank, notes, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, date, odometer, pricePerLiter, totalCost, liters, fuelType, stationName, isFullTank, transactionId, notes, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
-      fuelData.id || `fuel-${Date.now()}`,
-      String(fuelData.date),
-      fuelData.encrypted_data ? 0 : Number(fuelData.odometer || 0),
-      fuelData.encrypted_data ? 0 : Number(fuelData.pricePerLiter || 0),
-      fuelData.encrypted_data ? 0 : Number(fuelData.totalCost || 0),
-      fuelData.encrypted_data ? 0 : Number(fuelData.liters || 0),
-      fuelData.encrypted_data ? 'gasoline' : fuelData.fuelType || 'gasoline',
-      fuelData.encrypted_data ? '' : String(fuelData.stationName || ''),
+      fuelId,
+      cleanDate,
+      isEncrypted ? null : Number(fuelData.odometer || 0),
+      isEncrypted ? null : Number(fuelData.pricePerLiter || 0),
+      isEncrypted ? null : Number(fuelData.totalCost || 0),
+      isEncrypted ? null : Number(fuelData.liters || 0),
+      isEncrypted ? 'gasoline' : (fuelData.fuelType || 'gasoline'),
+      isEncrypted ? null : String(fuelData.stationName || ''),
       fuelData.isFullTank === false ? 0 : 1,
-      fuelData.encrypted_data ? '' : String(fuelData.notes || ''),
-      new Date().toISOString(),
-      fuelData.encrypted_data || null,
+      txId,
+      isEncrypted ? null : String(fuelData.notes || ''),
+      entryCreated,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
+
+  // Dual save: simultaneously insert or update the linked expense transaction
+  if (fuelData.transaction) {
+    await directSaveTransaction(client, familyId, {
+      ...fuelData.transaction,
+      id: txId,
+    });
+  } else if (!isEncrypted) {
+    const fuelLabel = fuelData.fuelType === 'ethanol' ? 'Etanol' : 'Gasolina';
+    const txDesc = `Abastecimento (${fuelLabel})${fuelData.stationName ? ` - ${fuelData.stationName}` : ''}${fuelData.liters ? ` [${Number(fuelData.liters).toFixed(2)}L]` : ''}`;
+    await directSaveTransaction(client, familyId, {
+      id: txId,
+      type: 'expense',
+      status: 'paid',
+      amount: Number(fuelData.totalCost || 0),
+      description: txDesc,
+      categoryId: 'exp-transport',
+      date: cleanDate,
+      notes: `${fuelData.odometer || 0} km • ${fuelData.pricePerLiter || 0}/L`,
+      createdAt: entryCreated,
+    });
+  }
+
   return directGetFullState(client, familyId);
 }
 
 export async function directDeleteFuel(client: Client, familyId: string, id: string): Promise<AppState> {
   await ensureClientSchema(client);
+  const res = await client.execute({
+    sql: 'SELECT transactionId FROM fuel_logs WHERE family_id = ? AND id = ?',
+    args: [familyId, id],
+  });
+  const txId = res.rows[0]?.transactionId || `tx-fuel-${id}`;
+
   await client.execute({
     sql: 'DELETE FROM fuel_logs WHERE family_id = ? AND id = ?',
     args: [familyId, id],
   });
+
+  await client.execute({
+    sql: 'DELETE FROM transactions WHERE family_id = ? AND (id = ? OR id = ?)',
+    args: [familyId, txId, `tx-fuel-${id}`],
+  });
+
   return directGetFullState(client, familyId);
 }
 
 export async function directSaveRecurring(client: Client, familyId: string, recData: any): Promise<AppState> {
   await ensureClientSchema(client);
+  const isEncrypted = Boolean(recData.encrypted_data || recData.payload);
+  const cleanIv = recData.iv || (recData.encrypted_data && recData.encrypted_data.startsWith('v1:') ? recData.encrypted_data.split(':')[1] : null);
+  const cleanPayload = recData.payload || (recData.encrypted_data && recData.encrypted_data.startsWith('v1:') ? recData.encrypted_data.split(':')[2] : (recData.encrypted_data || null));
+  const cleanEncrypted = recData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await client.execute({
     sql: `INSERT OR REPLACE INTO recurring_templates
-     (family_id, id, type, amount, description, categoryId, dayOfMonth, active, isInstallment, totalInstallments, startMonth, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, type, amount, description, categoryId, dayOfMonth, active, isInstallment, totalInstallments, startMonth, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       recData.id || `rec-${Date.now()}`,
       recData.type || 'expense',
-      recData.encrypted_data ? 0 : Number(recData.amount || 0),
-      recData.encrypted_data ? '🔒 Encrypted' : String(recData.description || '').trim(),
-      recData.encrypted_data ? 'encrypted' : String(recData.categoryId || ''),
+      isEncrypted ? null : Number(recData.amount || 0),
+      isEncrypted ? null : String(recData.description || '').trim(),
+      isEncrypted ? null : String(recData.categoryId || ''),
       Number(recData.dayOfMonth || 1),
       recData.active === false ? 0 : 1,
       recData.isInstallment ? 1 : 0,
       recData.totalInstallments ? Number(recData.totalInstallments) : null,
       recData.startMonth || null,
       new Date().toISOString(),
-      recData.encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
   return directGetFullState(client, familyId);

@@ -124,21 +124,23 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS categories (
       family_id TEXT NOT NULL,
       id TEXT NOT NULL,
-      name TEXT NOT NULL,
+      name TEXT,
       type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
-      color TEXT NOT NULL,
-      icon TEXT NOT NULL,
+      color TEXT,
+      icon TEXT,
       isDefault INTEGER NOT NULL DEFAULT 0,
+      iv TEXT DEFAULT NULL,
       encrypted_data TEXT DEFAULT NULL,
+      payload TEXT DEFAULT NULL,
       PRIMARY KEY (family_id, id)
     )`,
     `CREATE TABLE IF NOT EXISTS transactions (
       family_id TEXT NOT NULL,
       id TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
-      amount REAL NOT NULL,
-      description TEXT NOT NULL,
-      categoryId TEXT NOT NULL,
+      amount REAL,
+      description TEXT,
+      categoryId TEXT,
       date TEXT NOT NULL,
       notes TEXT DEFAULT '',
       recurringId TEXT DEFAULT NULL,
@@ -151,54 +153,62 @@ export async function initDb() {
       purchaseDate TEXT DEFAULT NULL,
       settledInvoiceKey TEXT DEFAULT NULL,
       createdAt TEXT NOT NULL,
+      iv TEXT DEFAULT NULL,
       encrypted_data TEXT DEFAULT NULL,
+      payload TEXT DEFAULT NULL,
       PRIMARY KEY (family_id, id)
     )`,
     `CREATE TABLE IF NOT EXISTS recurring_templates (
       family_id TEXT NOT NULL,
       id TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('income', 'expense')),
-      amount REAL NOT NULL,
-      description TEXT NOT NULL,
-      categoryId TEXT NOT NULL,
+      amount REAL,
+      description TEXT,
+      categoryId TEXT,
       dayOfMonth INTEGER NOT NULL DEFAULT 1,
       active INTEGER NOT NULL DEFAULT 1,
       isInstallment INTEGER NOT NULL DEFAULT 0,
       totalInstallments INTEGER DEFAULT NULL,
       startMonth TEXT DEFAULT NULL,
       createdAt TEXT NOT NULL,
+      iv TEXT DEFAULT NULL,
       encrypted_data TEXT DEFAULT NULL,
+      payload TEXT DEFAULT NULL,
       PRIMARY KEY (family_id, id)
     )`,
     `CREATE TABLE IF NOT EXISTS fuel_logs (
       family_id TEXT NOT NULL,
       id TEXT NOT NULL,
       date TEXT NOT NULL,
-      odometer REAL NOT NULL,
-      pricePerLiter REAL NOT NULL,
-      totalCost REAL NOT NULL,
-      liters REAL NOT NULL,
-      fuelType TEXT NOT NULL CHECK(fuelType IN ('gasoline', 'ethanol')),
+      odometer REAL,
+      pricePerLiter REAL,
+      totalCost REAL,
+      liters REAL,
+      fuelType TEXT CHECK(fuelType IN ('gasoline', 'ethanol')),
       stationName TEXT DEFAULT '',
       isFullTank INTEGER NOT NULL DEFAULT 1,
       transactionId TEXT DEFAULT NULL,
       notes TEXT DEFAULT '',
       createdAt TEXT NOT NULL,
+      iv TEXT DEFAULT NULL,
       encrypted_data TEXT DEFAULT NULL,
+      payload TEXT DEFAULT NULL,
       PRIMARY KEY (family_id, id)
     )`,
     `CREATE TABLE IF NOT EXISTS credit_cards (
       family_id TEXT NOT NULL,
       id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      brand TEXT NOT NULL DEFAULT 'other',
+      name TEXT,
+      brand TEXT DEFAULT 'other',
       last4Digits TEXT DEFAULT '',
-      color TEXT NOT NULL DEFAULT '#8b5cf6',
-      totalLimit REAL NOT NULL DEFAULT 5000,
-      closingDay INTEGER NOT NULL DEFAULT 25,
-      dueDay INTEGER NOT NULL DEFAULT 5,
+      color TEXT DEFAULT '#8b5cf6',
+      totalLimit REAL DEFAULT 0,
+      closingDay INTEGER DEFAULT 25,
+      dueDay INTEGER DEFAULT 5,
       createdAt TEXT NOT NULL,
+      iv TEXT DEFAULT NULL,
       encrypted_data TEXT DEFAULT NULL,
+      payload TEXT DEFAULT NULL,
       PRIMARY KEY (family_id, id)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_tx_family_date ON transactions(family_id, date)`,
@@ -212,12 +222,23 @@ export async function initDb() {
     await turso.execute(sql);
   }
 
-  // Ensure encrypted_data column exists on all tables
+  // Ensure encrypted_data, iv, and payload columns exist on all tables
+  await ensureColumn('transactions', 'iv', 'TEXT DEFAULT NULL');
   await ensureColumn('transactions', 'encrypted_data', 'TEXT DEFAULT NULL');
+  await ensureColumn('transactions', 'payload', 'TEXT DEFAULT NULL');
+  await ensureColumn('categories', 'iv', 'TEXT DEFAULT NULL');
   await ensureColumn('categories', 'encrypted_data', 'TEXT DEFAULT NULL');
+  await ensureColumn('categories', 'payload', 'TEXT DEFAULT NULL');
+  await ensureColumn('credit_cards', 'iv', 'TEXT DEFAULT NULL');
   await ensureColumn('credit_cards', 'encrypted_data', 'TEXT DEFAULT NULL');
+  await ensureColumn('credit_cards', 'payload', 'TEXT DEFAULT NULL');
+  await ensureColumn('recurring_templates', 'iv', 'TEXT DEFAULT NULL');
   await ensureColumn('recurring_templates', 'encrypted_data', 'TEXT DEFAULT NULL');
+  await ensureColumn('recurring_templates', 'payload', 'TEXT DEFAULT NULL');
+  await ensureColumn('fuel_logs', 'transactionId', 'TEXT DEFAULT NULL');
+  await ensureColumn('fuel_logs', 'iv', 'TEXT DEFAULT NULL');
   await ensureColumn('fuel_logs', 'encrypted_data', 'TEXT DEFAULT NULL');
+  await ensureColumn('fuel_logs', 'payload', 'TEXT DEFAULT NULL');
   await ensureColumn('settings', 'encrypted_data', 'TEXT DEFAULT NULL');
 
   console.log('[Turso] Database tables and indexes ready with Zero-Knowledge encryption support.');
@@ -406,13 +427,15 @@ export async function getFullState(familyId, port = 3456) {
     color: c.color,
     icon: c.icon,
     isDefault: Number(c.isDefault || 0),
-    encrypted_data: c.encrypted_data || null,
+    iv: c.iv || null,
+    payload: c.payload || null,
+    encrypted_data: c.encrypted_data || (c.iv && c.payload ? `v1:${c.iv}:${c.payload}` : c.payload) || null,
   }));
 
   const transactions = txRes.rows.map((t) => ({
     id: t.id,
     type: t.type,
-    amount: Number(t.amount || 0),
+    amount: t.amount !== null && t.amount !== undefined ? Number(t.amount) : 0,
     description: t.description || '',
     categoryId: t.categoryId || '',
     date: t.date,
@@ -427,7 +450,9 @@ export async function getFullState(familyId, port = 3456) {
     purchaseDate: t.purchaseDate || null,
     settledInvoiceKey: t.settledInvoiceKey || null,
     createdAt: t.createdAt,
-    encrypted_data: t.encrypted_data || null,
+    iv: t.iv || (t.encrypted_data && t.encrypted_data.startsWith('v1:') ? t.encrypted_data.split(':')[1] : null),
+    payload: t.payload || (t.encrypted_data && t.encrypted_data.startsWith('v1:') ? t.encrypted_data.split(':')[2] : t.encrypted_data) || null,
+    encrypted_data: t.encrypted_data || (t.iv && t.payload ? `v1:${t.iv}:${t.payload}` : t.payload) || null,
   }));
 
   const creditCards = cardRes.rows.map((c) => ({
@@ -441,7 +466,9 @@ export async function getFullState(familyId, port = 3456) {
     closingDay: Number(c.closingDay || 25),
     dueDay: Number(c.dueDay || 5),
     createdAt: c.createdAt,
-    encrypted_data: c.encrypted_data || null,
+    iv: c.iv || null,
+    payload: c.payload || null,
+    encrypted_data: c.encrypted_data || (c.iv && c.payload ? `v1:${c.iv}:${c.payload}` : c.payload) || null,
   }));
 
   const recurringTemplates = recRes.rows.map((r) => ({
@@ -456,7 +483,9 @@ export async function getFullState(familyId, port = 3456) {
     totalInstallments: r.totalInstallments ? Number(r.totalInstallments) : null,
     startMonth: r.startMonth || null,
     createdAt: r.createdAt,
-    encrypted_data: r.encrypted_data || null,
+    iv: r.iv || null,
+    payload: r.payload || null,
+    encrypted_data: r.encrypted_data || (r.iv && r.payload ? `v1:${r.iv}:${r.payload}` : r.payload) || null,
   }));
 
   const fuelLogs = fuelRes.rows.map((f) => ({
@@ -472,7 +501,9 @@ export async function getFullState(familyId, port = 3456) {
     transactionId: f.transactionId || null,
     notes: f.notes || '',
     createdAt: f.createdAt,
-    encrypted_data: f.encrypted_data || null,
+    iv: f.iv || (f.encrypted_data && f.encrypted_data.startsWith('v1:') ? f.encrypted_data.split(':')[1] : null),
+    payload: f.payload || (f.encrypted_data && f.encrypted_data.startsWith('v1:') ? f.encrypted_data.split(':')[2] : f.encrypted_data) || null,
+    encrypted_data: f.encrypted_data || (f.iv && f.payload ? `v1:${f.iv}:${f.payload}` : f.payload) || null,
   }));
 
   const lanUrls = getLocalNetworkAddresses(port);
@@ -526,7 +557,9 @@ export async function saveTransaction(familyId, txData) {
     purchaseDate,
     settledInvoiceKey,
     createdAt,
+    iv,
     encrypted_data,
+    payload,
     futureEntries,
   } = txData;
 
@@ -536,16 +569,21 @@ export async function saveTransaction(familyId, txData) {
   const cleanDate = String(date || new Date().toISOString().slice(0, 10));
   const entryCreated = createdAt || new Date().toISOString();
 
-  // If encrypted_data is present, zero-knowledge: don't store cleartext sensitive data
-  const cleanAmount = encrypted_data ? 0 : Number(amount || 0);
-  const cleanDesc = encrypted_data ? '🔒 Encrypted' : String(description || '').trim();
-  const cleanCatId = encrypted_data ? 'encrypted' : String(categoryId || '');
-  const cleanNotes = encrypted_data ? '' : String(notes || '').trim();
+  // Zero-Knowledge: when encrypted, sensitive columns are strictly NULL in database
+  const isEncrypted = Boolean(encrypted_data || payload);
+  const cleanAmount = isEncrypted ? null : Number(amount || 0);
+  const cleanDesc = isEncrypted ? null : (description ? String(description).trim() : null);
+  const cleanCatId = isEncrypted ? null : (categoryId ? String(categoryId) : null);
+  const cleanNotes = isEncrypted ? null : (notes ? String(notes).trim() : '');
+
+  const cleanIv = iv || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[1] : null);
+  const cleanPayload = payload || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[2] : (encrypted_data || null));
+  const cleanEncrypted = encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
 
   await turso.execute({
     sql: `INSERT OR REPLACE INTO transactions
-     (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       txId,
@@ -565,7 +603,9 @@ export async function saveTransaction(familyId, txData) {
       purchaseDate || null,
       settledInvoiceKey || null,
       entryCreated,
-      encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
 
@@ -573,20 +613,25 @@ export async function saveTransaction(familyId, txData) {
     for (const fTx of futureEntries) {
       if (!fTx || !fTx.date) continue;
       const fId = fTx.id || `tx-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const fEnc = Boolean(fTx.encrypted_data || fTx.payload);
+      const fIv = fTx.iv || (fTx.encrypted_data && fTx.encrypted_data.startsWith('v1:') ? fTx.encrypted_data.split(':')[1] : null);
+      const fPayload = fTx.payload || (fTx.encrypted_data && fTx.encrypted_data.startsWith('v1:') ? fTx.encrypted_data.split(':')[2] : (fTx.encrypted_data || null));
+      const fEncData = fTx.encrypted_data || (fIv && fPayload ? `v1:${fIv}:${fPayload}` : fPayload);
+
       await turso.execute({
         sql: `INSERT OR REPLACE INTO transactions
-         (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, encrypted_data)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           familyId,
           fId,
           fTx.type === 'income' ? 'income' : 'expense',
           fTx.status === 'paid' ? 'paid' : 'unpaid',
-          fTx.encrypted_data ? 0 : Number(fTx.amount ?? amount ?? 0),
-          fTx.encrypted_data ? '🔒 Encrypted' : String(fTx.description || description || '').trim(),
-          fTx.encrypted_data ? 'encrypted' : String(fTx.categoryId || categoryId || ''),
+          fEnc ? null : Number(fTx.amount ?? amount ?? 0),
+          fEnc ? null : (fTx.description || description ? String(fTx.description || description).trim() : null),
+          fEnc ? null : (fTx.categoryId || categoryId ? String(fTx.categoryId || categoryId) : null),
           String(fTx.date),
-          fTx.encrypted_data ? '' : String(fTx.notes ?? notes ?? '').trim(),
+          fEnc ? null : String(fTx.notes ?? notes ?? '').trim(),
           fTx.recurringId || recurringId || null,
           fTx.dueDay ? Number(fTx.dueDay) : dueDay ? Number(dueDay) : null,
           fTx.installmentCurrent ? Number(fTx.installmentCurrent) : null,
@@ -596,7 +641,9 @@ export async function saveTransaction(familyId, txData) {
           fTx.purchaseDate || purchaseDate || null,
           fTx.settledInvoiceKey || null,
           new Date().toISOString(),
-          fTx.encrypted_data || null,
+          fIv,
+          fEncData,
+          fPayload,
         ],
       });
     }
@@ -606,7 +653,7 @@ export async function saveTransaction(familyId, txData) {
 }
 
 export async function updateTransaction(familyId, id, txData) {
-  const { type, date, status, encrypted_data } = txData;
+  const { type, date, status, iv, encrypted_data, payload } = txData;
 
   const res = await turso.execute({
     sql: 'SELECT * FROM transactions WHERE family_id = ? AND id = ?',
@@ -624,12 +671,17 @@ export async function updateTransaction(familyId, id, txData) {
       ? 'unpaid'
       : 'paid';
 
-  if (encrypted_data) {
+  const isEncrypted = Boolean(encrypted_data || payload);
+  if (isEncrypted) {
+    const cleanIv = iv || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[1] : null);
+    const cleanPayload = payload || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[2] : (encrypted_data || null));
+    const cleanEncrypted = encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
     await turso.execute({
       sql: `UPDATE transactions
-       SET type = ?, status = ?, date = ?, encrypted_data = ?
+       SET type = ?, status = ?, date = ?, amount = NULL, description = NULL, categoryId = NULL, notes = NULL, iv = ?, encrypted_data = ?, payload = ?
        WHERE family_id = ? AND id = ?`,
-      args: [type || existing.type, nextStatus, date || existing.date, encrypted_data, familyId, id],
+      args: [type || existing.type, nextStatus, date || existing.date, cleanIv, cleanEncrypted, cleanPayload, familyId, id],
     });
   } else {
     // Unencrypted update fallback
@@ -688,34 +740,44 @@ export async function deleteTransaction(familyId, id) {
 }
 
 export async function saveCreditCard(familyId, cardData) {
-  const { id, name, brand, lastDigits, last4Digits, color, totalLimit, closingDay, dueDay, encrypted_data } = cardData;
+  const { id, name, brand, lastDigits, last4Digits, color, totalLimit, closingDay, dueDay, iv, encrypted_data, payload } = cardData;
   const cardId = id || `card-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const isEncrypted = Boolean(encrypted_data || payload);
+  const cleanIv = iv || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[1] : null);
+  const cleanPayload = payload || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[2] : (encrypted_data || null));
+  const cleanEncrypted = encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await turso.execute({
     sql: `INSERT OR REPLACE INTO credit_cards
-     (family_id, id, name, brand, last4Digits, color, totalLimit, closingDay, dueDay, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, name, brand, last4Digits, color, totalLimit, closingDay, dueDay, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       cardId,
-      encrypted_data ? '🔒 Encrypted' : String(name || 'Cartão').trim(),
-      encrypted_data ? 'other' : String(brand || 'other'),
-      encrypted_data ? '' : String(lastDigits || last4Digits || '').slice(-4),
-      encrypted_data ? '#8b5cf6' : String(color || '#8b5cf6'),
-      encrypted_data ? 0 : Number(totalLimit || 0),
-      encrypted_data ? 25 : Number(closingDay || 25),
-      encrypted_data ? 5 : Number(dueDay || 5),
+      isEncrypted ? null : String(name || 'Cartão').trim(),
+      isEncrypted ? 'other' : String(brand || 'other'),
+      isEncrypted ? '' : String(lastDigits || last4Digits || '').slice(-4),
+      isEncrypted ? '#8b5cf6' : String(color || '#8b5cf6'),
+      isEncrypted ? 0 : Number(totalLimit || 0),
+      isEncrypted ? 25 : Number(closingDay || 25),
+      isEncrypted ? 5 : Number(dueDay || 5),
       new Date().toISOString(),
-      encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
   return getFullState(familyId);
 }
 
 export async function updateCreditCard(familyId, id, cardData) {
-  if (cardData.encrypted_data) {
+  if (cardData.encrypted_data || cardData.payload) {
+    const cleanIv = cardData.iv || (cardData.encrypted_data && cardData.encrypted_data.startsWith('v1:') ? cardData.encrypted_data.split(':')[1] : null);
+    const cleanPayload = cardData.payload || (cardData.encrypted_data && cardData.encrypted_data.startsWith('v1:') ? cardData.encrypted_data.split(':')[2] : (cardData.encrypted_data || null));
+    const cleanEncrypted = cardData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
     await turso.execute({
-      sql: 'UPDATE credit_cards SET encrypted_data = ? WHERE family_id = ? AND id = ?',
-      args: [cardData.encrypted_data, familyId, id],
+      sql: 'UPDATE credit_cards SET name = NULL, iv = ?, encrypted_data = ?, payload = ? WHERE family_id = ? AND id = ?',
+      args: [cleanIv, cleanEncrypted, cleanPayload, familyId, id],
     });
   } else {
     await turso.execute({
@@ -751,31 +813,41 @@ export async function deleteCreditCard(familyId, id) {
 }
 
 export async function saveCategory(familyId, catData) {
-  const { id, name, type, color, icon, isDefault, encrypted_data } = catData;
+  const { id, name, type, color, icon, isDefault, iv, encrypted_data, payload } = catData;
   const catId = id || `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const isEncrypted = Boolean(encrypted_data || payload);
+  const cleanIv = iv || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[1] : null);
+  const cleanPayload = payload || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[2] : (encrypted_data || null));
+  const cleanEncrypted = encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await turso.execute({
     sql: `INSERT OR REPLACE INTO categories
-     (family_id, id, name, type, color, icon, isDefault, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, name, type, color, icon, isDefault, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       catId,
-      encrypted_data ? '🔒 Encrypted' : String(name || '').trim(),
+      isEncrypted ? null : String(name || '').trim(),
       type === 'income' ? 'income' : 'expense',
-      encrypted_data ? '#6366f1' : String(color || '#6366f1'),
-      encrypted_data ? 'Tag' : String(icon || 'Tag'),
+      isEncrypted ? '#6366f1' : String(color || '#6366f1'),
+      isEncrypted ? 'Tag' : String(icon || 'Tag'),
       isDefault ? 1 : 0,
-      encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
   return getFullState(familyId);
 }
 
 export async function updateCategory(familyId, id, catData) {
-  if (catData.encrypted_data) {
+  if (catData.encrypted_data || catData.payload) {
+    const cleanIv = catData.iv || (catData.encrypted_data && catData.encrypted_data.startsWith('v1:') ? catData.encrypted_data.split(':')[1] : null);
+    const cleanPayload = catData.payload || (catData.encrypted_data && catData.encrypted_data.startsWith('v1:') ? catData.encrypted_data.split(':')[2] : (catData.encrypted_data || null));
+    const cleanEncrypted = catData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
     await turso.execute({
-      sql: 'UPDATE categories SET type = ?, encrypted_data = ? WHERE family_id = ? AND id = ?',
-      args: [catData.type === 'income' ? 'income' : 'expense', catData.encrypted_data, familyId, id],
+      sql: 'UPDATE categories SET name = NULL, type = ?, iv = ?, encrypted_data = ?, payload = ? WHERE family_id = ? AND id = ?',
+      args: [catData.type === 'income' ? 'income' : 'expense', cleanIv, cleanEncrypted, cleanPayload, familyId, id],
     });
   } else {
     await turso.execute({
@@ -804,36 +876,46 @@ export async function deleteCategory(familyId, id) {
 }
 
 export async function saveRecurring(familyId, recData) {
-  const { id, type, amount, description, categoryId, dayOfMonth, active, isInstallment, totalInstallments, startMonth, encrypted_data } = recData;
+  const { id, type, amount, description, categoryId, dayOfMonth, active, isInstallment, totalInstallments, startMonth, iv, encrypted_data, payload } = recData;
   const recId = id || `rec-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const isEncrypted = Boolean(encrypted_data || payload);
+  const cleanIv = iv || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[1] : null);
+  const cleanPayload = payload || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[2] : (encrypted_data || null));
+  const cleanEncrypted = encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await turso.execute({
     sql: `INSERT OR REPLACE INTO recurring_templates
-     (family_id, id, type, amount, description, categoryId, dayOfMonth, active, isInstallment, totalInstallments, startMonth, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, type, amount, description, categoryId, dayOfMonth, active, isInstallment, totalInstallments, startMonth, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       recId,
       type === 'income' ? 'income' : 'expense',
-      encrypted_data ? 0 : Number(amount || 0),
-      encrypted_data ? '🔒 Encrypted' : String(description || '').trim(),
-      encrypted_data ? 'encrypted' : String(categoryId || ''),
+      isEncrypted ? null : Number(amount || 0),
+      isEncrypted ? null : String(description || '').trim(),
+      isEncrypted ? null : String(categoryId || ''),
       Number(dayOfMonth || 1),
       active === false ? 0 : 1,
       isInstallment ? 1 : 0,
       totalInstallments ? Number(totalInstallments) : null,
       startMonth || null,
       new Date().toISOString(),
-      encrypted_data || null,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
   return getFullState(familyId);
 }
 
 export async function updateRecurring(familyId, id, recData) {
-  if (recData.encrypted_data) {
+  if (recData.encrypted_data || recData.payload) {
+    const cleanIv = recData.iv || (recData.encrypted_data && recData.encrypted_data.startsWith('v1:') ? recData.encrypted_data.split(':')[1] : null);
+    const cleanPayload = recData.payload || (recData.encrypted_data && recData.encrypted_data.startsWith('v1:') ? recData.encrypted_data.split(':')[2] : (recData.encrypted_data || null));
+    const cleanEncrypted = recData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
     await turso.execute({
-      sql: 'UPDATE recurring_templates SET type = ?, active = ?, encrypted_data = ? WHERE family_id = ? AND id = ?',
-      args: [recData.type || 'expense', recData.active ? 1 : 0, recData.encrypted_data, familyId, id],
+      sql: 'UPDATE recurring_templates SET type = ?, active = ?, amount = NULL, description = NULL, categoryId = NULL, iv = ?, encrypted_data = ?, payload = ? WHERE family_id = ? AND id = ?',
+      args: [recData.type || 'expense', recData.active ? 1 : 0, cleanIv, cleanEncrypted, cleanPayload, familyId, id],
     });
   } else {
     await turso.execute({
@@ -864,36 +946,93 @@ export async function deleteRecurring(familyId, id) {
 }
 
 export async function saveFuelLog(familyId, fuelData) {
-  const { id, date, odometer, pricePerLiter, totalCost, liters, fuelType, stationName, isFullTank, notes, createdAt, encrypted_data } = fuelData;
+  const {
+    id,
+    date,
+    odometer,
+    pricePerLiter,
+    totalCost,
+    liters,
+    fuelType,
+    stationName,
+    isFullTank,
+    notes,
+    createdAt,
+    transactionId,
+    transaction,
+    iv,
+    encrypted_data,
+    payload,
+  } = fuelData;
+
   const fuelId = id || `fuel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const cleanDate = String(date || new Date().toISOString().slice(0, 10));
+  const entryCreated = createdAt || new Date().toISOString();
+  const txId = transactionId || (transaction && transaction.id) || `tx-fuel-${fuelId}`;
+
+  const isEncrypted = Boolean(encrypted_data || payload);
+  const cleanIv = iv || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[1] : null);
+  const cleanPayload = payload || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[2] : (encrypted_data || null));
+  const cleanEncrypted = encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+
   await turso.execute({
     sql: `INSERT OR REPLACE INTO fuel_logs
-     (family_id, id, date, odometer, pricePerLiter, totalCost, liters, fuelType, stationName, isFullTank, notes, createdAt, encrypted_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (family_id, id, date, odometer, pricePerLiter, totalCost, liters, fuelType, stationName, isFullTank, transactionId, notes, createdAt, iv, encrypted_data, payload)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       familyId,
       fuelId,
-      String(date || new Date().toISOString().slice(0, 10)),
-      encrypted_data ? 0 : Number(odometer || 0),
-      encrypted_data ? 0 : Number(pricePerLiter || 0),
-      encrypted_data ? 0 : Number(totalCost || 0),
-      encrypted_data ? 0 : Number(liters || 0),
-      encrypted_data ? 'gasoline' : fuelType || 'gasoline',
-      encrypted_data ? '' : String(stationName || ''),
+      cleanDate,
+      isEncrypted ? null : Number(odometer || 0),
+      isEncrypted ? null : Number(pricePerLiter || 0),
+      isEncrypted ? null : Number(totalCost || 0),
+      isEncrypted ? null : Number(liters || 0),
+      isEncrypted ? 'gasoline' : (fuelType || 'gasoline'),
+      isEncrypted ? null : String(stationName || ''),
       isFullTank === false ? 0 : 1,
-      encrypted_data ? '' : String(notes || ''),
-      createdAt || new Date().toISOString(),
-      encrypted_data || null,
+      txId,
+      isEncrypted ? null : String(notes || ''),
+      entryCreated,
+      cleanIv,
+      cleanEncrypted,
+      cleanPayload,
     ],
   });
+
+  // Dual save: simultaneously insert or update the linked expense transaction
+  if (transaction) {
+    await saveTransaction(familyId, {
+      ...transaction,
+      id: txId,
+    });
+  } else if (!isEncrypted) {
+    const fuelLabel = fuelType === 'ethanol' ? 'Etanol' : 'Gasolina';
+    const txDesc = `Abastecimento (${fuelLabel})${stationName ? ` - ${stationName}` : ''}${liters ? ` [${Number(liters).toFixed(2)}L]` : ''}`;
+    await saveTransaction(familyId, {
+      id: txId,
+      type: 'expense',
+      status: 'paid',
+      amount: Number(totalCost || 0),
+      description: txDesc,
+      categoryId: 'exp-transport',
+      date: cleanDate,
+      notes: `${odometer || 0} km • ${pricePerLiter || 0}/L`,
+      createdAt: entryCreated,
+    });
+  }
+
   return getFullState(familyId);
 }
 
 export async function updateFuelLog(familyId, id, fuelData) {
-  if (fuelData.encrypted_data) {
+  const isEncrypted = Boolean(fuelData.encrypted_data || fuelData.payload);
+  if (isEncrypted) {
+    const cleanIv = fuelData.iv || (fuelData.encrypted_data && fuelData.encrypted_data.startsWith('v1:') ? fuelData.encrypted_data.split(':')[1] : null);
+    const cleanPayload = fuelData.payload || (fuelData.encrypted_data && fuelData.encrypted_data.startsWith('v1:') ? fuelData.encrypted_data.split(':')[2] : (fuelData.encrypted_data || null));
+    const cleanEncrypted = fuelData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
     await turso.execute({
-      sql: 'UPDATE fuel_logs SET date = ?, encrypted_data = ? WHERE family_id = ? AND id = ?',
-      args: [String(fuelData.date), fuelData.encrypted_data, familyId, id],
+      sql: 'UPDATE fuel_logs SET date = ?, odometer = NULL, pricePerLiter = NULL, totalCost = NULL, liters = NULL, stationName = NULL, notes = NULL, iv = ?, encrypted_data = ?, payload = ? WHERE family_id = ? AND id = ?',
+      args: [String(fuelData.date), cleanIv, cleanEncrypted, cleanPayload, familyId, id],
     });
   } else {
     await turso.execute({
@@ -915,14 +1054,37 @@ export async function updateFuelLog(familyId, id, fuelData) {
       ],
     });
   }
+
+  if (fuelData.transaction) {
+    const txId = fuelData.transactionId || fuelData.transaction.id || `tx-fuel-${id}`;
+    await saveTransaction(familyId, {
+      ...fuelData.transaction,
+      id: txId,
+    });
+  }
+
   return getFullState(familyId);
 }
 
 export async function deleteFuelLog(familyId, id) {
+  // Query transactionId before deletion
+  const res = await turso.execute({
+    sql: 'SELECT transactionId FROM fuel_logs WHERE family_id = ? AND id = ?',
+    args: [familyId, id],
+  });
+  const txId = res.rows[0]?.transactionId || `tx-fuel-${id}`;
+
   await turso.execute({
     sql: 'DELETE FROM fuel_logs WHERE family_id = ? AND id = ?',
     args: [familyId, id],
   });
+
+  // Delete associated transaction
+  await turso.execute({
+    sql: 'DELETE FROM transactions WHERE family_id = ? AND (id = ? OR id = ?)',
+    args: [familyId, txId, `tx-fuel-${id}`],
+  });
+
   return getFullState(familyId);
 }
 

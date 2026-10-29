@@ -167,6 +167,25 @@ export const App: React.FC = () => {
   const handleLeaveFamily = useCallback(() => {
     clearStoredFamilyId();
     clearStoredMasterKey();
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (
+          key &&
+          (key.startsWith(STORAGE_STATE_KEY) ||
+            key.startsWith(STORAGE_PENDING_TX_KEY) ||
+            key === 'familyplan_family_id' ||
+            key === 'familyplan_master_key')
+        ) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+    setPendingOfflineTx([]);
     setFamilyId(null);
     setMasterKey(null);
     setState(FALLBACK_STATE);
@@ -840,11 +859,70 @@ export const App: React.FC = () => {
     isFullTank: boolean;
     notes?: string;
   }) => {
+    const fuelId = fuelData.id || `fuel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const txId = `tx-fuel-${fuelId}`;
+    const fuelLabel =
+      language === 'pt-BR'
+        ? fuelData.fuelType === 'ethanol'
+          ? 'Etanol'
+          : 'Gasolina'
+        : fuelData.fuelType === 'ethanol'
+        ? 'Ethanol'
+        : 'Gasoline';
+    const baseDesc = language === 'pt-BR' ? `Abastecimento (${fuelLabel})` : `Refueling (${fuelLabel})`;
+    const txDesc = `${baseDesc}${fuelData.stationName ? ` - ${fuelData.stationName}` : ''}${fuelData.liters ? ` [${Number(fuelData.liters).toFixed(2)}L]` : ''}`;
+
+    const linkedTx: Transaction = {
+      id: txId,
+      type: 'expense',
+      status: 'paid',
+      amount: Number(fuelData.totalCost || 0),
+      description: txDesc,
+      categoryId: 'exp-transport',
+      date: fuelData.date,
+      notes: `${fuelData.odometer} km • ${fuelData.pricePerLiter}/L`,
+      createdAt: new Date().toISOString(),
+    };
+
+    const fullFuelLog = {
+      id: fuelId,
+      ...fuelData,
+      transactionId: txId,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistic UI update for immediate response on balance, charts, and extrato
+    const prevFuel = state.fuelLogs || [];
+    const nextFuel = fuelData.id
+      ? prevFuel.map((f) => (f.id === fuelData.id ? fullFuelLog : f))
+      : [fullFuelLog, ...prevFuel];
+    const nextTx = state.transactions.some((tx) => tx.id === txId)
+      ? state.transactions.map((tx) => (tx.id === txId ? linkedTx : tx))
+      : [linkedTx, ...state.transactions];
+
+    saveStateToCache({
+      ...state,
+      fuelLogs: nextFuel,
+      transactions: nextTx,
+    });
+
     try {
-      const fuelPayload =
-        masterKey && familyId
-          ? await encryptFuelLog(fuelData as any, masterKey, familyId)
-          : fuelData;
+      let fuelPayload: any;
+      if (masterKey && familyId) {
+        const encFuel = await encryptFuelLog(fullFuelLog as any, masterKey, familyId);
+        const encTx = await encryptTransaction(linkedTx, masterKey, familyId);
+        fuelPayload = {
+          ...encFuel,
+          transactionId: txId,
+          transaction: encTx,
+        };
+      } else {
+        fuelPayload = {
+          ...fullFuelLog,
+          transaction: linkedTx,
+        };
+      }
+
       const url = fuelData.id ? `/api/fuel/${fuelData.id}` : '/api/fuel';
       const method = fuelData.id ? 'PUT' : 'POST';
       const res = await apiFetch(url, {
@@ -858,51 +936,24 @@ export const App: React.FC = () => {
           masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
         saveStateToCache(data);
       }
+      setIsOnlineWithServer(true);
     } catch {
-      const fuelId = fuelData.id || `fuel-${Date.now()}`;
-      const txId = `tx-fuel-${fuelId}`;
-      const fuelLabel =
-        language === 'pt-BR'
-          ? fuelData.fuelType === 'ethanol'
-            ? 'Etanol'
-            : 'Gasolina'
-          : fuelData.fuelType === 'ethanol'
-          ? 'Ethanol'
-          : 'Gasoline';
-      const baseDesc = language === 'pt-BR' ? `Abastecimento (${fuelLabel})` : `Refueling (${fuelLabel})`;
-      const txDesc = `${baseDesc}${fuelData.stationName ? ` - ${fuelData.stationName}` : ''} [${fuelData.liters.toFixed(2)}L]`;
-      const newFuelLog = {
-        id: fuelId,
-        ...fuelData,
-        transactionId: txId,
-        createdAt: new Date().toISOString(),
-      };
-      const newTx: Transaction = {
-        id: txId,
-        type: 'expense',
-        amount: fuelData.totalCost,
-        description: txDesc,
-        categoryId: 'exp-transport',
-        date: fuelData.date,
-        notes: `${fuelData.odometer} km • ${fuelData.pricePerLiter}/L`,
-        createdAt: new Date().toISOString(),
-      };
-      const prevFuel = state.fuelLogs || [];
-      const nextFuel = fuelData.id
-        ? prevFuel.map((f) => (f.id === fuelData.id ? newFuelLog : f))
-        : [newFuelLog, ...prevFuel];
-      const nextTx = state.transactions.some((tx) => tx.id === txId)
-        ? state.transactions.map((tx) => (tx.id === txId ? newTx : tx))
-        : [newTx, ...state.transactions];
-      saveStateToCache({
-        ...state,
-        fuelLogs: nextFuel,
-        transactions: nextTx,
-      });
+      setIsOnlineWithServer(false);
+      // Fallback state already cached optimistically above
     }
   };
 
   const handleDeleteFuelLog = async (id: string) => {
+    const target = (state.fuelLogs || []).find((f) => f.id === id);
+    const txId = target?.transactionId || `tx-fuel-${id}`;
+
+    // Optimistic UI update removing fuel log and associated expense transaction
+    saveStateToCache({
+      ...state,
+      fuelLogs: (state.fuelLogs || []).filter((f) => f.id !== id),
+      transactions: state.transactions.filter((tx) => tx.id !== txId && tx.id !== `tx-fuel-${id}`),
+    });
+
     try {
       const res = await apiFetch(`/api/fuel/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -911,14 +962,9 @@ export const App: React.FC = () => {
           masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
         saveStateToCache(data);
       }
+      setIsOnlineWithServer(true);
     } catch {
-      const target = (state.fuelLogs || []).find((f) => f.id === id);
-      const txId = target?.transactionId || `tx-fuel-${id}`;
-      saveStateToCache({
-        ...state,
-        fuelLogs: (state.fuelLogs || []).filter((f) => f.id !== id),
-        transactions: state.transactions.filter((tx) => tx.id !== txId),
-      });
+      setIsOnlineWithServer(false);
     }
   };
 

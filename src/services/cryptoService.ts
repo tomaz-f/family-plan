@@ -176,6 +176,8 @@ export async function encryptTransaction(
   date: string;
   status: string;
   createdAt: string;
+  iv: string;
+  payload: string;
   encrypted_data: string;
 }> {
   const sensitive = {
@@ -194,6 +196,9 @@ export async function encryptTransaction(
   };
 
   const encrypted_data = await encryptPayload(sensitive, masterKey, familyId);
+  const parts = encrypted_data.split(':');
+  const iv = parts[1] || '';
+  const payload = parts[2] || '';
 
   return {
     id: tx.id,
@@ -201,6 +206,8 @@ export async function encryptTransaction(
     date: tx.date,
     status: tx.status || 'paid',
     createdAt: tx.createdAt || new Date().toISOString(),
+    iv,
+    payload,
     encrypted_data,
   };
 }
@@ -210,7 +217,8 @@ export async function decryptTransaction(
   masterKey: string,
   familyId: string
 ): Promise<Transaction> {
-  if (!raw.encrypted_data) {
+  const encData = raw.encrypted_data || (raw.iv && raw.payload ? `v1:${raw.iv}:${raw.payload}` : null);
+  if (!encData) {
     // Fallback for unencrypted legacy rows
     return {
       id: raw.id,
@@ -234,7 +242,7 @@ export async function decryptTransaction(
   }
 
   try {
-    const sensitive = await decryptPayload<any>(raw.encrypted_data, masterKey, familyId);
+    const sensitive = await decryptPayload<any>(encData, masterKey, familyId);
     return {
       id: raw.id,
       type: raw.type,
@@ -278,6 +286,8 @@ export async function encryptCategory(
   id: string;
   type: string;
   isDefault: number;
+  iv: string;
+  payload: string;
   encrypted_data: string;
 }> {
   const sensitive = {
@@ -286,10 +296,15 @@ export async function encryptCategory(
     icon: cat.icon,
   };
   const encrypted_data = await encryptPayload(sensitive, masterKey, familyId);
+  const parts = encrypted_data.split(':');
+  const iv = parts[1] || '';
+  const payload = parts[2] || '';
   return {
     id: cat.id,
     type: cat.type,
     isDefault: cat.isDefault ? 1 : 0,
+    iv,
+    payload,
     encrypted_data,
   };
 }
@@ -299,7 +314,8 @@ export async function decryptCategory(
   masterKey: string,
   familyId: string
 ): Promise<Category> {
-  if (!raw.encrypted_data) {
+  const encData = raw.encrypted_data || (raw.iv && raw.payload ? `v1:${raw.iv}:${raw.payload}` : null);
+  if (!encData) {
     return {
       id: raw.id,
       name: raw.name || '',
@@ -311,7 +327,7 @@ export async function decryptCategory(
   }
 
   try {
-    const sensitive = await decryptPayload<any>(raw.encrypted_data, masterKey, familyId);
+    const sensitive = await decryptPayload<any>(encData, masterKey, familyId);
     return {
       id: raw.id,
       type: raw.type,
@@ -340,6 +356,8 @@ export async function encryptCreditCard(
 ): Promise<{
   id: string;
   createdAt: string;
+  iv: string;
+  payload: string;
   encrypted_data: string;
 }> {
   const sensitive = {
@@ -352,9 +370,14 @@ export async function encryptCreditCard(
     dueDay: card.dueDay,
   };
   const encrypted_data = await encryptPayload(sensitive, masterKey, familyId);
+  const parts = encrypted_data.split(':');
+  const iv = parts[1] || '';
+  const payload = parts[2] || '';
   return {
     id: card.id,
     createdAt: card.createdAt || new Date().toISOString(),
+    iv,
+    payload,
     encrypted_data,
   };
 }
@@ -364,7 +387,8 @@ export async function decryptCreditCard(
   masterKey: string,
   familyId: string
 ): Promise<CreditCard> {
-  if (!raw.encrypted_data) {
+  const encData = raw.encrypted_data || (raw.iv && raw.payload ? `v1:${raw.iv}:${raw.payload}` : null);
+  if (!encData) {
     return {
       id: raw.id,
       name: raw.name || '',
@@ -379,7 +403,7 @@ export async function decryptCreditCard(
   }
 
   try {
-    const sensitive = await decryptPayload<any>(raw.encrypted_data, masterKey, familyId);
+    const sensitive = await decryptPayload<any>(encData, masterKey, familyId);
     return {
       id: raw.id,
       createdAt: raw.createdAt,
@@ -415,6 +439,9 @@ export async function encryptFuelLog(
   id: string;
   date: string;
   createdAt: string;
+  transactionId?: string | null;
+  iv: string;
+  payload: string;
   encrypted_data: string;
 }> {
   const sensitive = {
@@ -429,10 +456,16 @@ export async function encryptFuelLog(
     notes: fuel.notes || '',
   };
   const encrypted_data = await encryptPayload(sensitive, masterKey, familyId);
+  const parts = encrypted_data.split(':');
+  const iv = parts[1] || '';
+  const payload = parts[2] || '';
   return {
     id: fuel.id,
     date: fuel.date,
     createdAt: fuel.createdAt || new Date().toISOString(),
+    transactionId: fuel.transactionId || null,
+    iv,
+    payload,
     encrypted_data,
   };
 }
@@ -442,7 +475,8 @@ export async function decryptFuelLog(
   masterKey: string,
   familyId: string
 ): Promise<FuelLog> {
-  if (!raw.encrypted_data) {
+  const encData = raw.encrypted_data || (raw.iv && raw.payload ? `v1:${raw.iv}:${raw.payload}` : null);
+  if (!encData) {
     return {
       id: raw.id,
       date: raw.date,
@@ -460,7 +494,7 @@ export async function decryptFuelLog(
   }
 
   try {
-    const sensitive = await decryptPayload<any>(raw.encrypted_data, masterKey, familyId);
+    const sensitive = await decryptPayload<any>(encData, masterKey, familyId);
     return {
       id: raw.id,
       date: raw.date,
@@ -472,7 +506,7 @@ export async function decryptFuelLog(
       fuelType: sensitive.fuelType || 'gasoline',
       stationName: sensitive.stationName || '',
       isFullTank: Boolean(sensitive.isFullTank),
-      transactionId: sensitive.transactionId || null,
+      transactionId: sensitive.transactionId || raw.transactionId || null,
       notes: sensitive.notes || '',
     };
   } catch (err) {
@@ -503,6 +537,8 @@ export async function encryptRecurringTemplate(
   type: string;
   active: boolean;
   createdAt: string;
+  iv: string;
+  payload: string;
   encrypted_data: string;
 }> {
   const sensitive = {
@@ -515,11 +551,16 @@ export async function encryptRecurringTemplate(
     startMonth: rec.startMonth || null,
   };
   const encrypted_data = await encryptPayload(sensitive, masterKey, familyId);
+  const parts = encrypted_data.split(':');
+  const iv = parts[1] || '';
+  const payload = parts[2] || '';
   return {
     id: rec.id,
     type: rec.type,
     active: rec.active,
     createdAt: rec.createdAt || new Date().toISOString(),
+    iv,
+    payload,
     encrypted_data,
   };
 }
@@ -529,7 +570,8 @@ export async function decryptRecurringTemplate(
   masterKey: string,
   familyId: string
 ): Promise<RecurringTemplate> {
-  if (!raw.encrypted_data) {
+  const encData = raw.encrypted_data || (raw.iv && raw.payload ? `v1:${raw.iv}:${raw.payload}` : null);
+  if (!encData) {
     return {
       id: raw.id,
       type: raw.type,
@@ -546,7 +588,7 @@ export async function decryptRecurringTemplate(
   }
 
   try {
-    const sensitive = await decryptPayload<any>(raw.encrypted_data, masterKey, familyId);
+    const sensitive = await decryptPayload<any>(encData, masterKey, familyId);
     return {
       id: raw.id,
       type: raw.type,
