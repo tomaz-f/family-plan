@@ -480,14 +480,25 @@ async function startServer() {
     const distPath = path.join(ROOT_DIR, 'dist');
     if (fs.existsSync(distPath)) {
       app.use((req, res, next) => {
-        if (req.path === '/' || req.path === '/index.html' || req.path === '/sw.js') {
+        if (
+          req.path === '/' ||
+          req.path === '/index.html' ||
+          req.path === '/sw.js' ||
+          req.path === '/family-plan/' ||
+          req.path.startsWith('/family-plan/sw.js')
+        ) {
           res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
           res.setHeader('Pragma', 'no-cache');
           res.setHeader('Expires', '0');
         }
         next();
       });
+      app.use('/family-plan', express.static(distPath));
       app.use(express.static(distPath));
+      app.get(['/family-plan', '/family-plan/*'], (_req, res) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
       app.get('*', (_req, res) => {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.sendFile(path.join(distPath, 'index.html'));
