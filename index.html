@@ -1,17 +1,48 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR" style="background-color: #000000; color-scheme: dark;">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
-    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f172a" />
+    <title>FAMILY PLAN</title>
+    
+    <!-- Primary Theme & Background (OLED Pure Black #000000) -->
+    <meta name="theme-color" content="#000000" />
+    <meta name="background-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Standard PWA Icons -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <!-- iOS / Safari Native Fullscreen Standalone App Configuration -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="FamilyPlan" />
-    <title>FamilyPlan — Family Finance Control</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png" />
+    <link rel="mask-icon" href="/masked-icon.svg" color="#10b981" />
+
+    <!-- Android / Chrome Native App Settings -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="FamilyPlan" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Pure OLED Black Splash & Root Guard to prevent white margins on iOS boot -->
+    <style>
+      html, body, #root {
+        background-color: #000000 !important;
+        color-scheme: dark;
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        width: 100%;
+      }
+    </style>
+
     <script>
       (function () {
         try {
@@ -28,14 +59,14 @@
           if (t && (t === 'dark' || t === 'tokyo-night' || t === 'oled' || t === 'light')) {
             document.documentElement.setAttribute('data-theme', t);
           } else {
-            document.documentElement.setAttribute('data-theme', 'tokyo-night');
+            document.documentElement.setAttribute('data-theme', 'oled');
           }
         } catch (e) {}
       })();
     </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-emerald-500 selection:text-white">
-    <div id="root"></div>
+  <body style="background-color: #000000;" class="bg-black text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
+    <div id="root" style="background-color: #000000;"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

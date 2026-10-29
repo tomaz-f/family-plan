@@ -1,14 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="112" fill="#0f172a"/>
-  <rect x="32" y="32" width="448" height="448" rx="88" fill="url(#grad)" fill-opacity="0.18"/>
+  <rect width="512" height="512" rx="112" fill="#000000"/>
+  <rect x="32" y="32" width="448" height="448" rx="88" fill="#111215" stroke="#22242a" stroke-width="6"/>
   <path d="M128 320L208 240L272 296L384 168" stroke="#10b981" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M312 168H384V240" stroke="#10b981" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="176" cy="176" r="36" fill="#38bdf8"/>
   <path d="M128 384H384" stroke="#94a3b8" stroke-width="24" stroke-linecap="round"/>
-  <defs>
-    <linearGradient id="grad" x1="32" y1="32" x2="480" y2="480" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#10b981"/>
-      <stop offset="1" stop-color="#38bdf8"/>
-    </linearGradient>
-  </defs>
 </svg>
