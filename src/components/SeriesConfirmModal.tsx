@@ -41,17 +41,10 @@ export function getSubsequentPendingSeriesTransactions(
     if (!isSameSeries(candidate, target)) return false;
     if ((candidate.status || 'paid') !== 'unpaid') return false;
 
-    if (
-      target.installmentTotal &&
-      target.installmentTotal > 1 &&
-      target.installmentCurrent &&
-      candidate.installmentCurrent
-    ) {
-      return (
-        candidate.installmentCurrent > target.installmentCurrent ||
-        (candidate.installmentCurrent === target.installmentCurrent &&
-          candidate.date >= target.date)
-      );
+    // For installment purchases, include all unpaid installments of the same purchase
+    // so editing or deleting the series never leaves orphaned unpaid installments on the card.
+    if (target.installmentTotal && target.installmentTotal > 1) {
+      return true;
     }
 
     return candidate.date >= target.date;

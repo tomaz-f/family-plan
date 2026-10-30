@@ -2,32 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
+:root,
+html[data-theme="oled"] {
+  --bg-main: #000000;
+  --bg-surface: #0D1117;
+  --bg-interactive: #161B22;
+  --border-subtle: #21262D;
+  --brand-primary: #6E5440;
+  --brand-hover: #7E624B;
+  --brand-accent: #D0B595;
+  --text-primary: #F8FAFC;
+  --text-muted: #94A3B8;
+  --semantic-income: #10B981;
+  --semantic-expense: #EF4444;
+  --semantic-pending: #F59E0B;
+}
+
+html[data-theme="light"] {
+  --bg-main: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-interactive: #F1F5F9;
+  --border-subtle: #E2E8F0;
+  --brand-primary: #6E5440;
+  --brand-hover: #7E624B;
+  --brand-accent: #D0B595;
+  --text-primary: #0F172A;
+  --text-muted: #64748B;
+  --semantic-income: #10B981;
+  --semantic-expense: #EF4444;
+  --semantic-pending: #F59E0B;
+}
+
 @layer base {
   *, *::before, *::after {
     -webkit-tap-highlight-color: transparent !important;
-    touch-action: manipulation;
+    box-sizing: border-box;
   }
 
-  html, body {
-    overscroll-behavior-y: none;
+  html {
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     -webkit-text-size-adjust: 100%;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  /* Desativa seleção acidental de textos em elementos de toque, botões, cards e barras de navegação */
-  button, a, input[type="button"], input[type="submit"], [role="button"], .app-shell, header, nav, .hero-card {
+  body {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: clip;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  /* Disable accidental text selection on touch targets, cards, and navigation bars */
+  button, a, input[type="button"], input[type="submit"], [role="button"], header, nav {
     user-select: none;
     -webkit-user-select: none;
   }
 
-  /* Permite seleção de texto apenas em campos de entrada e textos editáveis */
+  /* Allow text selection only in editable inputs and selectable code blocks */
   input, textarea, [contenteditable="true"], .select-all {
     user-select: auto;
     -webkit-user-select: auto;
   }
+
+  /* Enforce generous mobile-first touch targets (44px minimum height) on form controls */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select {
+    min-height: 44px;
+  }
 }
 
-/* Suporte global a Safe Areas para smartphones (Notch e Barra de Gestos do iOS e Android) */
+/* Global Mobile Safe Areas (Notch & iOS/Android Gesture Bar) */
 header {
   padding-top: env(safe-area-inset-top, 0px) !important;
 }
@@ -36,224 +89,111 @@ header {
   padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
 }
 
-/* Feedback tátil e resposta ativa imediata em botões e controles clicáveis */
+/* Tactile active feedback on touch controls */
 button:active:not(:disabled),
 [role="button"]:active:not([aria-disabled="true"]) {
   transform: scale(0.97);
-  opacity: 0.82;
+  opacity: 0.85;
   transition: transform 0.08s ease, opacity 0.08s ease;
 }
 
+/* Core Prumo Components */
+.oled-main-card {
+  background-color: #0D1117 !important;
+  border-color: #21262D !important;
+  color: #F8FAFC !important;
+}
+
+html[data-theme="light"] .oled-main-card {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+html[data-theme="light"] .oled-main-card .text-white {
+  color: #0F172A !important;
+}
+
+html[data-theme="light"] .oled-main-card .text-zinc-400 {
+  color: #64748B !important;
+}
+
+html[data-theme="light"] .oled-main-card .border-\[\#21262D\],
+html[data-theme="light"] .oled-main-card .border-\[\#1c1e24\] {
+  border-color: #E2E8F0 !important;
+}
+
+.fab-primary-btn {
+  background-color: #10B981 !important;
+  color: #FFFFFF !important;
+}
+
 /* =========================================================
-   DARK THEME
+   CLARO (LIGHT THEME) — Clean High-Contrast Day Mode
+   Main Background: #F8FAFC | Surface Cards: #FFFFFF
+   Interactive & Inputs: #F1F5F9 | Borders: #E2E8F0
+   Brand Primary: #6E5440 | Text: #0F172A / #64748B
    ========================================================= */
-html[data-theme="dark"] {
-  color-scheme: dark;
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
-html[data-theme="dark"] body,
-html[data-theme="dark"] .app-shell {
-  background-color: #0b1120 !important;
-  color: #f8fafc !important;
+html[data-theme="light"] body,
+html[data-theme="light"] .app-shell {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
 }
 
-html[data-theme="dark"] .bg-white {
-  background-color: #1e293b !important;
+html[data-theme="light"] header,
+html[data-theme="light"] .fixed.bottom-0 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-color: #E2E8F0 !important;
 }
 
-html[data-theme="dark"] .bg-white\/95 {
-  background-color: rgba(15, 23, 42, 0.92) !important;
+html[data-theme="light"] .fixed.bottom-0 button.text-slate-900 {
+  color: #6E5440 !important;
 }
 
-html[data-theme="dark"] .bg-slate-50,
-html[data-theme="dark"] .bg-slate-50\/70,
-html[data-theme="dark"] .bg-slate-100,
-html[data-theme="dark"] .bg-slate-100\/80 {
-  background-color: #0f172a !important;
+html[data-theme="light"] .fixed.bottom-0 button.text-slate-400 {
+  color: #64748B !important;
 }
 
-html[data-theme="dark"] .bg-slate-200,
-html[data-theme="dark"] .bg-slate-200\/80 {
-  background-color: #334155 !important;
+html[data-theme="light"] .fab-primary-btn {
+  border-color: #FFFFFF !important;
 }
 
-html[data-theme="dark"] .hover\:bg-slate-50:hover,
-html[data-theme="dark"] .hover\:bg-slate-50\/70:hover,
-html[data-theme="dark"] .hover\:bg-slate-50\/80:hover,
-html[data-theme="dark"] .hover\:bg-slate-100:hover {
-  background-color: #334155 !important;
+html[data-theme="light"] input:not([type="checkbox"]),
+html[data-theme="light"] select,
+html[data-theme="light"] textarea {
+  background-color: #F1F5F9 !important;
+  border-color: #E2E8F0 !important;
+  color: #0F172A !important;
 }
 
-html[data-theme="dark"] .border-slate-100,
-html[data-theme="dark"] .border-slate-200,
-html[data-theme="dark"] .border-slate-200\/60,
-html[data-theme="dark"] .border-slate-200\/70,
-html[data-theme="dark"] .border-slate-200\/80,
-html[data-theme="dark"] .border-slate-200\/90,
-html[data-theme="dark"] .border-slate-300 {
-  border-color: #334155 !important;
+html[data-theme="light"] input:focus,
+html[data-theme="light"] select:focus,
+html[data-theme="light"] textarea:focus {
+  border-color: #6E5440 !important;
+  outline: none !important;
 }
 
-html[data-theme="dark"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #334155 !important;
+html[data-theme="light"] button.bg-slate-900:not(.fab-option-btn),
+html[data-theme="light"] button.bg-indigo-600 {
+  background-color: #6E5440 !important;
+  color: #FFFDF5 !important;
 }
 
-html[data-theme="dark"] .text-slate-900,
-html[data-theme="dark"] .text-slate-800 {
-  color: #f8fafc !important;
-}
-
-html[data-theme="dark"] .text-slate-700,
-html[data-theme="dark"] .text-slate-600 {
-  color: #cbd5e1 !important;
-}
-
-html[data-theme="dark"] .text-slate-500,
-html[data-theme="dark"] .text-slate-400 {
-  color: #94a3b8 !important;
-}
-
-html[data-theme="dark"] input:not([type="checkbox"]),
-html[data-theme="dark"] select {
-  background-color: #0f172a !important;
-  border-color: #334155 !important;
-  color: #f8fafc !important;
-}
-
-html[data-theme="dark"] .bg-slate-900 {
-  background-color: #3b82f6 !important;
-  color: #ffffff !important;
-}
-
-html[data-theme="dark"] .hover\:bg-slate-800:hover {
-  background-color: #2563eb !important;
-}
-
-html[data-theme="dark"] .bg-indigo-50,
-html[data-theme="dark"] .bg-indigo-50\/40,
-html[data-theme="dark"] .bg-indigo-50\/30 {
-  background-color: rgba(99, 102, 241, 0.14) !important;
-  color: #e0e7ff !important;
+html[data-theme="light"] button.bg-slate-900:not(.fab-option-btn):hover,
+html[data-theme="light"] button.bg-indigo-600:hover {
+  background-color: #7E624B !important;
 }
 
 /* =========================================================
-   TOKYO NIGHT THEME (#1a1b26 / #24283b / #c0caf5 / #7aa2f7)
-   ========================================================= */
-html[data-theme="tokyo-night"] {
-  color-scheme: dark;
-}
-
-html[data-theme="tokyo-night"] body,
-html[data-theme="tokyo-night"] .app-shell {
-  background-color: #1a1b26 !important;
-  color: #c0caf5 !important;
-}
-
-html[data-theme="tokyo-night"] .hero-card {
-  background: linear-gradient(135deg, #1f2335 0%, #24283b 55%, #16161e 100%) !important;
-  border-color: #3b4261 !important;
-}
-
-html[data-theme="tokyo-night"] .bg-white {
-  background-color: #24283b !important;
-}
-
-html[data-theme="tokyo-night"] .bg-white\/95 {
-  background-color: rgba(26, 27, 38, 0.92) !important;
-}
-
-html[data-theme="tokyo-night"] .bg-slate-50,
-html[data-theme="tokyo-night"] .bg-slate-50\/70,
-html[data-theme="tokyo-night"] .bg-slate-100,
-html[data-theme="tokyo-night"] .bg-slate-100\/80 {
-  background-color: #1f2335 !important;
-}
-
-html[data-theme="tokyo-night"] .bg-slate-200,
-html[data-theme="tokyo-night"] .bg-slate-200\/80 {
-  background-color: #292e42 !important;
-}
-
-html[data-theme="tokyo-night"] .hover\:bg-slate-50:hover,
-html[data-theme="tokyo-night"] .hover\:bg-slate-50\/70:hover,
-html[data-theme="tokyo-night"] .hover\:bg-slate-50\/80:hover,
-html[data-theme="tokyo-night"] .hover\:bg-slate-100:hover {
-  background-color: #292e42 !important;
-}
-
-html[data-theme="tokyo-night"] .border-slate-100,
-html[data-theme="tokyo-night"] .border-slate-200,
-html[data-theme="tokyo-night"] .border-slate-200\/60,
-html[data-theme="tokyo-night"] .border-slate-200\/70,
-html[data-theme="tokyo-night"] .border-slate-200\/80,
-html[data-theme="tokyo-night"] .border-slate-200\/90,
-html[data-theme="tokyo-night"] .border-slate-300 {
-  border-color: #3b4261 !important;
-}
-
-html[data-theme="tokyo-night"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #292e42 !important;
-}
-
-html[data-theme="tokyo-night"] .text-slate-900,
-html[data-theme="tokyo-night"] .text-slate-800 {
-  color: #c0caf5 !important;
-}
-
-html[data-theme="tokyo-night"] .text-slate-700,
-html[data-theme="tokyo-night"] .text-slate-600 {
-  color: #a9b1d6 !important;
-}
-
-html[data-theme="tokyo-night"] .text-slate-500,
-html[data-theme="tokyo-night"] .text-slate-400 {
-  color: #787c99 !important;
-}
-
-html[data-theme="tokyo-night"] input:not([type="checkbox"]),
-html[data-theme="tokyo-night"] select {
-  background-color: #1a1b26 !important;
-  border-color: #3b4261 !important;
-  color: #c0caf5 !important;
-}
-
-html[data-theme="tokyo-night"] .bg-slate-900 {
-  background-color: #7aa2f7 !important;
-  color: #1a1b26 !important;
-}
-
-html[data-theme="tokyo-night"] .hover\:bg-slate-800:hover {
-  background-color: #89ddff !important;
-  color: #1a1b26 !important;
-}
-
-html[data-theme="tokyo-night"] .text-emerald-500,
-html[data-theme="tokyo-night"] .text-emerald-600 {
-  color: #73daca !important;
-}
-
-html[data-theme="tokyo-night"] .text-rose-500,
-html[data-theme="tokyo-night"] .text-rose-600 {
-  color: #f7768e !important;
-}
-
-html[data-theme="tokyo-night"] .text-indigo-500,
-html[data-theme="tokyo-night"] .text-indigo-600 {
-  color: #bb9af7 !important;
-}
-
-html[data-theme="tokyo-night"] .bg-indigo-50,
-html[data-theme="tokyo-night"] .bg-indigo-50\/40,
-html[data-theme="tokyo-night"] .bg-indigo-50\/30 {
-  background-color: rgba(187, 154, 247, 0.14) !important;
-  border-color: rgba(187, 154, 247, 0.35) !important;
-  color: #c0caf5 !important;
-}
-
-/* =========================================================
-   OLED TRUE BLACK THEME (Cockpit Automotivo Minimalista)
-   #000000 puro, ardósia/grafite neutro (#111215 / #141518)
-   bordas sutis (#212328), acentos cobalto/royal (#2563eb / #3b82f6)
+   OLED THEME (Default & Flagship Theme) — Prumo Design System
+   Main Background: #000000 | Surface Cards & Modals: #0D1117
+   Interactive & Inputs: #161B22 | Dividers & Outlines: #21262D
+   Brand Primary: #6E5440 | Brand Hover: #7E624B | Rope: #D0B595
+   Primary Text: #F8FAFC | Secondary/Muted Text: #94A3B8
    ========================================================= */
 html[data-theme="oled"] {
   color-scheme: dark;
@@ -262,58 +202,50 @@ html[data-theme="oled"] {
 html[data-theme="oled"] body,
 html[data-theme="oled"] .app-shell {
   background-color: #000000 !important;
-  color: #F4F5F7 !important;
+  color: #F8FAFC !important;
 }
 
-/* Header fixo & Barra de navegação inferior */
+/* Fixed Header & Bottom Navigation Bar */
 html[data-theme="oled"] header {
   background-color: rgba(0, 0, 0, 0.95) !important;
-  border-color: #1c1e24 !important;
+  border-color: #21262D !important;
 }
 
 html[data-theme="oled"] .fixed.bottom-0 {
   background-color: rgba(0, 0, 0, 0.95) !important;
-  border-color: #1c1e24 !important;
+  border-color: #21262D !important;
 }
 
 html[data-theme="oled"] .fixed.bottom-0 button.text-slate-900 {
-  color: #3b82f6 !important;
+  color: #D0B595 !important;
 }
 
 html[data-theme="oled"] .fixed.bottom-0 button.text-slate-400 {
-  color: #8E929B !important;
+  color: #94A3B8 !important;
 }
 
-/* Card Principal de Saldo (Hero Card) */
-html[data-theme="oled"] .hero-card {
-  background: #111215 !important;
-  border-color: #212328 !important;
-  box-shadow: none !important;
+html[data-theme="oled"] .fab-primary-btn {
+  border-color: #000000 !important;
 }
 
-/* Cards e superfícies gerais */
+/* Hero & Surface Cards (#0D1117) */
+html[data-theme="oled"] .hero-card,
 html[data-theme="oled"] .bg-white {
-  background-color: #141518 !important;
+  background-color: #0D1117 !important;
 }
 
 html[data-theme="oled"] .bg-white\/95 {
-  background-color: rgba(20, 21, 24, 0.95) !important;
+  background-color: rgba(13, 17, 23, 0.96) !important;
 }
 
-/* Superfícies secundárias, pills e fundos neutros */
+/* Interactive Elements, Secondary Surfaces & Pills (#161B22) */
 html[data-theme="oled"] .bg-slate-50,
 html[data-theme="oled"] .bg-slate-50\/70,
 html[data-theme="oled"] .bg-slate-100,
 html[data-theme="oled"] .bg-slate-100\/80,
-html[data-theme="oled"] .bg-slate-100\/90 {
-  background-color: #111215 !important;
-}
-
+html[data-theme="oled"] .bg-slate-100\/90,
 html[data-theme="oled"] .bg-slate-200,
-html[data-theme="oled"] .bg-slate-200\/80 {
-  background-color: #1c1e24 !important;
-}
-
+html[data-theme="oled"] .bg-slate-200\/80,
 html[data-theme="oled"] .bg-slate-800,
 html[data-theme="oled"] .bg-slate-800\/40,
 html[data-theme="oled"] .bg-slate-800\/50,
@@ -321,17 +253,17 @@ html[data-theme="oled"] .bg-slate-800\/60,
 html[data-theme="oled"] .bg-slate-800\/70,
 html[data-theme="oled"] .bg-slate-800\/80,
 html[data-theme="oled"] .bg-slate-800\/90 {
-  background-color: #111215 !important;
+  background-color: #161B22 !important;
 }
 
-html[data-theme="oled"] div.bg-slate-900,
+html[data-theme="oled"] div.bg-slate-900:not(.prumo-brand-badge),
 html[data-theme="oled"] .bg-slate-900\/60,
 html[data-theme="oled"] .bg-slate-900\/80,
 html[data-theme="oled"] .bg-slate-900\/90 {
-  background-color: #141518 !important;
+  background-color: #0D1117 !important;
 }
 
-/* Estados de Hover em botões e linhas */
+/* Hover States */
 html[data-theme="oled"] .hover\:bg-slate-50:hover,
 html[data-theme="oled"] .hover\:bg-slate-50\/70:hover,
 html[data-theme="oled"] .hover\:bg-slate-50\/80:hover,
@@ -340,10 +272,10 @@ html[data-theme="oled"] .hover\:bg-slate-200:hover,
 html[data-theme="oled"] .hover\:bg-slate-800\/70:hover,
 html[data-theme="oled"] .hover\:bg-slate-800\/80:hover,
 html[data-theme="oled"] .hover\:bg-slate-800:hover {
-  background-color: #1c1e24 !important;
+  background-color: #161B22 !important;
 }
 
-/* Bordas sutis de delimitação sem peso */
+/* 1px Subtle Dividers & Outlines (#21262D) */
 html[data-theme="oled"] .border-slate-100,
 html[data-theme="oled"] .border-slate-200,
 html[data-theme="oled"] .border-slate-200\/50,
@@ -363,109 +295,110 @@ html[data-theme="oled"] .border-slate-800\/60,
 html[data-theme="oled"] .border-slate-800\/70,
 html[data-theme="oled"] .border-slate-800\/80,
 html[data-theme="oled"] .border-slate-800\/90 {
-  border-color: #212328 !important;
+  border-color: #21262D !important;
 }
 
 html[data-theme="oled"] .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
 html[data-theme="oled"] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #1c1e24 !important;
+  border-color: #21262D !important;
 }
 
-/* Tipografia de alto contraste */
+/* Primary & Secondary Typography (#F8FAFC & #94A3B8) */
 html[data-theme="oled"] .text-slate-900,
 html[data-theme="oled"] .text-slate-800 {
-  color: #FFFFFF !important;
+  color: #F8FAFC !important;
 }
 
 html[data-theme="oled"] .text-slate-700,
 html[data-theme="oled"] .text-slate-600 {
-  color: #D1D5DB !important;
+  color: #E2E8F0 !important;
 }
 
 html[data-theme="oled"] .text-slate-500,
-html[data-theme="oled"] .text-slate-400 {
-  color: #8E929B !important;
-}
-
+html[data-theme="oled"] .text-slate-400,
 html[data-theme="oled"] .text-slate-300 {
-  color: #A0A5B1 !important;
+  color: #94A3B8 !important;
 }
 
-/* Inputs, Selects e Caixas de Texto */
+/* Interactive Inputs, Selects & Textareas (#161B22) */
 html[data-theme="oled"] input:not([type="checkbox"]),
 html[data-theme="oled"] select,
 html[data-theme="oled"] textarea {
-  background-color: #0b0c0e !important;
-  border-color: #212328 !important;
-  color: #FFFFFF !important;
+  background-color: #161B22 !important;
+  border-color: #21262D !important;
+  color: #F8FAFC !important;
 }
 
 html[data-theme="oled"] input:focus,
 html[data-theme="oled"] select:focus,
 html[data-theme="oled"] textarea:focus {
-  border-color: #2563eb !important;
+  border-color: #6E5440 !important;
   outline: none !important;
 }
 
-/* Botões primários com acento automotivo azul royal elétrico */
-html[data-theme="oled"] button.bg-slate-900,
+/* Primary Action Buttons in Rustic Oxidized Iron (#6E5440 -> #7E624B) */
+html[data-theme="oled"] button.bg-slate-900:not(.fab-option-btn),
 html[data-theme="oled"] button.bg-indigo-600 {
-  background-color: #2563eb !important;
-  color: #ffffff !important;
+  background-color: #6E5440 !important;
+  border-color: rgba(138, 111, 87, 0.5) !important;
+  color: #FFFDF5 !important;
 }
 
-html[data-theme="oled"] button.bg-slate-900:hover,
+html[data-theme="oled"] button.bg-slate-900:not(.fab-option-btn):hover,
 html[data-theme="oled"] button.bg-indigo-600:hover {
-  background-color: #1d4ed8 !important;
+  background-color: #7E624B !important;
 }
 
-/* Valores Financeiros: Verde Menta Limpo e Coral Elegante */
+/* Functional Semantics: Income (#10B981), Expense (#EF4444), Pending (#F59E0B), Accent (#D0B595) */
 html[data-theme="oled"] .text-emerald-500,
-html[data-theme="oled"] .text-emerald-600 {
-  color: #10b981 !important;
+html[data-theme="oled"] .text-emerald-600,
+html[data-theme="oled"] .text-emerald-400 {
+  color: #10B981 !important;
 }
 
 html[data-theme="oled"] .text-rose-500,
-html[data-theme="oled"] .text-rose-600 {
-  color: #f43f5e !important;
+html[data-theme="oled"] .text-rose-600,
+html[data-theme="oled"] .text-rose-400 {
+  color: #EF4444 !important;
+}
+
+html[data-theme="oled"] .text-amber-500,
+html[data-theme="oled"] .text-amber-400 {
+  color: #F59E0B !important;
 }
 
 html[data-theme="oled"] .text-indigo-500,
-html[data-theme="oled"] .text-indigo-400 {
-  color: #60a5fa !important;
+html[data-theme="oled"] .text-indigo-400,
+html[data-theme="oled"] .text-indigo-600 {
+  color: #D0B595 !important;
 }
 
-/* Badges e Pílulas */
+/* Badges & Pills */
 html[data-theme="oled"] .bg-indigo-50,
 html[data-theme="oled"] .bg-indigo-50\/40,
-html[data-theme="oled"] .bg-indigo-50\/30 {
-  background-color: rgba(37, 99, 235, 0.12) !important;
-  border-color: rgba(37, 99, 235, 0.28) !important;
-  color: #93c5fd !important;
-}
-
+html[data-theme="oled"] .bg-indigo-50\/30,
 html[data-theme="oled"] .bg-indigo-500\/10,
 html[data-theme="oled"] .bg-indigo-500\/20 {
-  background-color: rgba(37, 99, 235, 0.15) !important;
-  color: #93c5fd !important;
+  background-color: rgba(110, 84, 64, 0.22) !important;
+  border-color: rgba(208, 181, 149, 0.3) !important;
+  color: #D0B595 !important;
 }
 
 html[data-theme="oled"] .bg-emerald-500\/10 {
-  background-color: rgba(16, 185, 129, 0.12) !important;
+  background-color: rgba(16, 185, 129, 0.14) !important;
 }
 
 html[data-theme="oled"] .bg-amber-500\/10 {
-  background-color: rgba(245, 158, 11, 0.12) !important;
+  background-color: rgba(245, 158, 11, 0.14) !important;
 }
 
 html[data-theme="oled"] .bg-rose-500\/10 {
-  background-color: rgba(244, 63, 94, 0.12) !important;
+  background-color: rgba(239, 68, 68, 0.14) !important;
 }
 
 @media print {
-  html[data-theme="dark"] body,
-  html[data-theme="tokyo-night"] body,
   html[data-theme="oled"] body,
+  html[data-theme="light"] body,
   body {
     background: #ffffff !important;
     color: #0f172a !important;

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <!-- Tons terrosos/ferrugem para a argola e corpo cônico -->
+    <linearGradient id="favIronLight" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#735A47" />
+      <stop offset="50%" stop-color="#9C7F6A" />
+      <stop offset="100%" stop-color="#594435" />
+    </linearGradient>
+    <linearGradient id="favIronDark" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#423124" />
+      <stop offset="100%" stop-color="#1F150F" />
+    </linearGradient>
+
+    <!-- Corda de barbante/linho natural -->
+    <linearGradient id="favRope" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#CBB191" />
+      <stop offset="100%" stop-color="#8C7356" />
+    </linearGradient>
+
+    <style>
+      .plumb-wave-tiny {
+        animation: tinyWave 3.8s ease-in-out infinite;
+      }
+      @keyframes tinyWave {
+        0%, 100% { transform: translateY(-0.8px); }
+        50% { transform: translateY(0.8px); }
+      }
+    </style>
+  </defs>
+
+  <rect width="32" height="32" rx="6" fill="#000000" />
+
+  <g class="plumb-wave-tiny">
+    <!-- Corda espessa de alto contraste -->
+    <line x1="16" y1="0" x2="16" y2="13" stroke="url(#favRope)" stroke-width="2.5" />
+    <!-- Nó sutil -->
+    <circle cx="16" cy="13" r="1.5" fill="#8C7356" />
+
+    <!-- Olhal do prumo (argola superior) -->
+    <circle cx="16" cy="15" r="2.8" stroke="url(#favIronDark)" stroke-width="1.8" fill="none" />
+
+    <!-- Corpo cônico em ferro oxidado -->
+    <path d="M 16 17 L 11 20 L 21 20 Z" fill="url(#favIronLight)" />
+    <path d="M 11 20 L 16 29 L 16 20 Z" fill="url(#favIronLight)" />
+    <path d="M 16 20 L 16 29 L 21 20 Z" fill="url(#favIronDark)" />
+    
+    <!-- Ponta -->
+    <circle cx="16" cy="29" r="0.6" fill="#F3EBE3" />
+  </g>
+</svg>

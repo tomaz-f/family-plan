@@ -703,6 +703,41 @@ export async function updateTransaction(familyId, id, txData) {
     });
   }
 
+  if (Array.isArray(txData.updatedSeriesEntries)) {
+    for (const sEntry of txData.updatedSeriesEntries) {
+      if (!sEntry || !sEntry.id) continue;
+      const sEnc = Boolean(sEntry.encrypted_data || sEntry.payload);
+      if (sEnc) {
+        const sIv = sEntry.iv || (sEntry.encrypted_data && sEntry.encrypted_data.startsWith('v1:') ? sEntry.encrypted_data.split(':')[1] : null);
+        const sPayload = sEntry.payload || (sEntry.encrypted_data && sEntry.encrypted_data.startsWith('v1:') ? sEntry.encrypted_data.split(':')[2] : (sEntry.encrypted_data || null));
+        const sEncrypted = sEntry.encrypted_data || (sIv && sPayload ? `v1:${sIv}:${sPayload}` : sPayload);
+        await turso.execute({
+          sql: `UPDATE transactions
+           SET type = ?, status = ?, date = ?, amount = NULL, description = NULL, categoryId = NULL, notes = NULL, iv = ?, encrypted_data = ?, payload = ?
+           WHERE family_id = ? AND id = ?`,
+          args: [sEntry.type || 'expense', sEntry.status || 'unpaid', sEntry.date, sIv, sEncrypted, sPayload, familyId, sEntry.id],
+        });
+      } else {
+        await turso.execute({
+          sql: `UPDATE transactions
+           SET type = ?, status = ?, amount = ?, description = ?, categoryId = ?, date = ?, notes = ?
+           WHERE family_id = ? AND id = ?`,
+          args: [
+            sEntry.type || 'expense',
+            sEntry.status || 'unpaid',
+            Number(sEntry.amount || 0),
+            String(sEntry.description || ''),
+            String(sEntry.categoryId || ''),
+            String(sEntry.date),
+            String(sEntry.notes || ''),
+            familyId,
+            sEntry.id,
+          ],
+        });
+      }
+    }
+  }
+
   return getFullState(familyId);
 }
 
@@ -731,11 +766,15 @@ export async function updateTransactionStatus(familyId, id, status) {
   return getFullState(familyId);
 }
 
-export async function deleteTransaction(familyId, id) {
-  await turso.execute({
-    sql: 'DELETE FROM transactions WHERE family_id = ? AND id = ?',
-    args: [familyId, id],
-  });
+export async function deleteTransaction(familyId, id, _scope = 'single', deleteIds = null) {
+  const ids = Array.isArray(deleteIds) && deleteIds.length > 0 ? deleteIds : [id];
+  for (const targetId of ids) {
+    if (!targetId) continue;
+    await turso.execute({
+      sql: 'DELETE FROM transactions WHERE family_id = ? AND id = ?',
+      args: [familyId, targetId],
+    });
+  }
   return getFullState(familyId);
 }
 

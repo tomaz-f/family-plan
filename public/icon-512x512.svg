@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Gradientes de Ferro Oxidado Natural -->
+    <linearGradient id="ironLight512" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6E5440" />
+      <stop offset="40%" stop-color="#8A6F57" />
+      <stop offset="85%" stop-color="#543E2C" />
+      <stop offset="100%" stop-color="#3D2B1E" />
+    </linearGradient>
+
+    <linearGradient id="ironDark512" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3A2719" />
+      <stop offset="40%" stop-color="#24170E" />
+      <stop offset="90%" stop-color="#120B06" />
+      <stop offset="100%" stop-color="#050302" />
+    </linearGradient>
+
+    <!-- Corda de Fibra de Juta Natural -->
+    <linearGradient id="rope512" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#D0B595" />
+      <stop offset="50%" stop-color="#E7CDAC" />
+      <stop offset="100%" stop-color="#A68969" />
+    </linearGradient>
+
+    <style>
+      .prumo-calm-512 {
+        animation: calmWave512 4.2s ease-in-out infinite;
+      }
+      @keyframes calmWave512 {
+        0%, 100% { transform: translateY(-12px); }
+        50% { transform: translateY(12px); }
+      }
+    </style>
+  </defs>
+
+  <rect width="512" height="512" fill="#000000" />
+
+  <g class="prumo-calm-512">
+    <!-- Corda natural -->
+    <line x1="256" y1="-80" x2="256" y2="190" stroke="url(#rope512)" stroke-width="8" stroke-linecap="round" />
+    <line x1="252" y1="30" x2="260" y2="34" stroke="#846B4E" stroke-width="2" />
+    <line x1="252" y1="70" x2="260" y2="74" stroke="#846B4E" stroke-width="2" />
+    <line x1="252" y1="110" x2="260" y2="114" stroke="#846B4E" stroke-width="2" />
+    <line x1="252" y1="150" x2="260" y2="154" stroke="#846B4E" stroke-width="2" />
+
+    <!-- Nó Rústico Amarrado -->
+    <ellipse cx="256" cy="188" rx="14" ry="11" fill="#8C7051" />
+    <path d="M 246 182 C 248 195 264 195 266 182 Z" fill="#D0B595" />
+    <circle cx="254" cy="188" r="4.5" fill="#5E4730" />
+
+    <!-- Furo/Argola de ferro (olhal circular no topo) -->
+    <circle cx="256" cy="226" r="28" fill="none" stroke="url(#ironLight512)" stroke-width="15" />
+    <circle cx="256" cy="226" r="28" fill="none" stroke="url(#ironDark512)" stroke-dasharray="0, 88" stroke-width="15" />
+
+    <!-- Base do Olhal / Gargalo Ranhurado -->
+    <ellipse cx="256" cy="254" rx="19" ry="6" fill="url(#ironLight512)" />
+    <ellipse cx="256" cy="260" rx="15" ry="4" fill="url(#ironDark512)" />
+
+    <!-- Ombros cônicos superiores -->
+    <path d="M 256 260 L 180 300 L 256 300 Z" fill="url(#ironLight512)" />
+    <path d="M 256 260 L 256 300 L 332 300 Z" fill="url(#ironDark512)" />
+
+    <!-- Corpo Cônico Principal Inferior -->
+    <path d="M 180 300 L 256 466 L 256 300 Z" fill="url(#ironLight512)" />
+    <path d="M 256 300 L 256 466 L 332 300 Z" fill="url(#ironDark512)" />
+
+    <circle cx="256" cy="466" r="2" fill="#FFFFFF" opacity="0.8" />
+  </g>
+</svg>

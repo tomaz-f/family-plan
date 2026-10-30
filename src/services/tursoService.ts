@@ -190,7 +190,8 @@ async function executeDirectTurso(path: string, options: RequestInit = {}): Prom
     if (method === 'DELETE') {
       const urlObj = new URL(path, 'http://localhost');
       const id = urlObj.pathname.split('/').pop() || '';
-      const state = await directDeleteTransaction(directWebTurso, currentFamilyId, id);
+      const deleteIds = Array.isArray(body?.deleteIds) ? body.deleteIds : undefined;
+      const state = await directDeleteTransaction(directWebTurso, currentFamilyId, id, deleteIds);
       return mockResponse(state);
     }
   }
@@ -310,7 +311,8 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
 
   try {
     const res = await fetch(path, { ...options, headers });
-    if (res.status === 404 && directWebTurso) {
+    const contentType = res.headers.get('content-type') || '';
+    if ((!res.ok || !contentType.includes('application/json')) && directWebTurso) {
       return executeDirectTurso(path, options);
     }
     return res;

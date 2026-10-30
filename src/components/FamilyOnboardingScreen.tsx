@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, KeyRound, Plus, ArrowRight, Copy, Check, AlertCircle, Loader2, Lock, Shield } from 'lucide-react';
+import { KeyRound, ArrowRight, Copy, Check, AlertCircle, Loader2, Lock, Shield } from 'lucide-react';
 import {
   createFamily,
   joinFamily,
@@ -14,7 +14,7 @@ interface FamilyOnboardingScreenProps {
   onJoined: (familyId: string, masterKey: string) => void;
 }
 
-const SUBTITLE_TEXT = 'Gestão financeira familiar com foco em simplicidade e privacidade absoluta.';
+const SUBTITLE_TEXT = 'Gestão financeira familiar com foco em simplicidade e privacidade absoluta';
 
 export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ onJoined }) => {
   const [mode, setMode] = useState<'initial' | 'join' | 'created'>('initial');
@@ -27,23 +27,38 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
 
-  // Typewriter effect for subtitle
+  // Two-way continuous looping typewriter effect for subtitle
   const [displayedSubtitle, setDisplayedSubtitle] = useState('');
-  const [typewriterDone, setTypewriterDone] = useState(false);
 
   useEffect(() => {
-    let i = 0;
-    setDisplayedSubtitle('');
-    setTypewriterDone(false);
-    const timer = setInterval(() => {
-      i++;
-      setDisplayedSubtitle(SUBTITLE_TEXT.slice(0, i));
-      if (i >= SUBTITLE_TEXT.length) {
-        clearInterval(timer);
-        setTypewriterDone(true);
+    let index = 0;
+    let isDeleting = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const step = () => {
+      if (!isDeleting) {
+        index++;
+        setDisplayedSubtitle(SUBTITLE_TEXT.slice(0, index));
+        if (index >= SUBTITLE_TEXT.length) {
+          isDeleting = true;
+          timeoutId = setTimeout(step, 2500); // Pause 2.5s when full sentence is visible
+        } else {
+          timeoutId = setTimeout(step, 32); // Smooth steady typing cadence
+        }
+      } else {
+        index--;
+        setDisplayedSubtitle(SUBTITLE_TEXT.slice(0, index));
+        if (index <= 0) {
+          isDeleting = false;
+          timeoutId = setTimeout(step, 500); // Brief 500ms pause before repeating
+        } else {
+          timeoutId = setTimeout(step, 18); // Smooth backspacing cadence
+        }
       }
-    }, 28);
-    return () => clearInterval(timer);
+    };
+
+    timeoutId = setTimeout(step, 250);
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Flow 1: Create a brand new family space + generate local Zero-Knowledge Master Key
@@ -127,31 +142,127 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#000000] text-white flex flex-col items-center justify-center p-6 selection:bg-neutral-800 selection:text-white">
-      {/* Brand Header */}
-      <div className="w-full max-w-sm flex flex-col items-center text-center mb-8">
-        <div className="w-14 h-14 rounded-2xl bg-[#111215] border border-[#22242a] flex items-center justify-center mb-4 shadow-sm">
-          <ShieldCheck className="w-6 h-6 text-zinc-200" strokeWidth={1.8} />
+    <div className="min-h-[100dvh] w-full bg-[#000000] text-white flex flex-col items-center justify-between px-6 pt-0 pb-[max(2.25rem,env(safe-area-inset-bottom,0px))] selection:bg-neutral-800 selection:text-white">
+      {/* Top Section: Hanging Animated Plumb Bob (Prumo) + Brand Header + Subtitle */}
+      <div className="w-full max-w-sm flex flex-col items-center text-center shrink-0">
+        {/* Animated Plumb Bob SVG hanging directly from the top edge of the viewport */}
+        <div className="w-44 h-44 sm:w-52 sm:h-52 -mt-1 flex items-start justify-center pointer-events-none select-none">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 512 512"
+            className="w-full h-full block"
+            aria-label="Prumo"
+          >
+            <defs>
+              <linearGradient id="ironLightPrumo" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#6E5440" />
+                <stop offset="40%" stopColor="#8A6F57" />
+                <stop offset="85%" stopColor="#543E2C" />
+                <stop offset="100%" stopColor="#3D2B1E" />
+              </linearGradient>
+
+              <linearGradient id="ironDarkPrumo" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#3A2719" />
+                <stop offset="40%" stopColor="#24170E" />
+                <stop offset="90%" stopColor="#120B06" />
+                <stop offset="100%" stopColor="#050302" />
+              </linearGradient>
+
+              <linearGradient id="ropePrumo" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#D0B595" />
+                <stop offset="50%" stopColor="#E7CDAC" />
+                <stop offset="100%" stopColor="#A68969" />
+              </linearGradient>
+
+              <style>{`
+                .prumo-calm-hero {
+                  animation: calmWaveHero 4.2s ease-in-out infinite;
+                }
+                @keyframes calmWaveHero {
+                  0%, 100% { transform: translateY(-12px); }
+                  50% { transform: translateY(12px); }
+                }
+              `}</style>
+            </defs>
+
+            <rect width="512" height="512" fill="#000000" />
+
+            <g className="prumo-calm-hero">
+              {/* Corda natural */}
+              <line
+                x1="256"
+                y1="-80"
+                x2="256"
+                y2="190"
+                stroke="url(#ropePrumo)"
+                strokeWidth="8"
+                strokeLinecap="round"
+              />
+              <line x1="252" y1="30" x2="260" y2="34" stroke="#846B4E" strokeWidth="2" />
+              <line x1="252" y1="70" x2="260" y2="74" stroke="#846B4E" strokeWidth="2" />
+              <line x1="252" y1="110" x2="260" y2="114" stroke="#846B4E" strokeWidth="2" />
+              <line x1="252" y1="150" x2="260" y2="154" stroke="#846B4E" strokeWidth="2" />
+
+              {/* Nó Rústico Amarrado */}
+              <ellipse cx="256" cy="188" rx="14" ry="11" fill="#8C7051" />
+              <path d="M 246 182 C 248 195 264 195 266 182 Z" fill="#D0B595" />
+              <circle cx="254" cy="188" r="4.5" fill="#5E4730" />
+
+              {/* Furo/Argola de ferro (olhal circular no topo) */}
+              <circle cx="256" cy="226" r="28" fill="none" stroke="url(#ironLightPrumo)" strokeWidth="15" />
+              <circle
+                cx="256"
+                cy="226"
+                r="28"
+                fill="none"
+                stroke="url(#ironDarkPrumo)"
+                strokeDasharray="0, 88"
+                strokeWidth="15"
+              />
+
+              {/* Base do Olhal / Gargalo Ranhurado */}
+              <ellipse cx="256" cy="254" rx="19" ry="6" fill="url(#ironLightPrumo)" />
+              <ellipse cx="256" cy="260" rx="15" ry="4" fill="url(#ironDarkPrumo)" />
+
+              {/* Ombros cônicos superiores */}
+              <path d="M 256 260 L 180 300 L 256 300 Z" fill="url(#ironLightPrumo)" />
+              <path d="M 256 260 L 256 300 L 332 300 Z" fill="url(#ironDarkPrumo)" />
+
+              {/* Corpo Cônico Principal Inferior */}
+              <path d="M 180 300 L 256 466 L 256 300 Z" fill="url(#ironLightPrumo)" />
+              <path d="M 256 300 L 256 466 L 332 300 Z" fill="url(#ironDarkPrumo)" />
+
+              <circle cx="256" cy="466" r="2" fill="#FFFFFF" opacity="0.8" />
+            </g>
+          </svg>
         </div>
 
-        {/* App Title: FAMILY PLAN (all-caps, refined tracking, premium typography) */}
-        <h1 className="text-xl sm:text-2xl font-bold tracking-[0.25em] text-white uppercase font-sans">
-          FAMILY PLAN
-        </h1>
+        {/* Brand Name + Subtitle Block aligned to the same visual width */}
+        <div className="w-[264px] sm:w-[284px] mx-auto mt-3 flex flex-col items-center">
+          {/* Enlarged PRUMO title spanning the exact width of the subtitle container immediately below */}
+          <h1
+            aria-label="PRUMO"
+            className="w-full flex items-center justify-between text-[2.5rem] sm:text-[2.75rem] font-extrabold uppercase font-sans text-[#E5E7EB] leading-none whitespace-nowrap select-none"
+          >
+            <span>P</span>
+            <span>R</span>
+            <span>U</span>
+            <span>M</span>
+            <span>O</span>
+          </h1>
 
-        {/* Subtitle with Typewriter effect */}
-        <div className="min-h-[42px] flex items-center justify-center mt-2 px-2">
-          <p className="text-xs text-[#8E929B] leading-relaxed max-w-[280px]">
-            {displayedSubtitle}
-            {!typewriterDone && (
-              <span className="inline-block w-1.5 h-3.5 bg-emerald-400 ml-0.5 animate-pulse align-middle" />
-            )}
-          </p>
+          {/* Subtitle immediately below PRUMO with fixed min-height to prevent layout shifts (CLS) */}
+          <div className="w-full min-h-[44px] sm:min-h-[48px] flex items-start justify-center mt-2.5">
+            <p className="text-xs sm:text-[13px] text-[#8E929B] leading-relaxed text-center">
+              {displayedSubtitle}
+              <span className="inline-block w-1.5 h-3.5 bg-[#D0B595]/80 ml-0.5 animate-pulse align-middle" />
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Main Container */}
-      <div className="w-full max-w-sm">
+      {/* Lower Section: Action Buttons & Security Note */}
+      <div className="w-full max-w-sm mt-auto pt-10">
         {mode === 'initial' && (
           <div className="space-y-3.5 animate-fadeIn">
             {errorMessage && (
@@ -161,27 +272,24 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
               </div>
             )}
 
-            {/* High-Contrast Main Button: "+ Novo Espaço Familiar" */}
+            {/* Primary Button: "Novo Espaço Familiar" styled in warm oxidized iron / rustic bronze */}
             <button
               type="button"
               disabled={isLoading}
               onClick={handleCreateNewFamily}
-              className="w-full py-4 px-5 rounded-xl font-medium text-base bg-[#242832] hover:bg-[#2e3340] active:bg-[#1a1d24] text-white border border-[#3f4556] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 shadow-lg shadow-black/40 disabled:opacity-50"
+              className="w-full py-4 px-5 rounded-xl font-semibold text-sm sm:text-base bg-[#6E5440] hover:bg-[#7E624B] active:bg-[#5A4535] text-[#FFFDF5] border border-[#8A6F57]/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 shadow-lg shadow-black/50 disabled:opacity-50"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin text-zinc-100" />
-                  <span className="text-zinc-100">Criando chave segura...</span>
+                  <Loader2 className="w-5 h-5 animate-spin text-[#FFFDF5]" />
+                  <span className="text-[#FFFDF5]">Criando chave segura...</span>
                 </>
               ) : (
-                <>
-                  <Plus className="w-5 h-5 text-zinc-100" strokeWidth={2.5} />
-                  <span className="text-zinc-100 font-semibold tracking-wide">+ Novo Espaço Familiar</span>
-                </>
+                <span className="text-[#FFFDF5] font-semibold tracking-wide">Novo Espaço Familiar</span>
               )}
             </button>
 
-            {/* Secondary Button: "Ingressar com código" */}
+            {/* Secondary Button: "Ingressar com código" with consistent padding, typography, and alignment */}
             <button
               type="button"
               disabled={isLoading}
@@ -191,18 +299,18 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
                 setInputCode('');
                 setInputKey('');
               }}
-              className="w-full py-3.5 px-4 rounded-xl font-medium text-sm bg-[#111215] border border-[#22242a] text-[#D1D5DB] hover:bg-[#181a20] hover:text-white active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 px-5 rounded-xl font-semibold text-sm sm:text-base bg-[#111215] border border-[#22242a] text-[#D1D5DB] hover:bg-[#181a20] hover:text-white active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
             >
               <KeyRound className="w-4 h-4 text-[#8E929B]" strokeWidth={2} />
-              <span>Ingressar com código</span>
+              <span className="tracking-wide">Ingressar com código</span>
             </button>
 
-            {/* Footer Support Text */}
-            <div className="pt-4 flex items-center justify-center gap-2 text-center text-[#606470]">
-              <Lock className="w-3 h-3 shrink-0 text-emerald-500/70" />
-              <p className="text-[11px] leading-tight">
+            {/* Footer Support Text with Lock Icon centered directly BELOW the text */}
+            <div className="pt-4 flex flex-col items-center text-center gap-2 text-[#606470]">
+              <p className="text-[11px] leading-relaxed max-w-[280px]">
                 Sincronização multi-dispositivos com criptografia de ponta a ponta para privacidade total da sua família.
               </p>
+              <Lock className="w-3.5 h-3.5 text-emerald-500/70" />
             </div>
           </div>
         )}
@@ -259,17 +367,17 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
               <button
                 type="submit"
                 disabled={isLoading || !inputCode.trim() || inputKey.length < 14}
-                className="w-full py-3.5 px-4 rounded-xl font-semibold text-sm bg-[#242832] hover:bg-[#2e3340] text-white border border-[#3f4556] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+                className="w-full py-4 px-5 rounded-xl font-semibold text-sm sm:text-base bg-[#6E5440] hover:bg-[#7E624B] active:bg-[#5A4535] text-[#FFFDF5] border border-[#8A6F57]/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-zinc-100" />
-                    <span className="text-zinc-100">Decifrando e entrando...</span>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#FFFDF5]" />
+                    <span className="text-[#FFFDF5]">Decifrando e entrando...</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-zinc-100">Entrar na Família</span>
-                    <ArrowRight className="w-4 h-4 text-zinc-100" />
+                    <span className="text-[#FFFDF5]">Entrar na Família</span>
+                    <ArrowRight className="w-4 h-4 text-[#FFFDF5]" />
                   </>
                 )}
               </button>
@@ -356,10 +464,10 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
             <button
               type="button"
               onClick={() => onJoined(createdCode, createdKey)}
-              className="w-full py-4 px-4 rounded-xl font-semibold text-base bg-[#242832] hover:bg-[#2e3340] text-white border border-[#3f4556] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/40"
+              className="w-full py-4 px-5 rounded-xl font-semibold text-sm sm:text-base bg-[#6E5440] hover:bg-[#7E624B] active:bg-[#5A4535] text-[#FFFDF5] border border-[#8A6F57]/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-black/50"
             >
-              <span className="text-zinc-100">Já guardei a chave</span>
-              <ArrowRight className="w-4 h-4 text-zinc-100" />
+              <span className="text-[#FFFDF5]">Já guardei a chave</span>
+              <ArrowRight className="w-4 h-4 text-[#FFFDF5]" />
             </button>
           </div>
         )}

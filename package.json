@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node server/index.mjs --dev",
     "build": "vite build",
+    "preview": "vite preview",
     "start": "node server/index.mjs",
     "icons": "node scripts/generate-png-icons.mjs"
   },

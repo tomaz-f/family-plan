@@ -20,7 +20,7 @@ export const DEFAULT_CATEGORIES: Category[] = [
 ];
 
 export const DEFAULT_SETTINGS = {
-  familyName: 'FAMILY PLAN',
+  familyName: 'PRUMO',
   currency: 'BRL',
   language: 'pt-BR',
   theme: 'oled',
@@ -422,35 +422,76 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
 
 export async function directUpdateTransaction(client: Client, familyId: string, id: string, txData: any): Promise<AppState> {
   await ensureClientSchema(client);
-  const isEncrypted = Boolean(txData.encrypted_data || txData.payload);
-  if (isEncrypted) {
-    const cleanIv = txData.iv || (txData.encrypted_data && txData.encrypted_data.startsWith('v1:') ? txData.encrypted_data.split(':')[1] : null);
-    const cleanPayload = txData.payload || (txData.encrypted_data && txData.encrypted_data.startsWith('v1:') ? txData.encrypted_data.split(':')[2] : (txData.encrypted_data || null));
-    const cleanEncrypted = txData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
-    await client.execute({
-      sql: `UPDATE transactions
-       SET type = ?, status = ?, date = ?, amount = NULL, description = NULL, categoryId = NULL, notes = NULL, iv = ?, encrypted_data = ?, payload = ?
-       WHERE family_id = ? AND id = ?`,
-      args: [txData.type || 'expense', txData.status || 'paid', String(txData.date), cleanIv, cleanEncrypted, cleanPayload, familyId, id],
-    });
-  } else {
-    await client.execute({
-      sql: `UPDATE transactions
-       SET type = ?, status = ?, amount = ?, description = ?, categoryId = ?, date = ?, notes = ?
-       WHERE family_id = ? AND id = ?`,
-      args: [
-        txData.type || 'expense',
-        txData.status || 'paid',
-        Number(txData.amount || 0),
-        String(txData.description || ''),
-        String(txData.categoryId || ''),
-        String(txData.date),
-        String(txData.notes || ''),
-        familyId,
-        id,
-      ],
-    });
+  const updateSingleRow = async (rowId: string, rowData: any) => {
+    const isEncrypted = Boolean(rowData.encrypted_data || rowData.payload);
+    if (isEncrypted) {
+      const cleanIv = rowData.iv || (rowData.encrypted_data && rowData.encrypted_data.startsWith('v1:') ? rowData.encrypted_data.split(':')[1] : null);
+      const cleanPayload = rowData.payload || (rowData.encrypted_data && rowData.encrypted_data.startsWith('v1:') ? rowData.encrypted_data.split(':')[2] : (rowData.encrypted_data || null));
+      const cleanEncrypted = rowData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
+      await client.execute({
+        sql: `UPDATE transactions
+         SET type = ?, status = ?, date = ?, amount = NULL, description = NULL, categoryId = NULL, notes = NULL,
+             recurringId = ?, dueDay = ?, installmentCurrent = ?, installmentTotal = ?, cardId = ?, invoiceMonth = ?, purchaseDate = ?, settledInvoiceKey = ?,
+             iv = ?, encrypted_data = ?, payload = ?
+         WHERE family_id = ? AND id = ?`,
+        args: [
+          rowData.type || 'expense',
+          rowData.status || 'paid',
+          String(rowData.date),
+          rowData.recurringId || null,
+          rowData.dueDay || null,
+          rowData.installmentCurrent || null,
+          rowData.installmentTotal || null,
+          rowData.cardId || null,
+          rowData.invoiceMonth || null,
+          rowData.purchaseDate || null,
+          rowData.settledInvoiceKey || null,
+          cleanIv,
+          cleanEncrypted,
+          cleanPayload,
+          familyId,
+          rowId,
+        ],
+      });
+    } else {
+      await client.execute({
+        sql: `UPDATE transactions
+         SET type = ?, status = ?, amount = ?, description = ?, categoryId = ?, date = ?, notes = ?,
+             recurringId = ?, dueDay = ?, installmentCurrent = ?, installmentTotal = ?, cardId = ?, invoiceMonth = ?, purchaseDate = ?, settledInvoiceKey = ?
+         WHERE family_id = ? AND id = ?`,
+        args: [
+          rowData.type || 'expense',
+          rowData.status || 'paid',
+          Number(rowData.amount || 0),
+          String(rowData.description || ''),
+          String(rowData.categoryId || ''),
+          String(rowData.date),
+          String(rowData.notes || ''),
+          rowData.recurringId || null,
+          rowData.dueDay || null,
+          rowData.installmentCurrent || null,
+          rowData.installmentTotal || null,
+          rowData.cardId || null,
+          rowData.invoiceMonth || null,
+          rowData.purchaseDate || null,
+          rowData.settledInvoiceKey || null,
+          familyId,
+          rowId,
+        ],
+      });
+    }
+  };
+
+  await updateSingleRow(id, txData);
+
+  if (Array.isArray(txData.updatedSeriesEntries)) {
+    for (const sEntry of txData.updatedSeriesEntries) {
+      if (sEntry && sEntry.id) {
+        await updateSingleRow(sEntry.id, sEntry);
+      }
+    }
   }
+
   return directGetFullState(client, familyId);
 }
 
@@ -463,12 +504,16 @@ export async function directUpdateTransactionStatus(client: Client, familyId: st
   return directGetFullState(client, familyId);
 }
 
-export async function directDeleteTransaction(client: Client, familyId: string, id: string): Promise<AppState> {
+export async function directDeleteTransaction(client: Client, familyId: string, id: string, deleteIds?: string[]): Promise<AppState> {
   await ensureClientSchema(client);
-  await client.execute({
-    sql: 'DELETE FROM transactions WHERE family_id = ? AND id = ?',
-    args: [familyId, id],
-  });
+  const ids = Array.isArray(deleteIds) && deleteIds.length > 0 ? deleteIds : [id];
+  for (const targetId of ids) {
+    if (!targetId) continue;
+    await client.execute({
+      sql: 'DELETE FROM transactions WHERE family_id = ? AND id = ?',
+      args: [familyId, targetId],
+    });
+  }
   return directGetFullState(client, familyId);
 }
 

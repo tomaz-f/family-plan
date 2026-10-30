@@ -257,7 +257,8 @@ app.delete('/api/transactions/:id', async (req, res) => {
   try {
     const familyId = await resolveFamilyId(req);
     const scope = req.query.scope || req.body?.scope || 'single';
-    const state = await db.deleteTransaction(familyId, req.params.id, scope);
+    const deleteIds = Array.isArray(req.body?.deleteIds) ? req.body.deleteIds : null;
+    const state = await db.deleteTransaction(familyId, req.params.id, scope, deleteIds);
     res.json(state);
   } catch (err) {
     sendServerError(res, err);

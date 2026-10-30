@@ -64,6 +64,7 @@ interface TransactionModalProps {
       dueDay?: number | null;
       installmentCurrent?: number | null;
       installmentTotal?: number | null;
+      totalPurchaseAmount?: number | null;
       recurringId?: string | null;
       cardId?: string | null;
       invoiceMonth?: string | null;
@@ -128,7 +129,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     if (editingTransaction) {
       setType(editingTransaction.type);
       setStatus(editingTransaction.status === 'unpaid' ? 'unpaid' : 'paid');
-      setAmount(String(editingTransaction.amount));
+      if (editingTransaction.installmentTotal && editingTransaction.installmentTotal > 1) {
+        const totalVal =
+          editingTransaction.totalPurchaseAmount && editingTransaction.totalPurchaseAmount > 0
+            ? editingTransaction.totalPurchaseAmount
+            : Number((editingTransaction.amount * editingTransaction.installmentTotal).toFixed(2));
+        setAmount(String(totalVal));
+      } else {
+        setAmount(String(editingTransaction.amount));
+      }
       setDescription(editingTransaction.description);
       setCategoryId(editingTransaction.categoryId);
       setDate(editingTransaction.purchaseDate || editingTransaction.date);
@@ -214,6 +223,24 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const parsedInstCur = Math.max(1, Number(installmentCurrent) || 1);
   const parsedInstTot = Math.max(parsedInstCur, Number(installmentTotal) || 2);
 
+  const installmentBreakdown = useMemo(() => {
+    const rawNum = parseFloat(amount.replace(',', '.'));
+    const totalAmount = !Number.isNaN(rawNum) && rawNum > 0 ? rawNum : 0;
+    const count = recurrenceMode === 'installment' ? Math.max(1, parsedInstTot) : 1;
+    const totalCents = Math.round(totalAmount * 100);
+    const baseCents = Math.floor(totalCents / count);
+    const remainderCents = totalCents - baseCents * count;
+    const firstInstallmentAmount = Number(((baseCents + remainderCents) / 100).toFixed(2));
+    const regularInstallmentAmount = Number((baseCents / 100).toFixed(2));
+    return {
+      totalAmount,
+      count,
+      firstInstallmentAmount,
+      regularInstallmentAmount,
+      remainderCents,
+    };
+  }, [amount, recurrenceMode, parsedInstTot]);
+
   const cardCycleInfo = useMemo(() => {
     if (!selectedCard) return null;
     const baseDate = date || getTodayDateStr();
@@ -247,6 +274,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     const parsedAmount = parseFloat(amount.replace(',', '.'));
     if (Number.isNaN(parsedAmount) || parsedAmount <= 0) return;
 
+    const isInstallmentMode = recurrenceMode === 'installment' && parsedInstTot > 1;
+    const perInstallmentAmount = isInstallmentMode
+      ? parsedInstCur === 1
+        ? installmentBreakdown.firstInstallmentAmount
+        : installmentBreakdown.regularInstallmentAmount
+      : parsedAmount;
+    const totalPurchaseAmount = isInstallmentMode ? parsedAmount : null;
+
     setSubmitting(true);
     try {
       const selectedCat = categories.find((c) => c.id === categoryId);
@@ -261,9 +296,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
       let calculatedInvoiceMonth: string | null = null;
       if (selectedCard) {
-        calculatedInvoiceMonth = cardCycleInfo
+        const firstCycleMonth = cardCycleInfo
           ? cardCycleInfo.invoiceMonth
           : computeCardFirstInvoiceMonth(txPurchaseDate, selectedCard.closingDay).invoiceMonth;
+        calculatedInvoiceMonth =
+          isInstallmentMode && editingTransaction && parsedInstCur > 1
+            ? shiftMonth(firstCycleMonth, parsedInstCur - 1)
+            : firstCycleMonth;
       }
 
       await onSave(
@@ -271,10 +310,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           id: editingTransaction?.id,
           type,
           status: selectedCard ? 'unpaid' : status,
-          amount: parsedAmount,
+          amount: perInstallmentAmount,
+          totalPurchaseAmount,
           description: finalDescription,
           categoryId,
-          date,
+          date: editingTransaction && isInstallmentMode ? editingTransaction.date : date,
           notes: notes.trim(),
           dueDay: selectedCard
             ? selectedCard.dueDay
@@ -375,7 +415,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {/* Amount Input */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-              {t.amountLabel}
+              {type === 'expense' && (recurrenceMode === 'installment' || selectedCard)
+                ? language === 'pt-BR'
+                  ? `Valor Total da Compra (${currency})`
+                  : `Total Purchase Amount (${currency})`
+                : t.amountLabel}
             </label>
             <input
               type="number"
@@ -392,6 +436,23 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   : 'border-rose-200 text-rose-500 focus:ring-rose-500'
               }`}
             />
+            {recurrenceMode === 'installment' && (
+              <div className="mt-2 px-3.5 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-between gap-2 text-xs font-bold text-indigo-400">
+                <span className="flex items-center gap-1.5">
+                  <Layers size={14} className="shrink-0" />
+                  <span>
+                    {language === 'pt-BR'
+                      ? `Total de ${formatCurrency(installmentBreakdown.totalAmount, currency)} em ${installmentBreakdown.count}x de ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`
+                      : `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} in ${installmentBreakdown.count}x of ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`}
+                    {installmentBreakdown.remainderCents > 0 && installmentBreakdown.count > 1
+                      ? language === 'pt-BR'
+                        ? ` (1ª de ${formatCurrency(installmentBreakdown.firstInstallmentAmount, currency)})`
+                        : ` (1st of ${formatCurrency(installmentBreakdown.firstInstallmentAmount, currency)})`
+                      : ''}
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Description & Payment/Receipt Date */}
@@ -691,6 +752,32 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
             {recurrenceMode === 'installment' && (
               <div className="space-y-2.5 pt-1">
+                {/* Quick Installment Selector (2x to 24x) */}
+                <div>
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                    {language === 'pt-BR' ? 'Seleção Rápida de Parcelas' : 'Quick Installments'}
+                  </span>
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                    {[2, 3, 4, 6, 10, 12, 18, 24].map((n) => {
+                      const active = parsedInstTot === n;
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setInstallmentTotal(String(n))}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all ${
+                            active
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                          }`}
+                        >
+                          {n}x
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-3 gap-2.5">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">
@@ -741,8 +828,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </div>
                 </div>
 
-                <div className="px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-500 text-[11px] font-semibold text-center">
-                  {t.installmentHintSummary(parsedInstCur, parsedInstTot, concludingMonthLabel, parsedDueDay)}
+                <div className="px-3 py-2 rounded-lg bg-indigo-500/10 text-indigo-500 text-[11px] font-semibold text-center space-y-0.5">
+                  <div>
+                    {language === 'pt-BR'
+                      ? `Total de ${formatCurrency(installmentBreakdown.totalAmount, currency)} em ${installmentBreakdown.count}x de ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`
+                      : `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} in ${installmentBreakdown.count}x of ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`}
+                  </div>
+                  <div className="opacity-80">
+                    {t.installmentHintSummary(parsedInstCur, parsedInstTot, concludingMonthLabel, parsedDueDay)}
+                  </div>
                 </div>
               </div>
             )}
@@ -786,7 +880,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             ? {
                 ...editingTransaction,
                 type,
-                amount: parseFloat(amount.replace(',', '.')) || editingTransaction.amount,
+                amount:
+                  recurrenceMode === 'installment' && parsedInstTot > 1
+                    ? parsedInstCur === 1
+                      ? installmentBreakdown.firstInstallmentAmount
+                      : installmentBreakdown.regularInstallmentAmount
+                    : parseFloat(amount.replace(',', '.')) || editingTransaction.amount,
                 description: description.trim() || editingTransaction.description,
                 date,
               }

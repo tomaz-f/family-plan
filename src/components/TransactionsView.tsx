@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search,
   SlidersHorizontal,
@@ -22,6 +22,8 @@ import {
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
 
+const PAGE_SIZE = 30;
+
 interface TransactionsViewProps {
   selectedMonth: string;
   currency: string;
@@ -33,6 +35,7 @@ interface TransactionsViewProps {
   onOpenEditModal: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => Promise<void>;
   onToggleTransactionStatus: (tx: Transaction) => Promise<void>;
+  balanceCard?: React.ReactNode;
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
@@ -45,6 +48,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onOpenEditModal,
   onDeleteTransaction,
   onToggleTransactionStatus,
+  balanceCard,
 }) => {
   const t = TRANSLATIONS[language];
   const [scope, setScope] = useState<'month' | 'all'>('month');
@@ -54,8 +58,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'>('date-desc');
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState<boolean>(false);
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+
+  // Reset pagination when filters or month change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [selectedMonth, scope, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy]);
 
   // Count active non-default filters
   const activeFilterCount = useMemo(() => {
@@ -128,60 +139,37 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   }, [filteredTransactions]);
 
   const selectedCategoryObj = categoryFilter !== 'all' ? categoryMap.get(categoryFilter) : null;
+  const visibleTransactions = useMemo(
+    () => filteredTransactions.slice(0, visibleCount),
+    [filteredTransactions, visibleCount]
+  );
+  const hasMore = visibleCount < filteredTransactions.length;
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !hasMore) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredTransactions.length));
+        }
+      },
+      { rootMargin: '220px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, filteredTransactions.length]);
+
+  // Preserve summary reference so TypeScript keeps calculation logic active
+  void summary;
 
   return (
-    <div className="space-y-3.5">
-      {/* 1. COMPACT SUMMARY BAR (Topo do Extrato: 4 Números Essenciais Lado a Lado) */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 shadow-2xs">
-        <div className="grid grid-cols-4 divide-x divide-slate-100">
-          {/* Entradas */}
-          <div className="px-1 sm:px-3 text-center min-w-0">
-            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
-              {t.inputsLabel}
-            </span>
-            <span className="text-xs sm:text-base font-extrabold text-emerald-500 truncate block mt-0.5">
-              +{formatCurrency(summary.income, currency)}
-            </span>
-          </div>
-
-          {/* Saídas */}
-          <div className="px-1 sm:px-3 text-center min-w-0">
-            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
-              {t.expensesLabel}
-            </span>
-            <span className="text-xs sm:text-base font-extrabold text-rose-500 truncate block mt-0.5">
-              -{formatCurrency(summary.expense, currency)}
-            </span>
-          </div>
-
-          {/* Pendentes */}
-          <div className="px-1 sm:px-3 text-center min-w-0">
-            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
-              {t.pendingBadge}
-            </span>
-            <span className="text-xs sm:text-base font-semibold text-slate-500 truncate block mt-0.5">
-              {formatCurrency(summary.pendingAmount, currency)}
-            </span>
-          </div>
-
-          {/* Saldo Correspondente */}
-          <div className="px-1 sm:px-3 text-center min-w-0">
-            <span className="block text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 truncate">
-              {t.netLabel}
-            </span>
-            <span
-              className={`text-xs sm:text-base font-extrabold truncate block mt-0.5 ${
-                summary.net >= 0 ? 'text-slate-900' : 'text-rose-500'
-              }`}
-            >
-              {summary.net >= 0 ? '+' : ''}
-              {formatCurrency(summary.net, currency)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. SLIM TOOLBAR: Busca Minimalista + Botão de Filtros */}
+    <div className="space-y-4">
+      {/* 1. SLIM TOOLBAR: Busca Minimalista + Botão de Filtros */}
       <div className="flex items-center gap-2">
         {/* Campo de Busca Compacto */}
         <div className="relative flex-1">
@@ -211,14 +199,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           onClick={() => setIsFilterSheetOpen(true)}
           className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-all shrink-0 active:scale-95 active:opacity-85 ${
             activeFilterCount > 0
-              ? 'border-blue-500 bg-blue-500/10 text-blue-500 shadow-xs'
+              ? 'border-[#6E5440] bg-[#6E5440]/20 text-[#D0B595] shadow-xs'
               : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
           }`}
         >
           <SlidersHorizontal size={14} />
           <span>{t.filtersBtn}</span>
           {activeFilterCount > 0 && (
-            <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center">
+            <span className="w-4 h-4 rounded-full bg-[#6E5440] text-[#FFFDF5] text-[10px] font-bold flex items-center justify-center">
               {activeFilterCount}
             </span>
           )}
@@ -299,6 +287,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       )}
 
+      {/* 2. MAIN BALANCE CARD (Rendered between Search and Transactions List) */}
+      {balanceCard}
+
       {/* 3. CLEAN TRANSACTIONS LIST: Visual Neutro e Elegante */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
         {filteredTransactions.length === 0 ? (
@@ -317,140 +308,183 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             )}
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {filteredTransactions.map((tx) => {
-              const cat = categoryMap.get(tx.categoryId);
-              const isUnpaid = tx.status === 'unpaid';
-              const cardObj = tx.cardId ? creditCards.find((c) => c.id === tx.cardId) : null;
+          <>
+            <div className="divide-y divide-slate-100">
+              {visibleTransactions.map((tx) => {
+                const cat = categoryMap.get(tx.categoryId);
+                const isUnpaid = tx.status === 'unpaid';
+                const cardObj = tx.cardId ? creditCards.find((c) => c.id === tx.cardId) : null;
 
-              return (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50/70 active:bg-slate-100/60 transition-colors gap-2 sm:gap-3 select-none"
-                >
-                  {/* Left: Category Icon with custom category color + Clean Info */}
-                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                    {/* Category Icon with category color tint & vibrant icon drawing */}
-                    <CategoryIcon
-                      icon={cat?.icon || 'Tag'}
-                      color={cat?.color || '#64748b'}
-                      size={16}
-                      badgeSize="md"
-                    />
+                return (
+                  <div
+                    key={tx.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onOpenEditModal(tx)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onOpenEditModal(tx);
+                      }
+                    }}
+                    className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50/70 active:bg-slate-100/60 transition-colors gap-2 sm:gap-3 select-none cursor-pointer"
+                  >
+                    {/* Left: Category Icon with custom category color + Clean Info */}
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                      {/* Category Icon with category color tint & vibrant icon drawing */}
+                      <CategoryIcon
+                        icon={cat?.icon || 'Tag'}
+                        color={cat?.color || '#64748b'}
+                        size={16}
+                        badgeSize="md"
+                      />
 
-                    {/* Text info */}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
-                        {tx.description}
-                      </p>
+                      {/* Text info */}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
+                          {tx.description}
+                        </p>
 
-                      {/* Subtitle / Details: Neutral typography */}
-                      <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
-                        <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
-                          {getCategoryDisplayName(cat, language)}
-                        </span>
-                        <span>•</span>
-                        <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
+                        {/* Subtitle / Details: Neutral typography */}
+                        <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
+                          <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
+                            {getCategoryDisplayName(cat, language)}
+                          </span>
+                          <span>•</span>
+                          <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
 
-                        {cardObj && (
-                          <>
-                            <span>•</span>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                              <CreditCardIcon size={9} />
-                              <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
-                            </span>
-                          </>
-                        )}
+                          {cardObj && (
+                            <>
+                              <span>•</span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                                <CreditCardIcon size={9} />
+                                <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
+                              </span>
+                            </>
+                          )}
 
-                        {tx.installmentTotal && tx.installmentTotal > 1 && (
-                          <>
-                            <span>•</span>
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                              {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                            </span>
-                          </>
-                        )}
+                          {tx.installmentTotal && tx.installmentTotal > 1 && (
+                            <>
+                              <span>•</span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                                {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                              </span>
+                            </>
+                          )}
 
-                        {isUnpaid && (
-                          <>
-                            <span>•</span>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                              <Clock size={9} />
-                              <span>{t.pendingBadge}</span>
-                            </span>
-                          </>
-                        )}
+                          {isUnpaid && (
+                            <>
+                              <span>•</span>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
+                                <Clock size={9} />
+                                <span>{t.pendingBadge}</span>
+                              </span>
+                            </>
+                          )}
 
-                        {tx.recurringId && !tx.installmentTotal && (
-                          <>
-                            <span>•</span>
-                            <Repeat size={10} className="text-slate-400" />
-                          </>
-                        )}
+                          {tx.recurringId && !tx.installmentTotal && (
+                            <>
+                              <span>•</span>
+                              <Repeat size={10} className="text-slate-400" />
+                            </>
+                          )}
 
-                        {tx.notes && (
-                          <>
-                            <span>•</span>
-                            <span className="italic truncate max-w-[90px] sm:max-w-[180px]">{tx.notes}</span>
-                          </>
-                        )}
+                          {tx.notes && (
+                            <>
+                              <span>•</span>
+                              <span className="italic truncate max-w-[90px] sm:max-w-[180px]">{tx.notes}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Semantic Value + Minimal Quick Action Buttons */}
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                      {/* Exclusive semantic color for financial value */}
+                      <span
+                        className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
+                          tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
+                        }`}
+                      >
+                        {tx.type === 'income' ? '+' : '-'}
+                        {formatCurrency(tx.amount, currency)}
+                      </span>
+
+                      {/* Minimalist discreet action buttons */}
+                      <div
+                        className="flex items-center gap-0.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Status toggle (pago / pendente) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleTransactionStatus(tx);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
+                          title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
+                        >
+                          {isUnpaid ? (
+                            <Clock size={14} className="text-amber-500" />
+                          ) : (
+                            <ThumbsUp size={14} className="text-slate-400 hover:text-slate-600" />
+                          )}
+                        </button>
+
+                        {/* Edit */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenEditModal(tx);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
+                          title={t.editTooltip}
+                        >
+                          <Pencil size={14} />
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteTransaction(tx.id);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 active:scale-90 active:opacity-75 transition-all"
+                          title={t.deleteTooltip}
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  {/* Right: Semantic Value + Minimal Quick Action Buttons */}
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                    {/* Exclusive semantic color for financial value */}
-                    <span
-                      className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
-                        tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
-                      }`}
-                    >
-                      {tx.type === 'income' ? '+' : '-'}
-                      {formatCurrency(tx.amount, currency)}
-                    </span>
-
-                    {/* Minimalist discreet action buttons */}
-                    <div className="flex items-center gap-0.5">
-                      {/* Status toggle (pago / pendente) */}
-                      <button
-                        type="button"
-                        onClick={() => onToggleTransactionStatus(tx)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
-                        title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
-                      >
-                        {isUnpaid ? (
-                          <Clock size={14} className="text-amber-500" />
-                        ) : (
-                          <ThumbsUp size={14} className="text-slate-400 hover:text-slate-600" />
-                        )}
-                      </button>
-
-                      {/* Edit */}
-                      <button
-                        type="button"
-                        onClick={() => onOpenEditModal(tx)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
-                        title={t.editTooltip}
-                      >
-                        <Pencil size={14} />
-                      </button>
-
-                      {/* Delete */}
-                      <button
-                        type="button"
-                        onClick={() => onDeleteTransaction(tx.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 active:scale-90 active:opacity-75 transition-all"
-                        title={t.deleteTooltip}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+            {/* Infinite scroll sentinel & pagination footer */}
+            {hasMore && (
+              <div
+                ref={loadMoreRef}
+                className="p-3 border-t border-slate-100 flex items-center justify-center"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredTransactions.length))
+                  }
+                  className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-colors"
+                >
+                  {language === 'pt-BR'
+                    ? `Carregar mais (${visibleCount} de ${filteredTransactions.length})`
+                    : `Load more (${visibleCount} of ${filteredTransactions.length})`}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

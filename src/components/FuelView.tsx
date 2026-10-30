@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Fuel,
   Plus,
@@ -14,6 +14,7 @@ import {
   Calendar,
   BarChart3,
   Activity,
+  X,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -60,6 +61,7 @@ interface FuelViewProps {
   }) => Promise<void>;
   onDeleteFuelLog: (id: string) => Promise<void>;
   onUpdateTankCapacity: (tankCapacity: number) => Promise<void>;
+  openRefuelTrigger?: number;
 }
 
 interface EnrichedFuelLog extends FuelLog {
@@ -78,6 +80,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
   onSaveFuelLog,
   onDeleteFuelLog,
   onUpdateTankCapacity,
+  openRefuelTrigger,
 }) => {
   const t = TRANSLATIONS[language];
   const [showForm, setShowForm] = useState(false);
@@ -97,50 +100,14 @@ export const FuelView: React.FC<FuelViewProps> = ({
   // Tank size inline input
   const [tankInput, setTankInput] = useState(String(tankCapacity || 50));
 
-  const gridStroke =
-    theme === 'oled'
-      ? '#1c1e24'
-      : theme === 'tokyo-night'
-      ? '#292e42'
-      : theme === 'dark'
-      ? '#334155'
-      : '#f1f5f9';
-  const axisTickColor =
-    theme === 'oled'
-      ? '#8E929B'
-      : theme === 'tokyo-night'
-      ? '#787c99'
-      : theme === 'dark'
-      ? '#94a3b8'
-      : '#64748b';
+  const gridStroke = theme === 'oled' ? '#21262D' : '#E2E8F0';
+  const axisTickColor = theme === 'oled' ? '#94A3B8' : '#64748B';
   const tooltipStyle = useMemo(
     () => ({
       borderRadius: '12px',
-      border: `1px solid ${
-        theme === 'oled'
-          ? '#212328'
-          : theme === 'tokyo-night'
-          ? '#3b4261'
-          : theme === 'dark'
-          ? '#334155'
-          : '#e2e8f0'
-      }`,
-      backgroundColor:
-        theme === 'oled'
-          ? '#141518'
-          : theme === 'tokyo-night'
-          ? '#1f2335'
-          : theme === 'dark'
-          ? '#0f172a'
-          : '#ffffff',
-      color:
-        theme === 'oled'
-          ? '#F4F5F7'
-          : theme === 'tokyo-night'
-          ? '#c0caf5'
-          : theme === 'dark'
-          ? '#f8fafc'
-          : '#0f172a',
+      border: `1px solid ${theme === 'oled' ? '#21262D' : '#E2E8F0'}`,
+      backgroundColor: theme === 'oled' ? '#0D1117' : '#FFFFFF',
+      color: theme === 'oled' ? '#F8FAFC' : '#0F172A',
       fontSize: '12px',
     }),
     [theme]
@@ -271,6 +238,12 @@ export const FuelView: React.FC<FuelViewProps> = ({
     setIsFullTank(true);
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (openRefuelTrigger && openRefuelTrigger > 0) {
+      handleOpenNew();
+    }
+  }, [openRefuelTrigger]);
 
   const handleOpenEdit = (log: FuelLog) => {
     setEditingId(log.id);
@@ -505,19 +478,39 @@ export const FuelView: React.FC<FuelViewProps> = ({
         </div>
       </div>
 
-      {/* Add / Edit Refueling Form */}
+      {/* Add / Edit Refueling Modal */}
       {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white p-5 sm:p-6 rounded-2xl border border-amber-500/40 shadow-lg space-y-4"
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+          onClick={() => {
+            setShowForm(false);
+            setEditingId(null);
+          }}
         >
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Fuel size={18} className="text-amber-500" />
-              {editingId ? t.editRefuelTitle : t.newRefuelTitle}
-            </h2>
-            <span className="text-[11px] font-medium text-emerald-500">{t.autoExpenseNote}</span>
-          </div>
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleSubmit}
+            className="w-full max-w-2xl bg-white p-5 sm:p-6 rounded-t-3xl sm:rounded-2xl border border-amber-500/40 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Fuel size={18} className="text-amber-500" />
+                  {editingId ? t.editRefuelTitle : t.newRefuelTitle}
+                </h2>
+                <span className="text-[11px] font-medium text-emerald-500">{t.autoExpenseNote}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
           {/* Fuel Type & Full/Partial Tank Toggle */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -708,7 +701,8 @@ export const FuelView: React.FC<FuelViewProps> = ({
               {submitting ? t.savingBtn : t.saveRefuelBtn}
             </button>
           </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {/* 6 KPI REPORT CARDS */}

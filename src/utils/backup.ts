@@ -105,6 +105,7 @@ export function normalizeTransaction(raw: any): Transaction | null {
     dueDay: optNum(raw.dueDay),
     installmentCurrent: optNum(raw.installmentCurrent),
     installmentTotal: optNum(raw.installmentTotal),
+    totalPurchaseAmount: optNum(raw.totalPurchaseAmount),
     // Credit card & invoice links (must never be dropped)
     cardId: optStr(raw.cardId),
     invoiceMonth: optStr(raw.invoiceMonth),
@@ -278,7 +279,7 @@ export function buildBackupPayload(
 
   const s = state.settings;
   const settings: AppSettings = {
-    familyName: str(s.familyName, 'FAMILY PLAN'),
+    familyName: str(s.familyName, 'PRUMO'),
     currency: str(s.currency, 'BRL'),
     language: s.language === 'en' ? 'en' : 'pt-BR',
     theme: s.theme || 'oled',
@@ -380,7 +381,9 @@ export function parseBackupPayload(raw: unknown): NormalizedBackup {
   if (typeof s.familyName === 'string' && s.familyName.trim()) settings.familyName = s.familyName.trim();
   if (typeof s.currency === 'string' && s.currency.trim()) settings.currency = s.currency.trim();
   if (s.language === 'en' || s.language === 'pt-BR') settings.language = s.language;
-  if (['light', 'dark', 'tokyo-night', 'oled'].includes(s.theme)) settings.theme = s.theme;
+  if (s.theme !== undefined) {
+    settings.theme = s.theme === 'light' ? 'light' : 'oled';
+  }
   if (s.initialBalance !== undefined && Number.isFinite(Number(s.initialBalance))) {
     settings.initialBalance = Number(s.initialBalance);
   }

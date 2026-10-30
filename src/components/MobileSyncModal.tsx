@@ -885,75 +885,44 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                 </div>
               </div>
 
-              {/* Theme Picker Cards */}
+              {/* Sleek 2-Option Theme Selector (OLED vs Claro) */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
                   {t.appThemeLabel}
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedTheme('light');
-                      onUpdateSettings({ theme: 'light' });
-                    }}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
-                      selectedTheme === 'light'
-                        ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Sun size={15} />
-                    {t.themeLight}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedTheme('dark');
-                      onUpdateSettings({ theme: 'dark' });
-                    }}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
-                      selectedTheme === 'dark'
-                        ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Moon size={15} />
-                    {t.themeDark}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedTheme('tokyo-night');
-                      onUpdateSettings({ theme: 'tokyo-night' });
-                    }}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
-                      selectedTheme === 'tokyo-night'
-                        ? 'border-indigo-500 bg-[#1a1b26] text-[#7aa2f7] shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Sparkles size={15} />
-                    {t.themeTokyo}
-                  </button>
-
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedTheme('oled');
                       onUpdateSettings({ theme: 'oled' });
                     }}
-                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                    className={`min-h-[46px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl border text-xs font-bold transition-all ${
                       selectedTheme === 'oled'
-                        ? 'border-blue-500 bg-[#000000] text-white shadow-sm ring-1 ring-blue-500/60'
+                        ? 'border-[#8A6F57] bg-[#6E5440] text-[#FFFDF5] shadow-sm'
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                     }`}
                     title={t.themeOled}
                   >
-                    <Contrast size={15} className="text-blue-400" />
-                    <span>OLED</span>
+                    <Moon size={15} />
+                    <span>{t.themeOled}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTheme('light');
+                      onUpdateSettings({ theme: 'light' });
+                    }}
+                    className={`min-h-[46px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl border text-xs font-bold transition-all ${
+                      selectedTheme === 'light'
+                        ? 'border-[#8A6F57] bg-[#6E5440] text-[#FFFDF5] shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                    title={t.themeLight}
+                  >
+                    <Sun size={15} />
+                    <span>{t.themeLight}</span>
                   </button>
                 </div>
               </div>

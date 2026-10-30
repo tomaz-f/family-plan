@@ -194,6 +194,7 @@ export async function encryptTransaction(
   dueDay?: number | null;
   installmentCurrent?: number | null;
   installmentTotal?: number | null;
+  totalPurchaseAmount?: number | null;
   recurringId?: string | null;
   iv: string;
   payload: string;
@@ -208,6 +209,7 @@ export async function encryptTransaction(
     dueDay: tx.dueDay || null,
     installmentCurrent: tx.installmentCurrent || null,
     installmentTotal: tx.installmentTotal || null,
+    totalPurchaseAmount: tx.totalPurchaseAmount || null,
     cardId: tx.cardId || null,
     invoiceMonth: tx.invoiceMonth || null,
     purchaseDate: tx.purchaseDate || null,
@@ -232,6 +234,7 @@ export async function encryptTransaction(
     dueDay: tx.dueDay ? Number(tx.dueDay) : null,
     installmentCurrent: tx.installmentCurrent ? Number(tx.installmentCurrent) : null,
     installmentTotal: tx.installmentTotal ? Number(tx.installmentTotal) : null,
+    totalPurchaseAmount: tx.totalPurchaseAmount ? Number(tx.totalPurchaseAmount) : null,
     recurringId: tx.recurringId || null,
     iv,
     payload,
@@ -259,6 +262,7 @@ export async function decryptTransaction(
       dueDay: raw.dueDay ? Number(raw.dueDay) : null,
       installmentCurrent: raw.installmentCurrent ? Number(raw.installmentCurrent) : null,
       installmentTotal: raw.installmentTotal ? Number(raw.installmentTotal) : null,
+      totalPurchaseAmount: raw.totalPurchaseAmount ? Number(raw.totalPurchaseAmount) : null,
       status: raw.status || 'paid',
       cardId: raw.cardId || null,
       invoiceMonth: raw.invoiceMonth || null,
@@ -280,14 +284,27 @@ export async function decryptTransaction(
       description: sensitive.description || '',
       categoryId: sensitive.categoryId || '',
       notes: sensitive.notes || '',
-      recurringId: sensitive.recurringId || null,
-      dueDay: sensitive.dueDay ? Number(sensitive.dueDay) : null,
-      installmentCurrent: sensitive.installmentCurrent ? Number(sensitive.installmentCurrent) : null,
-      installmentTotal: sensitive.installmentTotal ? Number(sensitive.installmentTotal) : null,
-      cardId: sensitive.cardId || null,
-      invoiceMonth: sensitive.invoiceMonth || null,
-      purchaseDate: sensitive.purchaseDate || null,
-      settledInvoiceKey: sensitive.settledInvoiceKey || null,
+      recurringId: sensitive.recurringId || raw.recurringId || null,
+      dueDay: sensitive.dueDay ? Number(sensitive.dueDay) : raw.dueDay ? Number(raw.dueDay) : null,
+      installmentCurrent: sensitive.installmentCurrent
+        ? Number(sensitive.installmentCurrent)
+        : raw.installmentCurrent
+        ? Number(raw.installmentCurrent)
+        : null,
+      installmentTotal: sensitive.installmentTotal
+        ? Number(sensitive.installmentTotal)
+        : raw.installmentTotal
+        ? Number(raw.installmentTotal)
+        : null,
+      totalPurchaseAmount: sensitive.totalPurchaseAmount
+        ? Number(sensitive.totalPurchaseAmount)
+        : raw.totalPurchaseAmount
+        ? Number(raw.totalPurchaseAmount)
+        : null,
+      cardId: sensitive.cardId || raw.cardId || null,
+      invoiceMonth: sensitive.invoiceMonth || raw.invoiceMonth || null,
+      purchaseDate: sensitive.purchaseDate || raw.purchaseDate || null,
+      settledInvoiceKey: sensitive.settledInvoiceKey || raw.settledInvoiceKey || null,
     };
   } catch (err) {
     console.error(`[Crypto] Failed to decrypt transaction ${raw.id}:`, err);

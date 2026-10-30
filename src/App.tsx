@@ -4,15 +4,18 @@ import {
   ListOrdered,
   CreditCard as CreditCardIcon,
   Fuel,
-  FileBarChart2,
   ChevronLeft,
   ChevronRight,
   Settings,
-  TrendingUp,
   Sun,
   Moon,
   Sparkles,
   Languages,
+  Plus,
+  Minus,
+  PieChart as PieChartIcon,
+  FileText,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   AppLanguage,
@@ -39,6 +42,10 @@ import {
   mergeBackupIntoState,
   parseBackupPayload,
 } from './utils/backup';
+import {
+  exportFilteredHistoryToCSV,
+  exportFilteredHistoryToPDF,
+} from './utils/exportReport';
 import { DashboardView } from './components/DashboardView';
 import { TransactionsView } from './components/TransactionsView';
 import { CreditCardsView } from './components/CreditCardsView';
@@ -49,6 +56,7 @@ import { BalanceModal } from './components/BalanceModal';
 import { MobileSyncModal } from './components/MobileSyncModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FamilyOnboardingScreen } from './components/FamilyOnboardingScreen';
+import { PrumoLogoIcon } from './components/PrumoLogoIcon';
 import {
   getStoredFamilyId,
   clearStoredFamilyId,
@@ -75,10 +83,10 @@ const STORAGE_PENDING_TX_KEY = 'familyplan_pending_tx_v1';
 
 const FALLBACK_STATE: AppState = {
   settings: {
-    familyName: 'Family Finance',
+    familyName: 'PRUMO',
     currency: 'BRL',
     language: 'pt-BR',
-    theme: 'tokyo-night',
+    theme: 'oled',
     initialBalance: 0,
     updatedAt: new Date().toISOString(),
   },
@@ -98,6 +106,49 @@ const FALLBACK_STATE: AppState = {
   creditCards: [],
 };
 
+function splitInstallmentAmounts(totalAmount: number, totalInstallments: number): {
+  firstAmount: number;
+  regularAmount: number;
+} {
+  const count = Math.max(1, Math.round(totalInstallments));
+  const totalCents = Math.round(Number(totalAmount || 0) * 100);
+  const baseCents = Math.floor(totalCents / count);
+  const remainderCents = totalCents - baseCents * count;
+  return {
+    firstAmount: Number(((baseCents + remainderCents) / 100).toFixed(2)),
+    regularAmount: Number((baseCents / 100).toFixed(2)),
+  };
+}
+
+function normalizeLegacyInstallmentTransactions(transactions: Transaction[]): {
+  transactions: Transaction[];
+  repaired: Transaction[];
+} {
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return { transactions: [], repaired: [] };
+  }
+  const repaired: Transaction[] = [];
+  const next = transactions.map((tx) => {
+    const instTotal = Number(tx.installmentTotal || 0);
+    if (instTotal > 1 && (!tx.totalPurchaseAmount || tx.totalPurchaseAmount <= 0)) {
+      const totalVal = Number(tx.amount || 0);
+      if (totalVal > 0) {
+        const { firstAmount, regularAmount } = splitInstallmentAmounts(totalVal, instTotal);
+        const instCur = Number(tx.installmentCurrent || 1);
+        const fixedTx: Transaction = {
+          ...tx,
+          totalPurchaseAmount: totalVal,
+          amount: instCur === 1 ? firstAmount : regularAmount,
+        };
+        repaired.push(fixedTx);
+        return fixedTx;
+      }
+    }
+    return tx;
+  });
+  return { transactions: next, repaired };
+}
+
 export const App: React.FC = () => {
   const [familyId, setFamilyId] = useState<string | null>(() => getStoredFamilyId());
   const [masterKey, setMasterKey] = useState<string | null>(() => getStoredMasterKey());
@@ -107,7 +158,23 @@ export const App: React.FC = () => {
       const fid = getStoredFamilyId();
       const key = fid ? `${STORAGE_STATE_KEY}_${fid}` : STORAGE_STATE_KEY;
       const cached = localStorage.getItem(key);
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (
+          parsed?.settings?.familyName &&
+          (parsed.settings.familyName.toUpperCase() === 'FAMILY PLAN' ||
+            parsed.settings.familyName.toUpperCase() === 'FAMILY FINANCE')
+        ) {
+          parsed.settings.familyName = 'PRUMO';
+        }
+        if (parsed?.settings) {
+          parsed.settings.theme = parsed.settings.theme === 'light' ? 'light' : 'oled';
+        }
+        if (Array.isArray(parsed?.transactions)) {
+          parsed.transactions = normalizeLegacyInstallmentTransactions(parsed.transactions).transactions;
+        }
+        return parsed;
+      }
     } catch {
       // ignore
     }
@@ -130,7 +197,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'cards' | 'fuel' | 'reports'>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthStr());
 
-  // Modals
+  // Modals & Contextual FAB State
   const [txModalOpen, setTxModalOpen] = useState<boolean>(false);
   const [txModalInitialType, setTxModalInitialType] = useState<TransactionType>('expense');
   const [txModalInitialCardId, setTxModalInitialCardId] = useState<string | null>(null);
@@ -139,15 +206,12 @@ export const App: React.FC = () => {
   const [balanceModalOpen, setBalanceModalOpen] = useState<boolean>(false);
   const [syncModalOpen, setSyncModalOpen] = useState<boolean>(false);
   const [syncModalTab, setSyncModalTab] = useState<'mobile' | 'settings' | 'categories' | 'export' | 'backup'>('mobile');
+  const [fabMenuOpen, setFabMenuOpen] = useState<boolean>(false);
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [openRefuelTrigger, setOpenRefuelTrigger] = useState<number>(0);
 
   const language: AppLanguage = state.settings.language === 'en' ? 'en' : 'pt-BR';
-  const theme: AppTheme =
-    state.settings.theme === 'dark' ||
-    state.settings.theme === 'tokyo-night' ||
-    state.settings.theme === 'light' ||
-    state.settings.theme === 'oled'
-      ? state.settings.theme
-      : 'tokyo-night';
+  const theme: AppTheme = state.settings.theme === 'light' ? 'light' : 'oled';
 
   const t = TRANSLATIONS[language];
 
@@ -160,10 +224,29 @@ export const App: React.FC = () => {
 
   const saveStateToCache = useCallback(
     (nextState: AppState) => {
-      setState(nextState);
+      const normalizedName =
+        nextState.settings?.familyName &&
+        nextState.settings.familyName.toUpperCase() !== 'FAMILY PLAN' &&
+        nextState.settings.familyName.toUpperCase() !== 'FAMILY FINANCE'
+          ? nextState.settings.familyName
+          : 'PRUMO';
+      const normalizedTheme: AppTheme = nextState.settings?.theme === 'light' ? 'light' : 'oled';
+      const { transactions: normalizedTransactions } = normalizeLegacyInstallmentTransactions(
+        nextState.transactions || []
+      );
+      const normalizedState: AppState = {
+        ...nextState,
+        transactions: normalizedTransactions,
+        settings: {
+          ...nextState.settings,
+          familyName: normalizedName,
+          theme: normalizedTheme,
+        },
+      };
+      setState(normalizedState);
       try {
         const key = familyId ? `${STORAGE_STATE_KEY}_${familyId}` : STORAGE_STATE_KEY;
-        localStorage.setItem(key, JSON.stringify(nextState));
+        localStorage.setItem(key, JSON.stringify(normalizedState));
       } catch {
         // ignore quota errors
       }
@@ -237,8 +320,21 @@ export const App: React.FC = () => {
       if (!res.ok) throw new Error('Server unreachable');
       const rawData = await res.json();
       const data = masterKey ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+      const { repaired } = normalizeLegacyInstallmentTransactions(data.transactions || []);
       saveStateToCache(data);
       setIsOnlineWithServer(true);
+
+      // Persist any auto-repaired legacy installment rows back to Turso so they are permanently fixed
+      if (repaired.length > 0) {
+        const repairedPayload = masterKey
+          ? await Promise.all(repaired.map((r) => encryptTransaction(r, masterKey, familyId)))
+          : repaired;
+        await apiFetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pendingTransactions: repairedPayload }),
+        }).catch(() => {});
+      }
     } catch {
       setIsOnlineWithServer(false);
     }
@@ -282,6 +378,7 @@ export const App: React.FC = () => {
       type: TransactionType;
       status: TransactionStatus;
       amount: number;
+      totalPurchaseAmount?: number | null;
       description: string;
       categoryId: string;
       date: string;
@@ -309,11 +406,30 @@ export const App: React.FC = () => {
         ? `rec-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
         : txData.recurringId || null;
 
+    const isInstallmentSeries = Boolean(txData.installmentTotal && txData.installmentTotal > 1);
+    const seriesTotalPurchaseAmount = isInstallmentSeries
+      ? txData.totalPurchaseAmount && txData.totalPurchaseAmount > 0
+        ? txData.totalPurchaseAmount
+        : Number((txData.amount * (txData.installmentTotal || 1)).toFixed(2))
+      : null;
+
+    const installmentSplit =
+      isInstallmentSeries && seriesTotalPurchaseAmount
+        ? splitInstallmentAmounts(seriesTotalPurchaseAmount, txData.installmentTotal || 1)
+        : null;
+
+    const initialInstallmentAmount = installmentSplit
+      ? (txData.installmentCurrent || 1) === 1
+        ? installmentSplit.firstAmount
+        : installmentSplit.regularAmount
+      : txData.amount;
+
     const fullTx: Transaction = {
       id: txId,
       type: txData.type,
       status: txData.status,
-      amount: txData.amount,
+      amount: initialInstallmentAmount,
+      totalPurchaseAmount: seriesTotalPurchaseAmount,
       description: txData.description,
       categoryId: txData.categoryId,
       date: txData.date,
@@ -345,6 +461,12 @@ export const App: React.FC = () => {
         const startCur = recurringPlan.currentInstallment || 1;
         const total = recurringPlan.totalInstallments;
         const baseInvMonth = txData.invoiceMonth || baseMonth;
+        const split =
+          installmentSplit ||
+          splitInstallmentAmounts(
+            seriesTotalPurchaseAmount || txData.amount * total,
+            total
+          );
         for (let step = 1; startCur + step <= total; step++) {
           const instNum = startCur + step;
           const fInvoiceMonth = shiftMonth(baseInvMonth, step);
@@ -353,7 +475,8 @@ export const App: React.FC = () => {
             id: `tx-${Date.now()}-${step}-${Math.random().toString(36).slice(2, 7)}`,
             type: txData.type,
             status: 'unpaid',
-            amount: txData.amount,
+            amount: instNum === 1 ? split.firstAmount : split.regularAmount,
+            totalPurchaseAmount: seriesTotalPurchaseAmount,
             description: txData.description,
             categoryId: txData.categoryId,
             date: formatMonthDay(fMonth, dayOfMonth),
@@ -363,7 +486,7 @@ export const App: React.FC = () => {
             installmentTotal: total,
             recurringId: generatedRecId,
             cardId: txData.cardId || null,
-            invoiceMonth: fInvoiceMonth,
+            invoiceMonth: txData.cardId ? fInvoiceMonth : null,
             purchaseDate: txData.purchaseDate || txData.date,
             createdAt: new Date().toISOString(),
           });
@@ -394,6 +517,45 @@ export const App: React.FC = () => {
       }
     }
 
+    // Compute updated series entries on the client when editing a series (scope === 'future')
+    const updatedSeriesEntries: Transaction[] = [];
+    if (txData.id && scope === 'future') {
+      const originalTx = state.transactions.find((tx) => tx.id === txData.id);
+      if (originalTx) {
+        const relatedTxs = getSubsequentPendingSeriesTransactions(originalTx, state.transactions);
+        for (const relTx of relatedTxs) {
+          let nextRowDate = relTx.date;
+          if (fullTx.dueDay && relTx.date && relTx.date.length >= 7) {
+            const monthPrefix = relTx.date.slice(0, 7);
+            const [ry, rm] = monthPrefix.split('-').map(Number);
+            const maxDay = new Date(ry, rm, 0).getDate() || 28;
+            const clampedDay = Math.min(fullTx.dueDay, maxDay);
+            nextRowDate = `${monthPrefix}-${String(clampedDay).padStart(2, '0')}`;
+          }
+          const relInstCur = relTx.installmentCurrent || 1;
+          const relAmount = installmentSplit
+            ? relInstCur === 1
+              ? installmentSplit.firstAmount
+              : installmentSplit.regularAmount
+            : fullTx.amount;
+          updatedSeriesEntries.push({
+            ...relTx,
+            type: fullTx.type,
+            amount: relAmount,
+            totalPurchaseAmount: seriesTotalPurchaseAmount,
+            description: fullTx.description,
+            categoryId: fullTx.categoryId,
+            date: nextRowDate,
+            notes: fullTx.notes,
+            dueDay: fullTx.dueDay ?? relTx.dueDay,
+            installmentTotal: fullTx.installmentTotal ?? relTx.installmentTotal,
+            cardId: fullTx.cardId !== undefined ? fullTx.cardId : relTx.cardId,
+            purchaseDate: fullTx.purchaseDate || relTx.purchaseDate,
+          });
+        }
+      }
+    }
+
     try {
       let updatedState: AppState | null = null;
 
@@ -401,7 +563,7 @@ export const App: React.FC = () => {
         const rawRec = {
           id: generatedRecId,
           type: txData.type,
-          amount: txData.amount,
+          amount: fullTx.amount,
           description: txData.description,
           categoryId: txData.categoryId,
           dayOfMonth: recurringPlan.dayOfMonth,
@@ -435,6 +597,7 @@ export const App: React.FC = () => {
         ...fullTx,
         scope,
         futureEntries: futureEntries.length > 0 ? futureEntries : undefined,
+        updatedSeriesEntries: updatedSeriesEntries.length > 0 ? updatedSeriesEntries : undefined,
       };
 
       if (masterKey && familyId) {
@@ -445,10 +608,17 @@ export const App: React.FC = () => {
             futureEntries.map((f) => encryptTransaction(f, masterKey, familyId))
           );
         }
+        let encUpdatedSeries: any = undefined;
+        if (updatedSeriesEntries.length > 0) {
+          encUpdatedSeries = await Promise.all(
+            updatedSeriesEntries.map((u) => encryptTransaction(u, masterKey, familyId))
+          );
+        }
         txPayload = {
           ...encFullTx,
           scope,
           futureEntries: encFuture,
+          updatedSeriesEntries: encUpdatedSeries,
         };
       }
 
@@ -472,40 +642,12 @@ export const App: React.FC = () => {
       setIsOnlineWithServer(false);
       let nextTransactions: Transaction[];
       if (txData.id) {
-        const originalTx = state.transactions.find((tx) => tx.id === txData.id);
-        const subsequentIds =
-          scope === 'future' && originalTx
-            ? new Set(
-                getSubsequentPendingSeriesTransactions(originalTx, state.transactions).map(
-                  (t) => t.id
-                )
-              )
-            : new Set<string>();
-
+        const updatedMap = new Map<string, Transaction>(
+          updatedSeriesEntries.map((u) => [u.id, u])
+        );
         nextTransactions = state.transactions.map((tx) => {
           if (tx.id === txData.id) return fullTx;
-          if (subsequentIds.has(tx.id)) {
-            let nextRowDate = tx.date;
-            if (fullTx.dueDay && tx.date && tx.date.length >= 7) {
-              const monthPrefix = tx.date.slice(0, 7);
-              const [ry, rm] = monthPrefix.split('-').map(Number);
-              const maxDay = new Date(ry, rm, 0).getDate() || 28;
-              const clampedDay = Math.min(fullTx.dueDay, maxDay);
-              nextRowDate = `${monthPrefix}-${String(clampedDay).padStart(2, '0')}`;
-            }
-            return {
-              ...tx,
-              type: fullTx.type,
-              amount: fullTx.amount,
-              description: fullTx.description,
-              categoryId: fullTx.categoryId,
-              date: nextRowDate,
-              notes: fullTx.notes,
-              dueDay: fullTx.dueDay ?? tx.dueDay,
-              installmentTotal: fullTx.installmentTotal ?? tx.installmentTotal,
-              cardId: fullTx.cardId !== undefined ? fullTx.cardId : tx.cardId,
-            };
-          }
+          if (updatedMap.has(tx.id)) return updatedMap.get(tx.id)!;
           return tx;
         });
       } else {
@@ -518,13 +660,20 @@ export const App: React.FC = () => {
       };
       saveStateToCache(nextState);
 
+      const updatedIds = new Set<string>([
+        fullTx.id,
+        ...futureEntries.map((f) => f.id),
+        ...updatedSeriesEntries.map((u) => u.id),
+      ]);
       const nextPending = [
-        ...pendingOfflineTx.filter((p) => p.id !== fullTx.id),
+        ...pendingOfflineTx.filter((p) => !updatedIds.has(p.id)),
         fullTx,
         ...futureEntries,
+        ...updatedSeriesEntries,
       ];
       setPendingOfflineTx(nextPending);
-      localStorage.setItem(STORAGE_PENDING_TX_KEY, JSON.stringify(nextPending));
+      const pendingKey = familyId ? `${STORAGE_PENDING_TX_KEY}_${familyId}` : STORAGE_PENDING_TX_KEY;
+      localStorage.setItem(pendingKey, JSON.stringify(nextPending));
     }
   };
 
@@ -558,29 +707,43 @@ export const App: React.FC = () => {
   };
 
   const executeDeleteTransaction = async (id: string, scope: SeriesScope = 'single') => {
+    const originalTx = state.transactions.find((tx) => tx.id === id);
+    const idsToDelete = new Set<string>([id]);
+    if (scope === 'future' && originalTx) {
+      for (const subTx of getSubsequentPendingSeriesTransactions(originalTx, state.transactions)) {
+        idsToDelete.add(subTx.id);
+      }
+    }
+
+    // Optimistic local state + pending offline queue cleanup
+    const optimisticState: AppState = {
+      ...state,
+      transactions: state.transactions.filter((tx) => !idsToDelete.has(tx.id)),
+    };
+    saveStateToCache(optimisticState);
+
+    if (pendingOfflineTx.some((p) => idsToDelete.has(p.id))) {
+      const nextPending = pendingOfflineTx.filter((p) => !idsToDelete.has(p.id));
+      setPendingOfflineTx(nextPending);
+      const pendingKey = familyId ? `${STORAGE_PENDING_TX_KEY}_${familyId}` : STORAGE_PENDING_TX_KEY;
+      try {
+        localStorage.setItem(pendingKey, JSON.stringify(nextPending));
+      } catch {}
+    }
+
     try {
-      const res = await apiFetch(`/api/transactions/${id}?scope=${scope}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/transactions/${id}?scope=${scope}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope, deleteIds: Array.from(idsToDelete) }),
+      });
       if (!res.ok) throw new Error('Failed');
       const rawData: AppState = await res.json();
       const data =
         masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
     } catch {
-      const originalTx = state.transactions.find((tx) => tx.id === id);
-      const idsToDelete = new Set<string>([id]);
-      if (scope === 'future' && originalTx) {
-        for (const subTx of getSubsequentPendingSeriesTransactions(
-          originalTx,
-          state.transactions
-        )) {
-          idsToDelete.add(subTx.id);
-        }
-      }
-      const nextState: AppState = {
-        ...state,
-        transactions: state.transactions.filter((tx) => !idsToDelete.has(tx.id)),
-      };
-      saveStateToCache(nextState);
+      // Optimistic deletion already applied to local cache above
     }
   };
 
@@ -653,8 +816,7 @@ export const App: React.FC = () => {
   };
 
   const handleCycleTheme = () => {
-    const order: AppTheme[] = ['light', 'dark', 'tokyo-night', 'oled'];
-    const next = order[(order.indexOf(theme) + 1) % order.length];
+    const next: AppTheme = theme === 'oled' ? 'light' : 'oled';
     handleUpdateSettings({ theme: next });
   };
 
@@ -1104,62 +1266,118 @@ export const App: React.FC = () => {
   };
 
   const handlePayCardInvoice = async (cardId: string, invoiceMonth: string) => {
+    const card = (state.creditCards || []).find((c) => c.id === cardId);
+    if (!card) return;
+    const cardTxs = state.transactions.filter((tx) => {
+      if (tx.cardId !== cardId) return false;
+      const invMonth =
+        tx.invoiceMonth ||
+        computeCardFirstInvoiceMonth(tx.purchaseDate || tx.date, card.closingDay).invoiceMonth;
+      return invMonth === invoiceMonth;
+    });
+    const total = Number(cardTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0).toFixed(2));
+    if (total <= 0) return;
+
+    const [invYear, invMonth] = invoiceMonth.split('-').map(Number);
+    const nextMonthDate = new Date(invYear, invMonth, 0);
+    const dueDayClamped = Math.min(card.dueDay, nextMonthDate.getDate() || 28);
+    const dueDate = `${invoiceMonth}-${String(dueDayClamped).padStart(2, '0')}`;
+    const settlementKey = `${cardId}__${invoiceMonth}`;
+    const settlementTx: Transaction = {
+      id: `tx-fatura-${cardId}-${invoiceMonth}`,
+      type: 'expense',
+      status: 'paid',
+      amount: total,
+      description: `Fatura Cartão ${card.name} - ${formatMonthLabel(invoiceMonth, language)}`,
+      categoryId: 'exp-other',
+      date: dueDate,
+      notes: `Pagamento de fatura consolidada (${cardTxs.length} compras)`,
+      dueDay: card.dueDay,
+      settledInvoiceKey: settlementKey,
+      createdAt: new Date().toISOString(),
+    };
+
+    const cardTxIds = new Set(cardTxs.map((t) => t.id));
+    const optimisticTxs = [
+      settlementTx,
+      ...state.transactions
+        .filter((tx) => tx.id !== settlementTx.id && tx.settledInvoiceKey !== settlementKey)
+        .map((tx) => (cardTxIds.has(tx.id) ? { ...tx, status: 'paid' as TransactionStatus } : tx)),
+    ];
+    saveStateToCache({
+      ...state,
+      transactions: optimisticTxs,
+    });
+
     try {
-      const res = await apiFetch(`/api/cards/${cardId}/pay-invoice`, {
+      const txPayload =
+        masterKey && familyId
+          ? await encryptTransaction(settlementTx, masterKey, familyId)
+          : settlementTx;
+      await apiFetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoiceMonth }),
+        body: JSON.stringify(txPayload),
       });
-      if (!res.ok) throw new Error('Failed');
-      const rawData: AppState = await res.json();
-      const data =
-        masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
-      saveStateToCache(data);
+      for (const cTx of cardTxs) {
+        if (cTx.status !== 'paid') {
+          await apiFetch(`/api/transactions/${cTx.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'paid' }),
+          });
+        }
+      }
+      const res = await apiFetch('/api/state');
+      if (res.ok) {
+        const rawData: AppState = await res.json();
+        const data =
+          masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
+        saveStateToCache(data);
+      }
     } catch {
-      const card = (state.creditCards || []).find((c) => c.id === cardId);
-      if (!card) return;
-      const cardTxs = state.transactions.filter((tx) => {
-        if (tx.cardId !== cardId) return false;
-        const invMonth =
-          tx.invoiceMonth ||
-          computeCardFirstInvoiceMonth(tx.purchaseDate || tx.date, card.closingDay).invoiceMonth;
-        return invMonth === invoiceMonth;
-      });
-      const total = cardTxs.reduce((sum, tx) => sum + tx.amount, 0);
-      if (total <= 0) return;
-      const [invYear, invMonth] = invoiceMonth.split('-').map(Number);
-      const nextMonthDate = new Date(invYear, invMonth, 0);
-      const dueDayClamped = Math.min(card.dueDay, nextMonthDate.getDate() || 28);
-      const dueDate = `${invoiceMonth}-${String(dueDayClamped).padStart(2, '0')}`;
-      const settlementKey = `${cardId}__${invoiceMonth}`;
-      const newTx: Transaction = {
-        id: `tx-fatura-${cardId}-${invoiceMonth}`,
-        type: 'expense',
-        status: 'unpaid',
-        amount: total,
-        description: `Fatura Cartão ${card.name} - ${formatMonthLabel(invoiceMonth, language)}`,
-        categoryId: 'exp-others',
-        date: dueDate,
-        notes: `Pagamento de fatura consolidada (${cardTxs.length} compras)`,
-        dueDay: card.dueDay,
-        settledInvoiceKey: settlementKey,
-        createdAt: new Date().toISOString(),
-      };
-      saveStateToCache({
-        ...state,
-        transactions: [newTx, ...state.transactions],
-      });
+      // Optimistic state is already cached above
     }
   };
 
-  const themeBadgeLabel =
-    theme === 'oled'
-      ? t.themeOled
-      : theme === 'tokyo-night'
-      ? t.themeTokyo
-      : theme === 'dark'
-      ? t.themeDark
-      : t.themeLight;
+  const themeBadgeLabel = theme === 'light' ? t.themeLight : t.themeOled;
+  void themeBadgeLabel;
+
+  const buildCurrentMonthExportOptions = useCallback(
+    () => ({
+      periodMode: 'monthly' as const,
+      year: selectedMonth.slice(0, 4),
+      month: selectedMonth.slice(5, 7),
+      typeFilter: 'all' as const,
+      familyName: state.settings.familyName,
+      currency: state.settings.currency,
+      language,
+      initialBalance: state.settings.initialBalance,
+      categories: state.categories,
+      transactions: state.transactions,
+      fuelLogs: state.fuelLogs || [],
+    }),
+    [
+      selectedMonth,
+      state.settings.familyName,
+      state.settings.currency,
+      state.settings.initialBalance,
+      state.categories,
+      state.transactions,
+      state.fuelLogs,
+      language,
+    ]
+  );
+
+  const handleExportMonthlyPDF = () => {
+    setFabMenuOpen(false);
+    exportFilteredHistoryToPDF(buildCurrentMonthExportOptions());
+  };
+
+  const handleExportMonthlySpreadsheet = () => {
+    setFabMenuOpen(false);
+    exportFilteredHistoryToCSV(buildCurrentMonthExportOptions());
+  };
 
   if (!familyId || !masterKey) {
     return (
@@ -1173,53 +1391,56 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="app-shell min-h-screen flex flex-col bg-slate-50 text-slate-900 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] transition-colors">
-      {/* TOP NAVIGATION HEADER */}
+    <div className="app-shell min-h-[100dvh] w-full flex flex-col bg-slate-50 text-slate-900 pb-28 transition-colors">
+      {/* TOP NAVIGATION HEADER (Mobile-First Centered Container) */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 print:hidden pt-[env(safe-area-inset-top,0px)]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3">
+        <div className="max-w-lg w-full mx-auto px-4 h-16 flex items-center justify-between gap-2">
           {/* Brand */}
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-slate-900 text-emerald-400 flex items-center justify-center shadow-sm shrink-0">
-              <TrendingUp size={20} strokeWidth={2.5} />
-            </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            className="flex items-center gap-2.5 shrink-0 cursor-pointer select-none text-left focus:outline-none group py-1 -my-1 min-h-[44px]"
+            title="Prumo - Início"
+          >
+            <PrumoLogoIcon className="h-8 w-auto shrink-0 select-none drop-shadow-xs" />
             <div className="shrink-0">
-              <span className="text-base sm:text-lg font-black tracking-tight text-slate-900 block leading-none whitespace-nowrap">
-                {state.settings.familyName}
-              </span>
-              <span className="text-[11px] font-medium text-slate-400 hidden sm:block whitespace-nowrap mt-1">
-                {t.subtitle}
+              <span className="text-base font-black tracking-[0.14em] uppercase text-slate-900 group-hover:text-[#D0B595] transition-colors block leading-none whitespace-nowrap">
+                {state.settings.familyName &&
+                state.settings.familyName.toUpperCase() !== 'FAMILY PLAN' &&
+                state.settings.familyName.toUpperCase() !== 'FAMILY FINANCE'
+                  ? state.settings.familyName
+                  : 'PRUMO'}
               </span>
             </div>
-          </div>
+          </button>
 
           {/* Month Selector & Quick Controls */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Compact Month Switcher */}
-            <div className="flex items-center bg-slate-100 rounded-xl p-0.5 sm:p-1 border border-slate-200/50">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Compact Month Switcher with generous touch targets */}
+            <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200/50 min-h-[44px]">
               <button
                 type="button"
                 onClick={() => setSelectedMonth((m) => shiftMonth(m, -1))}
-                className="p-1 sm:p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white active:scale-95 transition-all"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white active:scale-95 transition-all"
                 title={t.prevMonth}
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={16} />
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedMonth(getCurrentMonthStr())}
-                className="px-1.5 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold text-slate-800 hover:text-indigo-500 active:scale-95 transition-all min-w-[76px] sm:min-w-[115px] text-center capitalize"
+                className="px-2 py-1 text-xs font-bold text-slate-800 hover:text-[#D0B595] active:scale-95 transition-all min-w-[78px] text-center capitalize"
                 title={t.jumpCurrentMonth}
               >
-                <span className="inline sm:hidden">{formatShortMonthLabel(selectedMonth, language)}</span>
-                <span className="hidden sm:inline">{formatMonthLabel(selectedMonth, language)}</span>
+                <span>{formatShortMonthLabel(selectedMonth, language)}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedMonth((m) => shiftMonth(m, 1))}
-                className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white active:scale-95 transition-all"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white active:scale-95 transition-all"
                 title={t.nextMonth}
               >
-                <ChevronRight size={14} />
+                <ChevronRight size={16} />
               </button>
             </div>
 
@@ -1230,17 +1451,17 @@ export const App: React.FC = () => {
                 setSyncModalTab('settings');
                 setSyncModalOpen(true);
               }}
-              className="p-2 sm:p-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 active:opacity-75 transition-all shadow-xs shrink-0"
+              className="w-11 h-11 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 active:opacity-75 transition-all shadow-xs shrink-0"
               title={t.preferencesTooltip}
             >
-              <Settings size={17} />
+              <Settings size={18} />
             </button>
           </div>
         </div>
       </header>
 
-      {/* MAIN CONTENT CONTAINER */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+      {/* MAIN CONTENT CONTAINER (100% Mobile-First Centered Column) */}
+      <main className="flex-1 max-w-lg w-full mx-auto px-4 pt-4 pb-28">
         {activeTab === 'dashboard' && (
           <ErrorBoundary fallbackTitle="Erro ao carregar o Painel Principal">
             <DashboardView
@@ -1292,6 +1513,7 @@ export const App: React.FC = () => {
               onOpenAddExpense={(cardId) => handleOpenAddModal('expense', cardId)}
               onEditTransaction={handleOpenEditModal}
               onDeleteTransaction={(tx) => handleDeleteTransaction(tx.id)}
+              onActiveCardChange={setActiveCardId}
             />
           </ErrorBoundary>
         )}
@@ -1307,6 +1529,7 @@ export const App: React.FC = () => {
             onSaveFuelLog={handleSaveFuelLog}
             onDeleteFuelLog={handleDeleteFuelLog}
             onUpdateTankCapacity={(cap) => handleUpdateSettings({ tankCapacity: cap })}
+            openRefuelTrigger={openRefuelTrigger}
           />
         )}
 
@@ -1319,6 +1542,7 @@ export const App: React.FC = () => {
             theme={theme}
             initialBalance={state.settings.initialBalance}
             categories={state.categories}
+            creditCards={state.creditCards || []}
             transactions={state.transactions}
             recurringTemplates={state.recurringTemplates}
             onSelectMonth={setSelectedMonth}
@@ -1326,62 +1550,190 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* STICKY BOTTOM NAVIGATION BAR */}
-      <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] print:hidden">
-        <div className="grid grid-cols-5 items-center gap-1 max-w-lg mx-auto">
+      {/* CONTEXTUAL FAB SPEED-DIAL OVERLAY (Home & Reports Tabs) */}
+      <div
+        aria-hidden={!(fabMenuOpen && (activeTab === 'dashboard' || activeTab === 'reports'))}
+        className={`fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] transition-opacity print:hidden ${
+          fabMenuOpen && (activeTab === 'dashboard' || activeTab === 'reports')
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => setFabMenuOpen(false)}
+      />
+
+      {/* STICKY BOTTOM NAVIGATION BAR WITH CENTRAL CONTEXTUAL FAB */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] print:hidden">
+        {/* Expanding Speed Dial Options when on Início */}
+        <div
+          className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 flex items-center gap-3 z-50 transition-all duration-150 ${
+            fabMenuOpen && activeTab === 'dashboard'
+              ? 'opacity-100 translate-y-0 pointer-events-auto'
+              : 'opacity-0 translate-y-2 pointer-events-none'
+          }`}
+        >
           <button
             type="button"
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
+            onClick={() => {
+              setFabMenuOpen(false);
+              handleOpenAddModal('income');
+            }}
+            className="fab-option-btn flex items-center gap-2 pl-2.5 pr-4 py-2.5 rounded-full bg-slate-950 text-white border border-emerald-500/40 shadow-xl shadow-black/50 active:scale-95 transition-all whitespace-nowrap"
+          >
+            <span className="w-7 h-7 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-xs">
+              <Plus size={16} strokeWidth={3} />
+            </span>
+            <span className="text-xs font-extrabold tracking-tight text-emerald-400">
+              {language === 'en' ? 'Income' : 'Entrada'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFabMenuOpen(false);
+              handleOpenAddModal('expense');
+            }}
+            className="fab-option-btn flex items-center gap-2 pl-2.5 pr-4 py-2.5 rounded-full bg-slate-950 text-white border border-rose-500/40 shadow-xl shadow-black/50 active:scale-95 transition-all whitespace-nowrap"
+          >
+            <span className="w-7 h-7 rounded-full bg-rose-500 text-white flex items-center justify-center font-black shadow-xs">
+              <Minus size={16} strokeWidth={3} />
+            </span>
+            <span className="text-xs font-extrabold tracking-tight text-rose-400">
+              {language === 'en' ? 'Expense' : 'Despesa'}
+            </span>
+          </button>
+        </div>
+
+        {/* Expanding Speed Dial Options when on Relatórios */}
+        <div
+          className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 flex items-center gap-2.5 z-50 transition-all duration-150 ${
+            fabMenuOpen && activeTab === 'reports'
+              ? 'opacity-100 translate-y-0 pointer-events-auto'
+              : 'opacity-0 translate-y-2 pointer-events-none'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={handleExportMonthlyPDF}
+            className="fab-option-btn flex items-center gap-2 pl-2.5 pr-4 py-2.5 rounded-full bg-slate-950 text-white border border-[#D0B595]/40 shadow-xl shadow-black/50 active:scale-95 transition-all whitespace-nowrap"
+          >
+            <span className="w-7 h-7 rounded-full bg-[#6E5440] text-[#FFFDF5] flex items-center justify-center font-black shadow-xs">
+              <FileText size={15} strokeWidth={2.5} />
+            </span>
+            <span className="text-xs font-extrabold tracking-tight text-[#D0B595]">
+              {language === 'en' ? 'Monthly PDF Report' : 'Relatório PDF do Mês'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportMonthlySpreadsheet}
+            className="fab-option-btn flex items-center gap-2 pl-2.5 pr-4 py-2.5 rounded-full bg-slate-950 text-white border border-emerald-500/40 shadow-xl shadow-black/50 active:scale-95 transition-all whitespace-nowrap"
+          >
+            <span className="w-7 h-7 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-xs">
+              <FileSpreadsheet size={15} strokeWidth={2.5} />
+            </span>
+            <span className="text-xs font-extrabold tracking-tight text-emerald-400">
+              {language === 'en' ? 'Export Spreadsheet' : 'Exportar Planilha'}
+            </span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-5 items-center gap-1 max-w-lg mx-auto">
+          {/* 1. Início */}
+          <button
+            type="button"
+            onClick={() => {
+              setFabMenuOpen(false);
+              setActiveTab('dashboard');
+            }}
+            className={`min-h-[48px] flex flex-col items-center justify-center py-2 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'dashboard' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
-            <LayoutDashboard size={19} />
-            <span className="mt-0.5">{t.navHomeMobile}</span>
+            <LayoutDashboard size={20} />
+            <span className="mt-0.5 truncate">{t.navHomeMobile}</span>
           </button>
 
+          {/* 2. Cartões */}
           <button
             type="button"
-            onClick={() => setActiveTab('transactions')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
-              activeTab === 'transactions' ? 'text-slate-900 font-bold' : 'text-slate-400'
-            }`}
-          >
-            <ListOrdered size={19} />
-            <span className="mt-0.5">{t.navHistoryMobile}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('cards')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
+            onClick={() => {
+              setFabMenuOpen(false);
+              setActiveTab('cards');
+            }}
+            className={`min-h-[48px] flex flex-col items-center justify-center py-2 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'cards' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
-            <CreditCardIcon size={19} />
-            <span className="mt-0.5">{t.navCardsMobile}</span>
+            <CreditCardIcon size={20} />
+            <span className="mt-0.5 truncate">{t.navCardsMobile}</span>
           </button>
 
+          {/* Center: Elevated Contextual Primary Action Button (FAB) */}
+          <div className="flex flex-col items-center justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                if (activeTab === 'dashboard' || activeTab === 'reports') {
+                  setFabMenuOpen((prev) => !prev);
+                } else if (activeTab === 'cards') {
+                  setFabMenuOpen(false);
+                  const targetCardId = activeCardId || state.creditCards?.[0]?.id || undefined;
+                  handleOpenAddModal('expense', targetCardId);
+                } else if (activeTab === 'fuel') {
+                  setFabMenuOpen(false);
+                  setOpenRefuelTrigger((n) => n + 1);
+                } else {
+                  setFabMenuOpen(false);
+                  handleOpenAddModal('expense');
+                }
+              }}
+              aria-label="Primary Action"
+              className="fab-primary-btn -mt-5 w-[52px] h-[52px] rounded-full bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/35 border-4 border-white flex items-center justify-center active:scale-95 transition-all select-none"
+            >
+              <Plus
+                size={26}
+                strokeWidth={2.75}
+                className={`transition-transform duration-200 ${
+                  fabMenuOpen && (activeTab === 'dashboard' || activeTab === 'reports')
+                    ? 'rotate-45'
+                    : 'rotate-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* 3. Combustível */}
           <button
             type="button"
-            onClick={() => setActiveTab('fuel')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
+            onClick={() => {
+              setFabMenuOpen(false);
+              setActiveTab('fuel');
+            }}
+            className={`min-h-[48px] flex flex-col items-center justify-center py-2 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'fuel' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
-            <Fuel size={19} />
-            <span className="mt-0.5">{t.navFuelMobile}</span>
+            <Fuel size={20} />
+            <span className="mt-0.5 truncate">{t.navFuelMobile}</span>
           </button>
 
+          {/* 4. Relatórios */}
           <button
             type="button"
-            onClick={() => setActiveTab('reports')}
-            className={`flex flex-col items-center py-1.5 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
+            onClick={() => {
+              setFabMenuOpen(false);
+              setActiveTab('reports');
+            }}
+            className={`min-h-[48px] flex flex-col items-center justify-center py-2 rounded-xl text-[11px] font-semibold active:scale-95 active:opacity-75 transition-all select-none ${
               activeTab === 'reports' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
-            <FileBarChart2 size={19} />
-            <span className="mt-0.5">{t.navReportsMobile}</span>
+            <PieChartIcon size={20} />
+            <span className="mt-0.5 truncate">
+              {language === 'en' ? 'Reports' : 'Relatórios'}
+            </span>
           </button>
         </div>
       </div>

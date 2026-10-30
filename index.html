@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>FAMILY PLAN</title>
+    <title>Prumo</title>
     
     <!-- Primary Theme & Background (OLED Pure Black #000000) -->
     <meta name="theme-color" content="#000000" />
@@ -11,24 +11,24 @@
     <meta name="color-scheme" content="dark" />
 
     <!-- Standard PWA Icons -->
-    <link rel="icon" type="image/svg+xml" href="%BASE_URL%icon.svg" />
-    <link rel="icon" type="image/png" sizes="192x192" href="%BASE_URL%icons/icon-192x192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="%BASE_URL%icons/icon-512x512.png" />
-    <link rel="shortcut icon" href="%BASE_URL%favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" sizes="192x192" href="/icon-192x192.svg" />
+    <link rel="icon" type="image/svg+xml" sizes="512x512" href="/icon-512x512.svg" />
+    <link rel="shortcut icon" href="/favicon.svg" />
 
     <!-- iOS / Safari Native Fullscreen Standalone App Configuration -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="FamilyPlan" />
-    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="%BASE_URL%apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="%BASE_URL%icons/icon-192x192.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="%BASE_URL%icons/icon-512x512.png" />
-    <link rel="mask-icon" href="%BASE_URL%masked-icon.svg" color="#10b981" />
+    <meta name="apple-mobile-web-app-title" content="Prumo" />
+    <link rel="apple-touch-icon" href="/icon-192x192.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-192x192.svg" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192x192.svg" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512x512.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#000000" />
 
     <!-- Android / Chrome Native App Settings -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="application-name" content="FamilyPlan" />
+    <meta name="application-name" content="Prumo" />
     <meta name="format-detection" content="telephone=no" />
 
     <!-- Pure OLED Black Splash & Root Guard to prevent white margins on iOS boot -->
@@ -56,11 +56,9 @@
               }
             }
           }
-          if (t && (t === 'dark' || t === 'tokyo-night' || t === 'oled' || t === 'light')) {
-            document.documentElement.setAttribute('data-theme', t);
-          } else {
-            document.documentElement.setAttribute('data-theme', 'oled');
-          }
+          var normalized = t === 'light' ? 'light' : 'oled';
+          document.documentElement.setAttribute('data-theme', normalized);
+          localStorage.setItem('familyplan_theme', normalized);
         } catch (e) {}
       })();
     </script>

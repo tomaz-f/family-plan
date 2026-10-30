@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ArrowUpRight,
   ArrowDownRight,
+  Eye,
+  EyeOff,
   TrendingUp,
   TrendingDown,
   Plus,
@@ -44,6 +46,7 @@ import {
 } from '../utils/format';
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
+import { TransactionsView } from './TransactionsView';
 
 interface DashboardViewProps {
   selectedMonth: string;
@@ -81,51 +84,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const t = TRANSLATIONS[language];
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
-  const isDark = theme === 'dark' || theme === 'tokyo-night' || theme === 'oled';
-  const gridStroke =
-    theme === 'oled'
-      ? '#1c1e24'
-      : theme === 'tokyo-night'
-      ? '#292e42'
-      : theme === 'dark'
-      ? '#334155'
-      : '#f1f5f9';
-  const axisTickColor =
-    theme === 'oled'
-      ? '#8E929B'
-      : theme === 'tokyo-night'
-      ? '#787c99'
-      : theme === 'dark'
-      ? '#94a3b8'
-      : '#64748b';
+  const isDark = theme === 'oled';
+  const gridStroke = theme === 'oled' ? '#21262D' : '#E2E8F0';
+  const axisTickColor = theme === 'oled' ? '#94A3B8' : '#64748B';
   const tooltipStyle = useMemo(
     () => ({
       borderRadius: '12px',
-      border: `1px solid ${
-        theme === 'oled'
-          ? '#212328'
-          : theme === 'tokyo-night'
-          ? '#3b4261'
-          : theme === 'dark'
-          ? '#334155'
-          : '#e2e8f0'
-      }`,
-      backgroundColor:
-        theme === 'oled'
-          ? '#141518'
-          : theme === 'tokyo-night'
-          ? '#1f2335'
-          : theme === 'dark'
-          ? '#0f172a'
-          : '#ffffff',
-      color:
-        theme === 'oled'
-          ? '#F4F5F7'
-          : theme === 'tokyo-night'
-          ? '#c0caf5'
-          : theme === 'dark'
-          ? '#f8fafc'
-          : '#0f172a',
+      border: `1px solid ${theme === 'oled' ? '#21262D' : '#E2E8F0'}`,
+      backgroundColor: theme === 'oled' ? '#0D1117' : '#FFFFFF',
+      color: theme === 'oled' ? '#F8FAFC' : '#0F172A',
       fontSize: '12px',
     }),
     [theme]
@@ -419,516 +386,190 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return result;
   }, [selectedMonth, monthTransactions]);
 
-  return (
-    <div className="space-y-6">
-      {/* HERO BANK ACCOUNT BALANCE CARD */}
-      <div className="hero-card relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 sm:p-7 shadow-xl border border-slate-700/60">
-        <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
-        <div className="absolute -left-12 -bottom-12 w-56 h-56 rounded-full bg-sky-500/10 blur-2xl pointer-events-none" />
+  // Retain references to preserved analytics hooks & components for upcoming screens
+  void {
+    isDark,
+    gridStroke,
+    axisTickColor,
+    tooltipStyle,
+    allTimeIncome,
+    allTimeExpense,
+    expenseCategoryBreakdown,
+    installmentCommitment,
+    openInvoicesTotal,
+    sixMonthTrend,
+    dailyTrendData,
+    onNavigateTab,
+    TrendingUp,
+    TrendingDown,
+    Plus,
+    Minus,
+    Pencil,
+    Trash2,
+    ChevronRight,
+    PieChartIcon,
+    BarChart3,
+    Activity,
+    ThumbsUp,
+    ThumbsDown,
+    Clock,
+    Layers,
+    CreditCardIcon,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+    RechartsTooltip,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    AreaChart,
+    Area,
+    Legend,
+    formatMonthLabel,
+    formatShortDate,
+    CategoryIcon,
+  };
 
-        <div className="relative flex flex-col md:flex-row items-center justify-between gap-5">
-          {/* Spacer to counterbalance action buttons on desktop and keep balance dead-centered */}
-          <div className="hidden md:block w-64 shrink-0" aria-hidden="true" />
+  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('prumo_hide_balance') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
-          {/* Centered Balance Display */}
-          <div className="text-center flex-1">
-            <h1
-              className={`text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight ${
-                (currentBankBalance ?? 0) < 0 ? 'text-rose-400' : 'text-white'
-              }`}
-            >
-              {formatCurrency(currentBankBalance ?? 0, currency)}
-            </h1>
-          </div>
+  const toggleBalancePrivacy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsBalanceHidden((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('prumo_hide_balance', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
-          {/* Primary Action Buttons */}
-          <div className="flex flex-wrap sm:flex-nowrap items-center justify-center md:justify-end gap-3 w-full md:w-64 shrink-0">
-            <button
-              type="button"
-              onClick={() => onOpenAddModal('income')}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-950/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <Plus size={18} strokeWidth={2.75} />
-              {t.addInputBtn}
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenAddModal('expense')}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-sm shadow-lg shadow-rose-950/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <Minus size={18} strokeWidth={2.75} />
-              {t.addExpenseBtn}
-            </button>
-          </div>
-        </div>
-      </div>
+  // Main Balance Card Element (Rendered between Search and Transactions List)
+  const balanceCardElement = (
+    <div className="oled-main-card rounded-2xl bg-[#0D1117] text-white px-4 py-4 sm:px-6 sm:py-5 border border-[#21262D]">
+      {/* Centered Main Balance with Proportional Privacy Toggle */}
+      <div className="flex items-center justify-center gap-2.5 py-0.5">
+        <h1
+          role={onOpenBalanceModal ? 'button' : undefined}
+          tabIndex={onOpenBalanceModal ? 0 : undefined}
+          onClick={onOpenBalanceModal}
+          onKeyDown={(e) => {
+            if (onOpenBalanceModal && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault();
+              onOpenBalanceModal();
+            }
+          }}
+          className={`text-[32px] sm:text-[38px] font-black tracking-tight leading-none text-center truncate ${
+            onOpenBalanceModal ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
+          } ${(currentBankBalance ?? 0) < 0 ? 'text-rose-400' : 'text-white'}`}
+          title={
+            onOpenBalanceModal
+              ? language === 'pt-BR'
+                ? 'Ajustar saldo inicial'
+                : 'Adjust initial balance'
+              : undefined
+          }
+        >
+          {isBalanceHidden ? '••••••' : formatCurrency(currentBankBalance ?? 0, currency)}
+        </h1>
 
-      {/* PRIMARY KPI CARDS: ENTRADAS & DESPESAS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Monthly Inputs */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              {t.inputsLabel}
-            </span>
-            <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
-              <ArrowUpRight size={13} strokeWidth={2.5} />
-            </div>
-          </div>
-          <div className="text-center my-auto py-0.5">
-            <p className="text-2xl font-black text-emerald-500 tracking-tight">
-              +{formatCurrency(monthStats.income, currency)}
-            </p>
-            <div className="mt-2.5 flex items-center justify-center">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                <span className="opacity-75 font-medium">{t.pendingIncomeExpected}:</span>
-                <span className="font-extrabold tracking-tight">
-                  +{formatCurrency(monthStats.pendingIncome, currency)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Monthly Expenses */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              {t.expensesLabel}
-            </span>
-            <div className="w-5 h-5 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
-              <ArrowDownRight size={13} strokeWidth={2.5} />
-            </div>
-          </div>
-          <div className="text-center my-auto py-0.5">
-            <p className="text-2xl font-black text-rose-500 tracking-tight">
-              -{formatCurrency(monthStats.expense, currency)}
-            </p>
-            <div className="mt-2.5 flex items-center justify-center">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                <span className="opacity-75 font-medium">{t.pendingExpenseScheduled}:</span>
-                <span className="font-extrabold tracking-tight">
-                  -{formatCurrency(monthStats.pendingExpense, currency)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CHARTS ROW 1: CATEGORY BREAKDOWN + 6-MONTH CASH FLOW */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Category Breakdown */}
-        <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <PieChartIcon size={18} className="text-indigo-500" />
-                {t.expensesByCategory}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {t.breakdownForMonth(formatMonthLabel(selectedMonth, language))}
-              </p>
-            </div>
-            <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
-              {t.totalLabel}: {formatCurrency(monthStats.expense, currency)}
-            </span>
-          </div>
-
-          {expenseCategoryBreakdown.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-sm font-semibold text-slate-600">
-                {t.noExpensesYet(formatMonthLabel(selectedMonth, language))}
-              </p>
-              <p className="text-xs text-slate-400 mt-1 mb-4">{t.noExpensesDesc}</p>
-              <button
-                type="button"
-                onClick={() => onOpenAddModal('expense')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
-              >
-                <Plus size={14} />
-                {t.addFirstExpense}
-              </button>
-            </div>
+        <button
+          type="button"
+          onClick={toggleBalancePrivacy}
+          className="p-1 rounded-lg text-zinc-400 hover:text-white active:scale-90 transition-all shrink-0 focus:outline-none"
+          title={
+            isBalanceHidden
+              ? language === 'pt-BR'
+                ? 'Mostrar saldo'
+                : 'Show balance'
+              : language === 'pt-BR'
+              ? 'Ocultar saldo'
+              : 'Hide balance'
+          }
+          aria-label={isBalanceHidden ? 'Show balance' : 'Hide balance'}
+        >
+          {isBalanceHidden ? (
+            <EyeOff size={22} className="stroke-[2.2]" />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-              <div className="sm:col-span-5 h-56 relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={expenseCategoryBreakdown}
-                      dataKey="amount"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={52}
-                      outerRadius={82}
-                      paddingAngle={2}
-                    >
-                      {expenseCategoryBreakdown.map((entry) => (
-                        <Cell
-                          key={entry.categoryId}
-                          fill={entry.color}
-                          stroke={theme === 'oled' ? '#141518' : isDark ? '#1e293b' : '#ffffff'}
-                          strokeWidth={2}
-                        />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip
-                      formatter={(val: number) => formatCurrency(Number(val), currency)}
-                      contentStyle={tooltipStyle}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="sm:col-span-7 space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                {expenseCategoryBreakdown.map((item) => (
-                  <div key={item.categoryId} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <CategoryIcon icon={item.icon} color={item.color} size={14} badgeSize="sm" />
-                        <span className="font-semibold text-slate-800 truncate">{item.name}</span>
-                        <span className="text-[11px] text-slate-400">({item.count})</span>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="font-bold text-slate-900">
-                          {formatCurrency(item.amount, currency)}
-                        </span>
-                        <span className="text-slate-400 ml-1.5 text-[11px]">
-                          {item.percentage.toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.max(3, item.percentage)}%`,
-                          backgroundColor: item.color,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <Eye size={22} className="stroke-[2.2]" />
           )}
-        </div>
-
-        {/* 6-Month Cash Flow Bar Chart */}
-        <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <BarChart3 size={18} className="text-emerald-500" />
-                {t.sixMonthTitle}
-              </h2>
-              <p className="text-xs text-slate-500">{t.sixMonthSub}</p>
-            </div>
-          </div>
-
-          <div className="h-60 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sixMonthTrend} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                <RechartsTooltip
-                  formatter={(value: number, name: string) => [
-                    formatCurrency(Number(value), currency),
-                    name === 'Inputs' ? t.chartInputs : t.chartExpenses,
-                  ]}
-                  contentStyle={tooltipStyle}
-                />
-                <Legend
-                  formatter={(value) => (value === 'Inputs' ? t.chartInputs : t.chartExpenses)}
-                  wrapperStyle={{ fontSize: '12px' }}
-                />
-                <Bar dataKey="Inputs" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={32} />
-                <Bar dataKey="Expenses" fill="#f43f5e" radius={[6, 6, 0, 0]} maxBarSize={32} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        </button>
       </div>
 
-      {/* SECONDARY KPI CARDS: PARCELAMENTOS & FATURAS EM ABERTO */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Comprometimento com Parcelamentos */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Parcelamentos
+      {/* Monthly Summary Section (Two Centered Columns with Enhanced Typography) */}
+      <div className="mt-3.5 pt-3 border-t border-[#21262D] flex justify-center gap-10 sm:gap-16">
+        {/* Column 1 (ENTRADAS) */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <div className="w-4.5 h-4.5 rounded-full bg-emerald-500/15 text-[#10B981] flex items-center justify-center shrink-0">
+              <ArrowUpRight size={12} strokeWidth={2.5} />
+            </div>
+            <span className="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-zinc-400 truncate">
+              {language === 'pt-BR' ? 'ENTRADAS' : 'INCOME'}
             </span>
-            <div className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
-              <Layers size={13} strokeWidth={2.5} />
-            </div>
           </div>
-          <div className="text-center my-auto py-2">
-            <p className="text-2xl font-black text-rose-500 tracking-tight">
-              {installmentCommitment > 0
-                ? `-${formatCurrency(installmentCommitment, currency)}`
-                : formatCurrency(0, currency)}
-            </p>
-          </div>
-        </div>
-
-        {/* Total de Faturas em Aberto */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              FATURAS EM ABERTO
+          <p className="text-lg sm:text-xl font-black text-[#10B981] tracking-tight truncate">
+            {isBalanceHidden ? '+••••••' : `+${formatCurrency(monthStats.income, currency)}`}
+          </p>
+          <p
+            className="text-xs sm:text-sm font-medium text-[#94A3B8] truncate mt-0.5"
+            title={`${language === 'pt-BR' ? 'A receber:' : 'To receive:'} ${formatCurrency(monthStats.pendingIncome, currency)}`}
+          >
+            {language === 'pt-BR' ? 'A receber:' : 'To receive:'}{' '}
+            <span className="text-zinc-200 font-bold ml-0.5">
+              {isBalanceHidden ? '••••' : formatCurrency(monthStats.pendingIncome, currency)}
             </span>
-            <div className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
-              <CreditCardIcon size={13} strokeWidth={2.5} />
-            </div>
-          </div>
-          <div className="text-center my-auto py-2">
-            <p className="text-2xl font-black text-amber-500 dark:text-amber-400 tracking-tight">
-              {openInvoicesTotal > 0
-                ? `-${formatCurrency(openInvoicesTotal, currency)}`
-                : formatCurrency(0, currency)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* CHARTS ROW 2: DAILY SPENDING EVOLUTION + RECENT TRANSACTIONS */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Daily Spending Trend */}
-        <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Activity size={18} className="text-rose-500" />
-                {t.dailySpendingTitle}
-              </h2>
-              <p className="text-xs text-slate-500">
-                {t.dailySpendingSub(formatMonthLabel(selectedMonth, language))}
-              </p>
-            </div>
-          </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dailyTrendData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="cumGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.28} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                <RechartsTooltip
-                  formatter={(value: number, name: string) => [
-                    formatCurrency(Number(value), currency),
-                    name === 'CumulativeExpense' ? t.cumulativeMonthSpend : t.dailySpend,
-                  ]}
-                  labelFormatter={(day) => t.dayLabel(day)}
-                  contentStyle={tooltipStyle}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="CumulativeExpense"
-                  name="CumulativeExpense"
-                  stroke="#6366f1"
-                  strokeWidth={2.5}
-                  fillOpacity={1}
-                  fill="url(#cumGrad)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="DailyExpense"
-                  name="DailyExpense"
-                  stroke="#f43f5e"
-                  strokeWidth={2}
-                  fill="#f43f5e"
-                  fillOpacity={0.12}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          </p>
         </div>
 
-        {/* Recent Transactions in Selected Month */}
-        <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  {t.recentActivity} ({formatShortMonthLabel(selectedMonth, language)})
-                </h2>
-                <p className="text-xs text-slate-500">{t.latestInputsAndExpenses}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => onNavigateTab('transactions')}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-500 hover:text-indigo-400"
-              >
-                {t.viewAllCount(monthTransactions.length)}
-                <ChevronRight size={14} />
-              </button>
+        {/* Column 2 (DESPESAS) */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <div className="w-4.5 h-4.5 rounded-full bg-rose-500/15 text-[#EF4444] flex items-center justify-center shrink-0">
+              <ArrowDownRight size={12} strokeWidth={2.5} />
             </div>
-
-            {monthTransactions.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-sm font-medium text-slate-500">
-                  {t.noEntriesInMonth(formatMonthLabel(selectedMonth, language))}
-                </p>
-                <div className="flex items-center justify-center gap-2 mt-3">
-                  <button
-                    type="button"
-                    onClick={() => onOpenAddModal('income')}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/10 text-emerald-500 text-xs font-semibold hover:bg-emerald-500/20"
-                  >
-                    <Plus size={14} strokeWidth={2.5} />
-                    {t.addInputShort}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onOpenAddModal('expense')}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 text-rose-500 text-xs font-semibold hover:bg-rose-500/20"
-                  >
-                    <Minus size={14} strokeWidth={2.5} />
-                    {t.addExpenseShort}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {monthTransactions.slice(0, 6).map((tx) => {
-                  const cat = categoryMap.get(tx.categoryId);
-                  const isUnpaid = tx.status === 'unpaid';
-                  const cardObj = tx.cardId ? creditCards.find((c) => c.id === tx.cardId) : null;
-                  return (
-                    <div
-                      key={tx.id}
-                      className="flex items-center justify-between p-2.5 sm:p-3 hover:bg-slate-50/70 active:bg-slate-100/60 transition-colors gap-2 sm:gap-3 rounded-xl select-none"
-                    >
-                      {/* Left: Category Icon with custom category color + Clean Info */}
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                        <CategoryIcon
-                          icon={cat?.icon || 'Tag'}
-                          color={cat?.color || '#64748b'}
-                          size={16}
-                          badgeSize="md"
-                        />
-
-                        {/* Text info */}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
-                            {tx.description}
-                          </p>
-
-                          {/* Subtitle / Details: Neutral typography */}
-                          <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
-                            <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
-                              {getCategoryDisplayName(cat, language)}
-                            </span>
-                            <span>•</span>
-                            <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
-
-                            {cardObj && (
-                              <>
-                                <span>•</span>
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                                  <CreditCardIcon size={9} />
-                                  <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
-                                </span>
-                              </>
-                            )}
-
-                            {tx.installmentTotal && tx.installmentTotal > 1 && (
-                              <>
-                                <span>•</span>
-                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                                  {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                                </span>
-                              </>
-                            )}
-
-                            {isUnpaid && (
-                              <>
-                                <span>•</span>
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                                  <Clock size={9} />
-                                  <span>{t.pendingBadge}</span>
-                                </span>
-                              </>
-                            )}
-
-                            {tx.dueDay && !cardObj && !tx.installmentTotal && (
-                              <>
-                                <span>•</span>
-                                <span className="text-[10px] text-slate-400">
-                                  {t.dueDayBadge(tx.dueDay)}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right: Semantic Value + Minimal Quick Action Buttons */}
-                      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                        {/* Exclusive semantic color for financial value */}
-                        <span
-                          className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
-                            tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
-                          }`}
-                        >
-                          {tx.type === 'income' ? '+' : '-'}
-                          {formatCurrency(tx.amount, currency)}
-                        </span>
-
-                        {/* Minimalist discreet action buttons */}
-                        <div className="flex items-center gap-0.5">
-                          {/* Status toggle (pago / pendente) */}
-                          <button
-                            type="button"
-                            onClick={() => onToggleTransactionStatus(tx)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
-                            title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
-                          >
-                            {isUnpaid ? (
-                              <Clock size={14} className="text-amber-500" />
-                            ) : (
-                              <ThumbsUp size={14} className="text-slate-400 hover:text-slate-600" />
-                            )}
-                          </button>
-
-                          {/* Edit */}
-                          <button
-                            type="button"
-                            onClick={() => onOpenEditModal(tx)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
-                            title={t.editTooltip}
-                          >
-                            <Pencil size={14} />
-                          </button>
-
-                          {/* Delete */}
-                          <button
-                            type="button"
-                            onClick={() => onDeleteTransaction(tx.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 active:scale-90 active:opacity-75 transition-all"
-                            title={t.deleteTooltip}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <span className="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-zinc-400 truncate">
+              {language === 'pt-BR' ? 'DESPESAS' : 'EXPENSES'}
+            </span>
           </div>
+          <p className="text-lg sm:text-xl font-black text-[#EF4444] tracking-tight truncate">
+            {isBalanceHidden ? '-••••••' : `-${formatCurrency(monthStats.expense, currency)}`}
+          </p>
+          <p
+            className="text-xs sm:text-sm font-medium text-[#94A3B8] truncate mt-0.5"
+            title={`${language === 'pt-BR' ? 'A pagar:' : 'To pay:'} ${formatCurrency(monthStats.pendingExpense, currency)}`}
+          >
+            {language === 'pt-BR' ? 'A pagar:' : 'To pay:'}{' '}
+            <span className="text-zinc-200 font-bold ml-0.5">
+              {isBalanceHidden ? '••••' : formatCurrency(monthStats.pendingExpense, currency)}
+            </span>
+          </p>
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <TransactionsView
+      selectedMonth={selectedMonth}
+      currency={currency}
+      language={language}
+      categories={categories}
+      creditCards={creditCards}
+      transactions={transactions}
+      onOpenAddModal={onOpenAddModal}
+      onOpenEditModal={onOpenEditModal}
+      onDeleteTransaction={onDeleteTransaction}
+      onToggleTransactionStatus={onToggleTransactionStatus}
+      balanceCard={balanceCardElement}
+    />
   );
 };

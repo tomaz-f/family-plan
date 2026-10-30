@@ -39,6 +39,9 @@ export default defineConfig(({ mode }) => {
           enabled: true,
         },
         includeAssets: [
+          'favicon.svg',
+          'icon-192x192.svg',
+          'icon-512x512.svg',
           'favicon.ico',
           'apple-touch-icon.png',
           'masked-icon.svg',
@@ -46,8 +49,8 @@ export default defineConfig(({ mode }) => {
           'icon.svg',
         ],
         manifest: {
-          name: 'FAMILY PLAN',
-          short_name: 'FamilyPlan',
+          name: 'Prumo',
+          short_name: 'Prumo',
           description: 'Gestão financeira familiar com foco em simplicidade e privacidade absoluta.',
           start_url: './',
           scope: './',
@@ -57,22 +60,16 @@ export default defineConfig(({ mode }) => {
           theme_color: '#000000',
           icons: [
             {
-              src: 'icons/icon-192x192.png',
+              src: 'icon-192x192.svg',
               sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any maskable',
-            },
-            {
-              src: 'icons/icon-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any maskable',
-            },
-            {
-              src: 'icon.svg',
-              sizes: 'any',
               type: 'image/svg+xml',
               purpose: 'any',
+            },
+            {
+              src: 'icon-512x512.svg',
+              sizes: '512x512',
+              type: 'image/svg+xml',
+              purpose: 'any maskable',
             },
           ],
         },

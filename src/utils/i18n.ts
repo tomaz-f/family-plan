@@ -47,9 +47,7 @@ export const TRANSLATIONS = {
     jumpCurrentMonth: 'Click to jump to current month',
     preferencesTooltip: 'Preferences, Categories & Backup',
     themeLight: 'Light',
-    themeDark: 'Dark',
-    themeTokyo: 'Tokyo Night',
-    themeOled: 'OLED (True Black)',
+    themeOled: 'OLED',
 
     // Dashboard Hero
     currentBankBalance: 'Current Bank Account Balance',
@@ -614,9 +612,7 @@ export const TRANSLATIONS = {
     jumpCurrentMonth: 'Clique para ir ao mês atual',
     preferencesTooltip: 'Preferências, Categorias e Backup',
     themeLight: 'Claro',
-    themeDark: 'Escuro',
-    themeTokyo: 'Tokyo Night',
-    themeOled: 'OLED (Preto Puro)',
+    themeOled: 'OLED',
 
     // Dashboard Hero
     currentBankBalance: 'Saldo Atual na Conta Bancária',

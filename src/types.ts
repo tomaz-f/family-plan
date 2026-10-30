@@ -1,6 +1,6 @@
 export type TransactionType = 'income' | 'expense';
 export type TransactionStatus = 'paid' | 'unpaid';
-export type AppTheme = 'light' | 'dark' | 'tokyo-night' | 'oled';
+export type AppTheme = 'oled' | 'light';
 export type AppLanguage = 'en' | 'pt-BR';
 export type FuelType = 'gasoline' | 'ethanol';
 
@@ -55,6 +55,7 @@ export interface Transaction {
   dueDay?: number | null;
   installmentCurrent?: number | null;
   installmentTotal?: number | null;
+  totalPurchaseAmount?: number | null;
   cardId?: string | null;
   invoiceMonth?: string | null; // YYYY-MM
   purchaseDate?: string | null; // YYYY-MM-DD

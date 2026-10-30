@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   CreditCard as CreditCardIcon,
   Plus,
@@ -63,6 +63,7 @@ interface CreditCardsViewProps {
   onOpenAddExpense: (cardId?: string) => void;
   onEditTransaction: (tx: Transaction) => void;
   onDeleteTransaction: (tx: Transaction) => void;
+  onActiveCardChange?: (cardId: string | null) => void;
 }
 
 const BRAND_OPTIONS: { id: CreditCardBrand; name: string }[] = [
@@ -139,6 +140,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   onOpenAddExpense,
   onEditTransaction,
   onDeleteTransaction,
+  onActiveCardChange,
 }) => {
   const t = TRANSLATIONS[language];
   const todayStr = getTodayDateStr();
@@ -174,50 +176,91 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     return creditCards.find((c) => c.id === selectedCardId) || creditCards[0] || null;
   }, [creditCards, selectedCardId]);
 
+  useEffect(() => {
+    onActiveCardChange?.(activeCard?.id || null);
+  }, [activeCard?.id, onActiveCardChange]);
+
   // Helper to determine the invoiceMonth of any card transaction
   const getTxInvoiceMonth = (tx: Transaction, card: CreditCard): string => {
     if (tx.invoiceMonth) return tx.invoiceMonth;
-    return computeCardFirstInvoiceMonth(tx.purchaseDate || tx.date, card.closingDay).invoiceMonth;
+    const firstMonth = computeCardFirstInvoiceMonth(
+      tx.purchaseDate || tx.date,
+      card.closingDay
+    ).invoiceMonth;
+    if (
+      tx.installmentTotal &&
+      tx.installmentTotal > 1 &&
+      tx.installmentCurrent &&
+      tx.installmentCurrent > 1
+    ) {
+      return shiftMonth(firstMonth, tx.installmentCurrent - 1);
+    }
+    return firstMonth;
   };
 
   // Compute card metrics for all cards
   const cardsMetrics = useMemo(() => {
-    const cardMap = new Map<string, CreditCard>();
-    creditCards.forEach((c) => cardMap.set(c.id, c));
-
     return creditCards.map((card) => {
       const cardTxs = transactions.filter((tx) => tx.cardId === card.id);
 
-      // Used limit: sum of all unpaid purchases
-      const usedLimit = cardTxs.reduce((sum, tx) => {
-        if (tx.status === 'unpaid') {
-          return sum + Number(tx.amount || 0);
+      // Identify billing cycles whose invoice has already been paid/settled
+      const settledMonths = new Set<string>();
+      transactions.forEach((tx) => {
+        if (
+          tx.settledInvoiceKey &&
+          tx.status === 'paid' &&
+          tx.settledInvoiceKey.startsWith(`${card.id}__`)
+        ) {
+          const monthPart = tx.settledInvoiceKey.split('__')[1];
+          if (monthPart) settledMonths.add(monthPart);
         }
-        return sum;
-      }, 0);
+      });
 
-      const availableLimit = Math.max(0, card.totalLimit - usedLimit);
+      // Used limit: true outstanding balance of all active unpaid purchases on the card
+      // (unpaid single-payment purchases + remaining unpaid installments across all active purchases)
+      const usedLimit = Number(
+        cardTxs
+          .reduce((sum, tx) => {
+            const invMonth = getTxInvoiceMonth(tx, card);
+            const isPaid = tx.status === 'paid' || settledMonths.has(invMonth);
+            if (!isPaid) {
+              return sum + Number(tx.amount || 0);
+            }
+            return sum;
+          }, 0)
+          .toFixed(2)
+      );
+
+      const availableLimit = Math.max(0, Number((card.totalLimit - usedLimit).toFixed(2)));
       const usedPercentage =
         card.totalLimit > 0 ? Math.min(100, Math.round((usedLimit / card.totalLimit) * 100)) : 0;
 
-      // Current month invoice
-      const currentInvoiceTotal = cardTxs.reduce((sum, tx) => {
-        const invMonth = getTxInvoiceMonth(tx, card);
-        if (invMonth === currentMonthStr) {
-          return sum + Number(tx.amount || 0);
-        }
-        return sum;
-      }, 0);
+      // Current month invoice: sums ONLY purchases/installments falling due in currentMonthStr
+      const currentInvoiceTotal = Number(
+        cardTxs
+          .reduce((sum, tx) => {
+            const invMonth = getTxInvoiceMonth(tx, card);
+            if (invMonth === currentMonthStr) {
+              return sum + Number(tx.amount || 0);
+            }
+            return sum;
+          }, 0)
+          .toFixed(2)
+      );
 
-      // Next month invoice
+      // Next month invoice: sums ONLY purchases/installments falling due in nextMonthStr
       const nextMonthStr = shiftMonth(currentMonthStr, 1);
-      const nextInvoiceTotal = cardTxs.reduce((sum, tx) => {
-        const invMonth = getTxInvoiceMonth(tx, card);
-        if (invMonth === nextMonthStr) {
-          return sum + Number(tx.amount || 0);
-        }
-        return sum;
-      }, 0);
+      const nextInvoiceTotal = Number(
+        cardTxs
+          .reduce((sum, tx) => {
+            const invMonth = getTxInvoiceMonth(tx, card);
+            if (invMonth === nextMonthStr) {
+              return sum + Number(tx.amount || 0);
+            }
+            return sum;
+          }, 0)
+          .toFixed(2)
+      );
 
       // Check if current month invoice has a settlement transaction on main bank statement
       const currentSettledKey = `${card.id}__${currentMonthStr}`;
@@ -249,7 +292,9 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       totalUsed += m.usedLimit;
     });
 
-    const totalAvailable = Math.max(0, totalLimit - totalUsed);
+    totalLimit = Number(totalLimit.toFixed(2));
+    totalUsed = Number(totalUsed.toFixed(2));
+    const totalAvailable = Math.max(0, Number((totalLimit - totalUsed).toFixed(2)));
     const combinedPercentage =
       totalLimit > 0 ? Math.min(100, Math.round((totalUsed / totalLimit) * 100)) : 0;
 
@@ -269,16 +314,20 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
       creditCards.forEach((card) => {
         const cardTxs = transactions.filter((tx) => tx.cardId === card.id);
-        const cardMonthTotal = cardTxs.reduce((sum, tx) => {
-          const invMonth = getTxInvoiceMonth(tx, card);
-          if (invMonth === ym) {
-            return sum + Number(tx.amount || 0);
-          }
-          return sum;
-        }, 0);
+        const cardMonthTotal = Number(
+          cardTxs
+            .reduce((sum, tx) => {
+              const invMonth = getTxInvoiceMonth(tx, card);
+              if (invMonth === ym) {
+                return sum + Number(tx.amount || 0);
+              }
+              return sum;
+            }, 0)
+            .toFixed(2)
+        );
 
         row[card.id] = cardMonthTotal;
-        row.totalCommitment += cardMonthTotal;
+        row.totalCommitment = Number((row.totalCommitment + cardMonthTotal).toFixed(2));
       });
 
       return row;
@@ -310,7 +359,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       .filter((tx) => tx.cardId === activeCard.id && getTxInvoiceMonth(tx, activeCard) === statementMonth)
       .sort((a, b) => (b.purchaseDate || b.date).localeCompare(a.purchaseDate || a.date));
 
-    const total = txs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const total = Number(txs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0).toFixed(2));
 
     const settlementKey = `${activeCard.id}__${statementMonth}`;
     const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === settlementKey) || null;
@@ -1009,12 +1058,26 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                        <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5 flex-wrap">
                           <span>{tx.purchaseDate || tx.date}</span>
                           {cat && (
                             <>
                               <span>•</span>
                               <span>{getCategoryDisplayName(cat, language)}</span>
+                            </>
+                          )}
+                          {hasInstallment && (
+                            <>
+                              <span>•</span>
+                              <span>
+                                Total:{' '}
+                                {formatCurrency(
+                                  tx.totalPurchaseAmount && tx.totalPurchaseAmount > 0
+                                    ? tx.totalPurchaseAmount
+                                    : Number((tx.amount * (tx.installmentTotal || 1)).toFixed(2)),
+                                  currency
+                                )}
+                              </span>
                             </>
                           )}
                           {tx.notes && (
