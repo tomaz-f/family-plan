@@ -16,6 +16,8 @@ import {
   PieChart as PieChartIcon,
   FileText,
   FileSpreadsheet,
+  Menu,
+  Download,
 } from 'lucide-react';
 import {
   AppLanguage,
@@ -205,7 +207,8 @@ export const App: React.FC = () => {
   const [deletingSeriesTx, setDeletingSeriesTx] = useState<Transaction | null>(null);
   const [balanceModalOpen, setBalanceModalOpen] = useState<boolean>(false);
   const [syncModalOpen, setSyncModalOpen] = useState<boolean>(false);
-  const [syncModalTab, setSyncModalTab] = useState<'mobile' | 'settings' | 'categories' | 'export' | 'backup'>('mobile');
+  const [syncModalTab, setSyncModalTab] = useState<'mobile' | 'settings' | 'categories' | 'export' | 'backup'>('settings');
+  const [headerMenuOpen, setHeaderMenuOpen] = useState<boolean>(false);
   const [fabMenuOpen, setFabMenuOpen] = useState<boolean>(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [openRefuelTrigger, setOpenRefuelTrigger] = useState<number>(0);
@@ -1444,18 +1447,92 @@ export const App: React.FC = () => {
               </button>
             </div>
 
-            {/* Settings (Gear) Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setSyncModalTab('settings');
-                setSyncModalOpen(true);
-              }}
-              className="w-11 h-11 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 active:opacity-75 transition-all shadow-xs shrink-0"
-              title={t.preferencesTooltip}
-            >
-              <Settings size={18} />
-            </button>
+            {/* Hamburger Menu & Telegram-Style Floating Dropdown */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setHeaderMenuOpen((prev) => !prev)}
+                className="w-10 h-10 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 active:opacity-75 transition-all shadow-xs shrink-0"
+                title={language === 'pt-BR' ? 'Menu e Configurações' : 'Menu & Settings'}
+                aria-expanded={headerMenuOpen}
+                aria-haspopup="menu"
+              >
+                <Menu size={20} />
+              </button>
+
+              {headerMenuOpen && (
+                <>
+                  {/* Invisible click-outside backdrop */}
+                  <div
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={() => setHeaderMenuOpen(false)}
+                  />
+
+                  {/* Telegram-style dropdown popover */}
+                  <div
+                    role="menu"
+                    className="telegram-dropdown-menu absolute right-0 top-full mt-2 min-w-[215px] py-1.5 rounded-2xl border shadow-2xl z-50 flex flex-col"
+                  >
+                    {/* 1. Theme Toggle: Modo Claro / Modo OLED */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        const nextTheme: AppTheme = theme === 'oled' ? 'light' : 'oled';
+                        handleUpdateSettings({ theme: nextTheme });
+                        setHeaderMenuOpen(false);
+                      }}
+                      className="telegram-dropdown-item w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors min-h-[44px]"
+                    >
+                      {theme === 'oled' ? (
+                        <Sun size={18} className="text-amber-400 shrink-0" />
+                      ) : (
+                        <Moon size={18} className="text-slate-600 shrink-0" />
+                      )}
+                      <span>
+                        {theme === 'oled'
+                          ? language === 'pt-BR'
+                            ? 'Modo Claro'
+                            : 'Light Mode'
+                          : language === 'pt-BR'
+                          ? 'Modo OLED'
+                          : 'OLED Mode'}
+                      </span>
+                    </button>
+
+                    {/* 2. Configurações */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setHeaderMenuOpen(false);
+                        setSyncModalTab('settings');
+                        setSyncModalOpen(true);
+                      }}
+                      className="telegram-dropdown-item w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors min-h-[44px]"
+                    >
+                      <Settings size={18} className="text-slate-400 shrink-0" />
+                      <span>{language === 'pt-BR' ? 'Configurações' : 'Settings'}</span>
+                    </button>
+
+                    {/* 3. Exportar Dados */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setHeaderMenuOpen(false);
+                        setSyncModalTab('export');
+                        setSyncModalOpen(true);
+                      }}
+                      className="telegram-dropdown-item w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors min-h-[44px]"
+                    >
+                      <Download size={18} className="text-emerald-500 shrink-0" />
+                      <span>{language === 'pt-BR' ? 'Exportar Dados' : 'Export Data'}</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>

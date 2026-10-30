@@ -612,6 +612,90 @@ html[data-theme="light"] .tx-compact-modal input.tx-amount-input {
   box-shadow: none !important;
 }
 
+/* =========================================================
+   Telegram-Style Header Dropdown & Full-Screen Settings
+   ========================================================= */
+.telegram-dropdown-menu {
+  background-color: #161B22 !important;
+  border-color: #21262D !important;
+  color: #F8FAFC !important;
+}
+
+.telegram-dropdown-item {
+  color: #F8FAFC !important;
+}
+
+.telegram-dropdown-item:hover,
+.telegram-dropdown-item:active {
+  background-color: #21262D !important;
+}
+
+html[data-theme="light"] .telegram-dropdown-menu {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+html[data-theme="light"] .telegram-dropdown-item {
+  color: #0F172A !important;
+}
+
+html[data-theme="light"] .telegram-dropdown-item:hover,
+html[data-theme="light"] .telegram-dropdown-item:active {
+  background-color: #F1F5F9 !important;
+}
+
+.settings-screen-shell {
+  background-color: #000000 !important;
+  color: #F8FAFC !important;
+}
+
+html[data-theme="light"] .settings-screen-shell {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+}
+
+.settings-header-bar {
+  background-color: rgba(0, 0, 0, 0.92) !important;
+  border-color: #21262D !important;
+  padding-top: max(12px, env(safe-area-inset-top, 0px)) !important;
+}
+
+html[data-theme="light"] .settings-header-bar {
+  background-color: rgba(248, 250, 252, 0.92) !important;
+  border-color: #E2E8F0 !important;
+}
+
+.settings-hero-badge,
+.settings-group-card {
+  background-color: #0D1117 !important;
+  border-color: #21262D !important;
+}
+
+.settings-group-card > :not([hidden]) ~ :not([hidden]) {
+  border-color: #21262D !important;
+}
+
+.settings-row-item:hover,
+.settings-row-item:active {
+  background-color: #161B22 !important;
+}
+
+html[data-theme="light"] .settings-hero-badge,
+html[data-theme="light"] .settings-group-card {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+}
+
+html[data-theme="light"] .settings-group-card > :not([hidden]) ~ :not([hidden]) {
+  border-color: #E2E8F0 !important;
+}
+
+html[data-theme="light"] .settings-row-item:hover,
+html[data-theme="light"] .settings-row-item:active {
+  background-color: #F1F5F9 !important;
+}
+
 @media print {
   html[data-theme="oled"] body,
   html[data-theme="light"] body,
