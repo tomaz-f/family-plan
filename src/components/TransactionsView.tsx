@@ -21,7 +21,6 @@ import {
   exportTransactionsToCSV,
   formatCurrency,
   formatMonthLabel,
-  formatShortDate,
 } from '../utils/format';
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
@@ -32,6 +31,19 @@ const PAGE_SIZE = 30;
 const SWIPE_REVEAL_WIDTH = 140;
 const SWIPE_SNAP_THRESHOLD = 55;
 const SWIPE_MAX_DRAG = 165;
+
+const formatNumericDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  if (Number.isNaN(date.getTime())) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
 
 interface SwipeableTransactionRowProps {
   tx: Transaction;
@@ -336,68 +348,59 @@ const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
               {tx.description}
             </p>
 
-            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
-              <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-1 leading-none">
+              <span className="text-slate-500 font-medium truncate max-w-[120px] sm:max-w-none">
                 {getCategoryDisplayName(cat, language)}
               </span>
-              <span>•</span>
-              <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
 
               {cardObj && (
-                <>
-                  <span>•</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                    <CreditCardIcon size={9} />
-                    <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
-                  </span>
-                </>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                  <CreditCardIcon size={9} />
+                  <span className="truncate max-w-[75px] sm:max-w-none">{cardObj.name}</span>
+                </span>
               )}
 
               {tx.installmentTotal && tx.installmentTotal > 1 && (
-                <>
-                  <span>•</span>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                    {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                  </span>
-                </>
+                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                  {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                </span>
               )}
 
               {isUnpaid && (
-                <>
-                  <span>•</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                    <Clock size={9} />
-                    <span>{t.pendingBadge}</span>
-                  </span>
-                </>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
+                  <Clock size={9} />
+                  <span>{t.pendingBadge}</span>
+                </span>
               )}
 
               {tx.recurringId && !tx.installmentTotal && (
-                <>
-                  <span>•</span>
-                  <Repeat size={10} className="text-slate-400" />
-                </>
+                <span className="inline-flex items-center text-slate-400">
+                  <Repeat size={10} />
+                </span>
               )}
 
               {tx.notes && (
                 <>
                   <span>•</span>
-                  <span className="italic truncate max-w-[90px] sm:max-w-[180px]">{tx.notes}</span>
+                  <span className="italic truncate max-w-[100px] sm:max-w-[180px]">{tx.notes}</span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Right: Formatted Transaction Amount Only (Action buttons hidden behind foreground) */}
-        <div className="flex items-center shrink-0 pl-1">
+        {/* Right: Formatted Transaction Amount & Numeric Date Stack */}
+        <div className="flex flex-col items-end justify-center text-right shrink-0 pl-2">
           <span
-            className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
-              tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
+            className={`text-sm sm:text-base font-semibold whitespace-nowrap leading-tight ${
+              tx.type === 'income' ? 'text-[#10B981]' : 'text-[#EF4444]'
             }`}
           >
             {tx.type === 'income' ? '+' : '-'}
             {formatCurrency(tx.amount, currency)}
+          </span>
+          <span className="text-xs text-slate-400 mt-0.5 whitespace-nowrap leading-none">
+            {formatNumericDate(tx.date)}
           </span>
         </div>
       </div>

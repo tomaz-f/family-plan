@@ -362,141 +362,172 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     await executeSave('single');
   };
 
+  const currencySymbol =
+    ({
+      BRL: 'R$',
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      CAD: 'CA$',
+      AUD: 'A$',
+      MXN: 'MX$',
+      JPY: '¥',
+    } as Record<string, string>)[currency] || currency;
+
+  // Preserve unused icon imports for compatibility
+  void { Calendar, FileText, ThumbsDown };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 animate-fadeIn">
-      <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[94vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h2 className="text-lg font-bold text-slate-900">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="tx-compact-modal bg-white w-[92%] max-w-[420px] mx-auto rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Compact Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
+          <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
             {editingTransaction
-              ? t.editEntryTitle
+              ? type === 'income'
+                ? language === 'pt-BR'
+                  ? 'Editar Entrada'
+                  : 'Edit Income'
+                : language === 'pt-BR'
+                ? 'Editar Despesa'
+                : 'Edit Expense'
               : type === 'income'
-              ? t.addInputModalTitle
-              : t.addExpenseModalTitle}
+              ? language === 'pt-BR'
+                ? 'Nova Entrada'
+                : 'New Income'
+              : language === 'pt-BR'
+              ? 'Nova Despesa'
+              : 'New Expense'}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            aria-label={t.cancelBtn}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
-          {/* Type Switcher */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+        <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto no-scrollbar">
+          {/* Compact Segmented Type Toggle */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
             <button
               type="button"
               onClick={() => setType('expense')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
                 type === 'expense'
-                  ? 'bg-rose-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#EF4444] text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              <ArrowDownRight size={17} />
-              {t.expenseOutTab}
+              <ArrowDownRight size={14} strokeWidth={2.5} />
+              <span>{language === 'pt-BR' ? 'Despesa' : 'Expense'}</span>
             </button>
             <button
               type="button"
               onClick={() => setType('income')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
                 type === 'income'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#10B981] text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              <ArrowUpRight size={17} />
-              {t.inputInTab}
+              <ArrowUpRight size={14} strokeWidth={2.5} />
+              <span>{language === 'pt-BR' ? 'Entrada' : 'Income'}</span>
             </button>
           </div>
 
-          {/* Amount Input */}
+          {/* Prominent Amount Input with R$ Prefix */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
               {type === 'expense' && (recurrenceMode === 'installment' || selectedCard)
                 ? language === 'pt-BR'
-                  ? `Valor Total da Compra (${currency})`
-                  : `Total Purchase Amount (${currency})`
-                : t.amountLabel}
+                  ? 'Valor Total da Compra'
+                  : 'Total Purchase Amount'
+                : language === 'pt-BR'
+                ? 'Valor'
+                : 'Amount'}
             </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              required
-              autoFocus
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className={`w-full text-2xl font-bold px-4 py-3 rounded-xl border bg-slate-50/70 focus:bg-white focus:outline-none focus:ring-2 transition-all ${
-                type === 'income'
-                  ? 'border-emerald-200 text-emerald-500 focus:ring-emerald-500'
-                  : 'border-rose-200 text-rose-500 focus:ring-rose-500'
-              }`}
-            />
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 focus-within:border-[#6E5440] transition-all">
+              <span
+                className={`text-lg sm:text-xl font-bold select-none shrink-0 ${
+                  type === 'income' ? 'text-[#10B981]' : 'text-[#EF4444]'
+                }`}
+              >
+                {currencySymbol}
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                autoFocus
+                placeholder="0,00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className={`tx-amount-input w-full text-2xl sm:text-3xl font-bold focus:outline-none p-0 leading-none ${
+                  type === 'income' ? 'tx-amount-input-income' : 'tx-amount-input-expense'
+                }`}
+              />
+            </div>
             {recurrenceMode === 'installment' && (
-              <div className="mt-2 px-3.5 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-between gap-2 text-xs font-bold text-indigo-400">
-                <span className="flex items-center gap-1.5">
-                  <Layers size={14} className="shrink-0" />
-                  <span>
-                    {language === 'pt-BR'
-                      ? `Total de ${formatCurrency(installmentBreakdown.totalAmount, currency)} em ${installmentBreakdown.count}x de ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`
-                      : `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} in ${installmentBreakdown.count}x of ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`}
-                    {installmentBreakdown.remainderCents > 0 && installmentBreakdown.count > 1
-                      ? language === 'pt-BR'
-                        ? ` (1ª de ${formatCurrency(installmentBreakdown.firstInstallmentAmount, currency)})`
-                        : ` (1st of ${formatCurrency(installmentBreakdown.firstInstallmentAmount, currency)})`
-                      : ''}
-                  </span>
+              <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                <Layers size={12} className="text-[#D0B595] shrink-0" />
+                <span className="truncate">
+                  {language === 'pt-BR'
+                    ? `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} em ${installmentBreakdown.count}x de ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`
+                    : `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} in ${installmentBreakdown.count}x of ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`}
+                  {installmentBreakdown.remainderCents > 0 && installmentBreakdown.count > 1
+                    ? ` (1ª: ${formatCurrency(installmentBreakdown.firstInstallmentAmount, currency)})`
+                    : ''}
                 </span>
               </div>
             )}
           </div>
 
-          {/* Description & Payment/Receipt Date */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                {t.descriptionLabel}
+          {/* Side-by-Side Description & Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                {language === 'pt-BR' ? 'Descrição' : 'Description'}
               </label>
-              <div className="relative">
-                <FileText size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  placeholder={type === 'income' ? t.incomeDescPlaceholder : t.expenseDescPlaceholder}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
+              <input
+                type="text"
+                required
+                placeholder={type === 'income' ? t.incomeDescPlaceholder : t.expenseDescPlaceholder}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none transition-colors"
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                {t.dateLabel}
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                {language === 'pt-BR' ? 'Data' : 'Date'}
               </label>
-              <div className="relative">
-                <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => handleDateChange(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="w-full h-11 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none transition-colors"
+              />
             </div>
           </div>
 
-          {/* Category Picker */}
+          {/* Compact Category Horizontal Pill Carousel */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-              {t.categoryLabel}
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              {language === 'pt-BR' ? 'Categoria' : 'Category'}
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-0.5 px-0.5">
               {filteredCategories.map((cat) => {
                 const selected = cat.id === categoryId;
                 return (
@@ -504,70 +535,45 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     key={cat.id}
                     type="button"
                     onClick={() => setCategoryId(cat.id)}
-                    className={`flex items-center gap-2.5 p-2 rounded-xl border text-left transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-all active:scale-95 ${
                       selected
-                        ? 'border-slate-900 bg-slate-900 text-white shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                        ? 'filter-chip-active font-semibold shadow-xs'
+                        : 'filter-chip-inactive'
                     }`}
                   >
                     <CategoryIcon
                       icon={cat.icon}
                       color={selected ? '#ffffff' : cat.color}
-                      size={16}
+                      size={13}
                       badgeSize="sm"
-                      className={selected ? '!bg-white/20 !text-white' : ''}
+                      className={selected ? '!bg-white/20 !text-white !w-5 !h-5' : '!w-5 !h-5'}
                     />
-                    <span className="text-xs font-medium leading-tight line-clamp-2">
-                      {getCategoryDisplayName(cat, language)}
-                    </span>
+                    <span>{getCategoryDisplayName(cat, language)}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Optional Notes */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
-              {t.notesOptionalLabel}
-            </label>
-            <input
-              type="text"
-              placeholder={t.notesPlaceholder}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-            />
-          </div>
-
-          {/* Payment Method / Account (Bank vs Credit Card) */}
+          {/* Account / Card Compact Pill Selector (For Expenses) */}
           {type === 'expense' && (
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                {t.paymentMethodLabel}
+            <div>
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                {language === 'pt-BR' ? 'Conta / Cartão' : 'Account / Card'}
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
                 <button
                   type="button"
                   onClick={() => handleSelectCard(null)}
-                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
+                  className={`rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-medium border whitespace-nowrap shrink-0 transition-all active:scale-95 ${
                     !selectedCardId
-                      ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20 font-semibold'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      ? 'filter-chip-active font-semibold shadow-xs'
+                      : 'filter-chip-inactive'
                   }`}
                 >
-                  <div
-                    className={`p-2 rounded-lg ${
-                      !selectedCardId ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    <Landmark size={16} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold leading-tight">{t.bankAccountCash}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{t.instantBalanceDeduction}</p>
-                  </div>
-                  {!selectedCardId && <Check size={16} className="text-indigo-600 shrink-0" />}
+                  <Landmark size={13} className="shrink-0" />
+                  <span>{language === 'pt-BR' ? 'Conta / Pix' : 'Bank / Cash'}</span>
+                  {!selectedCardId && <Check size={12} className="shrink-0 ml-0.5" />}
                 </button>
 
                 {creditCards.map((card) => {
@@ -577,159 +583,127 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       key={card.id}
                       type="button"
                       onClick={() => handleSelectCard(card.id)}
-                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
+                      className={`rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-medium border whitespace-nowrap shrink-0 transition-all active:scale-95 ${
                         isSelected
-                          ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 ring-2 ring-indigo-500/20 font-semibold'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                          ? 'filter-chip-active font-semibold shadow-xs'
+                          : 'filter-chip-inactive'
                       }`}
                     >
-                      <div
-                        className="p-2 rounded-lg text-white shrink-0"
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: card.color || '#6366f1' }}
-                      >
-                        <CreditCardIcon size={16} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold leading-tight truncate">{card.name}</p>
-                        <p className="text-[10px] text-slate-500 truncate">
-                          {t.closingDayShort}: {card.closingDay} | {t.dueDayShort}: {card.dueDay}
-                        </p>
-                      </div>
-                      {isSelected && <Check size={16} className="text-indigo-600 shrink-0" />}
+                      />
+                      <CreditCardIcon size={13} className="shrink-0" />
+                      <span>{card.name}</span>
+                      {isSelected && <Check size={12} className="shrink-0 ml-0.5" />}
                     </button>
                   );
                 })}
               </div>
 
-              {/* Smart Cycle Assignment Box */}
+              {/* Compact Smart Cycle Pill when Card is Selected */}
               {selectedCard && cardCycleInfo && (
-                <div className="p-3 rounded-xl bg-indigo-50/80 border border-indigo-200/80 space-y-2 mt-2">
-                  <div className="flex items-center gap-1.5 text-indigo-700 font-bold text-xs uppercase tracking-wider">
-                    <Sparkles size={14} />
-                    <span>{t.smartCycleTitle}</span>
-                  </div>
-                  <p className="text-xs text-slate-700">
-                    {cardCycleInfo.rolledToNext
-                      ? t.cardClosingAfterHint(selectedCard.closingDay)
-                      : t.cardClosingBeforeHint(selectedCard.closingDay)}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs font-semibold">
-                    <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white shadow-xs">
-                      {t.invoiceCycleLabel}: <strong>{cardCycleInfo.formattedMonth}</strong>
+                <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between gap-2 text-[11px]">
+                  <span className="flex items-center gap-1 text-slate-600 font-medium truncate">
+                    <Sparkles size={12} className="text-[#D0B595] shrink-0" />
+                    <span>
+                      {t.invoiceCycleLabel}: <strong className="text-slate-900">{cardCycleInfo.formattedMonth}</strong>
                     </span>
-                    <span className="px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-indigo-800">
-                      {t.invoiceDueDayBadge(selectedCard.dueDay)}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-indigo-800 font-medium leading-relaxed pt-1 border-t border-indigo-100">
-                    {t.cardBalanceRuleHint}
-                  </p>
+                  </span>
+                  <span className="text-slate-500 font-semibold shrink-0">
+                    {t.dueDayShort}: {selectedCard.dueDay}
+                  </span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Payment Status Selector: Paid vs Unpaid / Pending (Only for Bank Account / Cash) */}
-          {!selectedCard ? (
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                {t.paymentStatusLabel}
+          {/* Compact Payment Status & Frequency Controls */}
+          <div className="space-y-2.5">
+            {!selectedCard && (
+              <div>
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  {language === 'pt-BR' ? 'Status' : 'Status'}
+                </span>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={() => setStatus('paid')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
+                      status === 'paid'
+                        ? 'bg-[#10B981] text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <ThumbsUp size={13} />
+                    <span>{language === 'pt-BR' ? 'Pago' : 'Paid'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStatus('unpaid')}
+                    className={`flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
+                      status === 'unpaid'
+                        ? 'bg-[#F59E0B] text-slate-950 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>{language === 'pt-BR' ? 'Pendente' : 'Pending'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Frequency Segmented Control */}
+            <div>
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                {language === 'pt-BR' ? 'Frequência' : 'Frequency'}
               </span>
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
                 <button
                   type="button"
-                  onClick={() => setStatus('paid')}
-                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                    status === 'paid'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                  onClick={() => setRecurrenceMode('single')}
+                  className={`flex items-center justify-center gap-1 h-8 px-2 rounded-lg text-xs font-semibold transition-all ${
+                    recurrenceMode === 'single'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  <ThumbsUp size={14} />
-                  <span>{type === 'income' ? t.statusPaidIncome : t.statusPaidExpense}</span>
+                  <Check size={12} />
+                  <span>{language === 'pt-BR' ? 'Única' : 'Single'}</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setStatus('unpaid')}
-                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                    status === 'unpaid'
-                      ? 'bg-amber-500 text-slate-950 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
+                  onClick={() => setRecurrenceMode('recurring')}
+                  className={`flex items-center justify-center gap-1 h-8 px-2 rounded-lg text-xs font-semibold transition-all ${
+                    recurrenceMode === 'recurring'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  <ThumbsDown size={14} />
-                  <span>{type === 'income' ? t.statusUnpaidIncome : t.statusUnpaidExpense}</span>
+                  <Repeat size={12} />
+                  <span>{language === 'pt-BR' ? 'Fixa' : 'Fixed'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRecurrenceMode('installment')}
+                  className={`flex items-center justify-center gap-1 h-8 px-2 rounded-lg text-xs font-semibold transition-all ${
+                    recurrenceMode === 'installment'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <Layers size={12} />
+                  <span>{language === 'pt-BR' ? 'Parcelada' : 'Installments'}</span>
                 </button>
               </div>
-              {status === 'unpaid' && (
-                <p className="text-[11px] font-medium text-amber-600 px-1">{t.unpaidBalanceHint}</p>
-              )}
-            </div>
-          ) : (
-            <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-200/60 flex items-center justify-between text-xs">
-              <span className="text-slate-600 font-semibold">{t.paymentStatusLabel}</span>
-              <span className="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 font-bold border border-amber-500/30 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                {t.cardStatusAccumulated}
-              </span>
-            </div>
-          )}
 
-          {/* Concise Frequency / Recurrence / Installment Selector */}
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                {t.frequencyLabel}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setRecurrenceMode('single')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
-                  recurrenceMode === 'single'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Check size={13} />
-                <span>{t.freqOneTime}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setRecurrenceMode('recurring')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
-                  recurrenceMode === 'recurring'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Repeat size={13} />
-                <span>{t.freqRecurring}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setRecurrenceMode('installment')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
-                  recurrenceMode === 'installment'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Layers size={13} />
-                <span>{t.freqInstallment}</span>
-              </button>
-            </div>
-
-            {/* Extra fields when Fixa Mensal or Parcelada is selected */}
-            {recurrenceMode === 'recurring' && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-semibold text-slate-600 shrink-0">
+              {/* Extra compact fields for Fixa or Parcelada */}
+              {recurrenceMode === 'recurring' && (
+                <div className="flex items-center justify-between gap-2 mt-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
+                  <label className="text-xs font-medium text-slate-600">
                     {type === 'income' ? t.expectedDayShortLabel : t.dueDayShortLabel}:
                   </label>
                   <input
@@ -741,23 +715,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       setDueDay(e.target.value);
                       setDueDayManuallyEdited(true);
                     }}
-                    className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
+                    className="w-14 h-7 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
                   />
                 </div>
-                <span className="text-[11px] font-medium text-indigo-500">
-                  {t.recurringHintSummary(parsedDueDay)}
-                </span>
-              </div>
-            )}
+              )}
 
-            {recurrenceMode === 'installment' && (
-              <div className="space-y-2.5 pt-1">
-                {/* Quick Installment Selector (2x to 24x) */}
-                <div>
-                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                    {language === 'pt-BR' ? 'Seleção Rápida de Parcelas' : 'Quick Installments'}
-                  </span>
-                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+              {recurrenceMode === 'installment' && (
+                <div className="space-y-2 mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
                     {[2, 3, 4, 6, 10, 12, 18, 24].map((n) => {
                       const active = parsedInstTot === n;
                       return (
@@ -765,10 +730,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                           key={n}
                           type="button"
                           onClick={() => setInstallmentTotal(String(n))}
-                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all ${
+                          className={`py-1 px-2.5 rounded-lg text-[11px] font-bold border shrink-0 transition-all ${
                             active
-                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                              ? 'filter-chip-active shadow-2xs'
+                              : 'filter-chip-inactive'
                           }`}
                         >
                           {n}x
@@ -776,88 +741,95 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       );
                     })}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      {t.currentInstLabel}
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="240"
-                      value={installmentCurrent}
-                      onChange={(e) => setInstallmentCurrent(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
-                    />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                        {t.currentInstLabel}
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="240"
+                        value={installmentCurrent}
+                        onChange={(e) => setInstallmentCurrent(e.target.value)}
+                        className="w-full h-8 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                        {t.totalInstLabel}
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="240"
+                        value={installmentTotal}
+                        onChange={(e) => setInstallmentTotal(e.target.value)}
+                        className="w-full h-8 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                        {type === 'income' ? t.expectedDayShortLabel : t.dueDayShortLabel}
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        disabled={Boolean(selectedCard)}
+                        value={selectedCard ? selectedCard.dueDay : dueDay}
+                        onChange={(e) => {
+                          setDueDay(e.target.value);
+                          setDueDayManuallyEdited(true);
+                        }}
+                        className={`w-full h-8 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold ${
+                          selectedCard ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                        }`}
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      {t.totalInstLabel}
-                    </label>
-                    <input
-                      type="number"
-                      min="2"
-                      max="240"
-                      value={installmentTotal}
-                      onChange={(e) => setInstallmentTotal(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      {type === 'income' ? t.expectedDayShortLabel : t.dueDayShortLabel}
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="31"
-                      disabled={Boolean(selectedCard)}
-                      value={selectedCard ? selectedCard.dueDay : dueDay}
-                      onChange={(e) => {
-                        setDueDay(e.target.value);
-                        setDueDayManuallyEdited(true);
-                      }}
-                      className={`w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-center text-xs font-bold ${
-                        selectedCard ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                <div className="px-3 py-2 rounded-lg bg-indigo-500/10 text-indigo-500 text-[11px] font-semibold text-center space-y-0.5">
-                  <div>
-                    {language === 'pt-BR'
-                      ? `Total de ${formatCurrency(installmentBreakdown.totalAmount, currency)} em ${installmentBreakdown.count}x de ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`
-                      : `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} in ${installmentBreakdown.count}x of ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`}
-                  </div>
-                  <div className="opacity-80">
+                  <p className="text-[10px] text-slate-400 text-center">
                     {t.installmentHintSummary(parsedInstCur, parsedInstTot, concludingMonthLabel, parsedDueDay)}
-                  </div>
+                  </p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3 pt-1">
+          {/* Streamlined Single-Line Notes Input */}
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              {language === 'pt-BR' ? 'Observações' : 'Notes'}
+            </label>
+            <input
+              type="text"
+              placeholder={t.notesPlaceholder}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none transition-colors"
+            />
+          </div>
+
+          {/* Compact Action Footer */}
+          <div className="flex items-center gap-2.5 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
+              className="py-2.5 px-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
             >
               {t.cancelBtn}
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-white text-sm font-semibold shadow-sm transition-all ${
+              className={`flex-1 py-2.5 px-4 rounded-xl text-white text-xs font-semibold shadow-xs transition-all ${
                 type === 'income'
-                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                  : 'bg-rose-600 hover:bg-rose-700'
+                  ? 'bg-[#10B981] hover:bg-emerald-600'
+                  : 'bg-[#EF4444] hover:bg-rose-600'
               }`}
             >
               {submitting
@@ -865,8 +837,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 : editingTransaction
                 ? t.saveChangesBtn
                 : type === 'income'
-                ? t.addInputSubmitBtn
-                : t.addExpenseSubmitBtn}
+                ? language === 'pt-BR'
+                  ? 'Adicionar Entrada'
+                  : 'Add Income'
+                : language === 'pt-BR'
+                ? 'Adicionar Despesa'
+                : 'Add Expense'}
             </button>
           </div>
         </form>

@@ -554,6 +554,64 @@ html[data-theme="light"] .swipe-action-btn-danger:hover {
   color: #DC2626 !important;
 }
 
+/* =========================================================
+   Compact Transaction Modal (OLED & Claro)
+   ========================================================= */
+.tx-compact-modal {
+  background-color: #0D1117 !important;
+  border-color: #21262D !important;
+  color: #F8FAFC !important;
+}
+
+.tx-compact-modal input {
+  min-height: unset !important;
+}
+
+.tx-compact-modal input[type="date"] {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.25rem;
+}
+
+.tx-compact-modal input[type="date"]::-webkit-datetime-edit,
+.tx-compact-modal input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+}
+
+.tx-compact-modal input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+
+.tx-compact-modal input.tx-amount-input {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.tx-compact-modal input.tx-amount-input-expense {
+  color: #EF4444 !important;
+}
+
+.tx-compact-modal input.tx-amount-input-income {
+  color: #10B981 !important;
+}
+
+html[data-theme="light"] .tx-compact-modal {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+html[data-theme="light"] .tx-compact-modal input.tx-amount-input {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 @media print {
   html[data-theme="oled"] body,
   html[data-theme="light"] body,
