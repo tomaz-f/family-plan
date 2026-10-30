@@ -17,6 +17,7 @@ import {
   directSaveRecurring,
   directDeleteRecurring,
   directResetData,
+  directImportData,
 } from './tursoDirectClient';
 
 export {
@@ -274,6 +275,12 @@ async function executeDirectTurso(path: string, options: RequestInit = {}): Prom
   // 9. Reset
   if (path.startsWith('/api/reset') && method === 'POST') {
     const state = await directResetData(directWebTurso, currentFamilyId);
+    return mockResponse(state);
+  }
+
+  // 10. Import Full Backup
+  if (path.startsWith('/api/import') && method === 'POST') {
+    const state = await directImportData(directWebTurso, currentFamilyId, body);
     return mockResponse(state);
   }
 

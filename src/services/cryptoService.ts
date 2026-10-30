@@ -187,6 +187,14 @@ export async function encryptTransaction(
   date: string;
   status: string;
   createdAt: string;
+  cardId?: string | null;
+  invoiceMonth?: string | null;
+  purchaseDate?: string | null;
+  settledInvoiceKey?: string | null;
+  dueDay?: number | null;
+  installmentCurrent?: number | null;
+  installmentTotal?: number | null;
+  recurringId?: string | null;
   iv: string;
   payload: string;
   encrypted_data: string;
@@ -217,6 +225,14 @@ export async function encryptTransaction(
     date: tx.date,
     status: tx.status || 'paid',
     createdAt: tx.createdAt || new Date().toISOString(),
+    cardId: tx.cardId || null,
+    invoiceMonth: tx.invoiceMonth || null,
+    purchaseDate: tx.purchaseDate || null,
+    settledInvoiceKey: tx.settledInvoiceKey || null,
+    dueDay: tx.dueDay ? Number(tx.dueDay) : null,
+    installmentCurrent: tx.installmentCurrent ? Number(tx.installmentCurrent) : null,
+    installmentTotal: tx.installmentTotal ? Number(tx.installmentTotal) : null,
+    recurringId: tx.recurringId || null,
     iv,
     payload,
     encrypted_data,
@@ -415,16 +431,18 @@ export async function decryptCreditCard(
 
   try {
     const sensitive = await decryptPayload<any>(encData, masterKey, familyId);
+    const digits = sensitive.last4Digits || sensitive.lastDigits || raw.last4Digits || raw.lastDigits || '';
     return {
       id: raw.id,
       createdAt: raw.createdAt,
       name: sensitive.name || 'Cartão',
-      brand: sensitive.brand || 'other',
-      lastDigits: sensitive.last4Digits || '',
-      color: sensitive.color || '#8b5cf6',
-      totalLimit: Number(sensitive.totalLimit || 0),
-      closingDay: Number(sensitive.closingDay || 25),
-      dueDay: Number(sensitive.dueDay || 5),
+      brand: sensitive.brand || raw.brand || 'other',
+      lastDigits: digits,
+      last4Digits: digits,
+      color: sensitive.color || raw.color || '#8b5cf6',
+      totalLimit: Number(sensitive.totalLimit ?? raw.totalLimit ?? 0),
+      closingDay: Number(sensitive.closingDay ?? raw.closingDay ?? 25),
+      dueDay: Number(sensitive.dueDay ?? raw.dueDay ?? 5),
     };
   } catch (err) {
     console.error(`[Crypto] Failed to decrypt card ${raw.id}:`, err);

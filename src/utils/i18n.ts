@@ -411,7 +411,7 @@ export const TRANSLATIONS = {
       'PDF includes: Executive KPI cards, Category Donut Chart, Cash Flow Bar Chart, Category Breakdown Tables, Monthly Summary, and Complete Ledger.',
     exportFullBackupTitle: 'Export Full Backup (JSON)',
     exportFullBackupDesc:
-      'Download a complete copy of your family balance, transactions, categories, and recurring templates.',
+      'Download a complete copy of all your family data: bank transactions, credit cards & limits, fuel logs, categories, and recurring templates.',
     downloadBackupBtn: 'Download Backup (.json)',
     restoreImportTitle: 'Restore / Import Backup',
     restoreImportDesc: 'Import a previously exported .json backup file.',
@@ -978,7 +978,7 @@ export const TRANSLATIONS = {
       'O PDF inclui: Indicadores Executivos, Gráfico de Rosca por Categoria, Gráfico de Fluxo de Caixa, Tabelas Detalhadas por Categoria, Evolução Mensal e Extrato Completo.',
     exportFullBackupTitle: 'Exportar Backup Completo (JSON)',
     exportFullBackupDesc:
-      'Baixe uma cópia completa do seu saldo, lançamentos, categorias e modelos mensais.',
+      'Baixe uma cópia completa de todos os dados da família: extrato bancário, cartões de crédito e limites, abastecimentos, categorias e despesas fixas.',
     downloadBackupBtn: 'Baixar Backup (.json)',
     restoreImportTitle: 'Restaurar / Importar Backup',
     restoreImportDesc: 'Importe um arquivo .json exportado anteriormente.',

@@ -761,7 +761,7 @@ export async function saveCreditCard(familyId, cardData) {
       isEncrypted ? 0 : Number(totalLimit || 0),
       isEncrypted ? 25 : Number(closingDay || 25),
       isEncrypted ? 5 : Number(dueDay || 5),
-      new Date().toISOString(),
+      cardData.createdAt || new Date().toISOString(),
       cleanIv,
       cleanEncrypted,
       cleanPayload,
@@ -1121,35 +1121,58 @@ export async function resetData(familyId) {
 }
 
 export async function importData(familyId, data) {
-  if (Array.isArray(data.transactions)) {
-    for (const t of data.transactions) {
-      if (!t.id) continue;
-      await saveTransaction(familyId, t);
+  if (data.mode === 'replace') {
+    await turso.execute({ sql: 'DELETE FROM transactions WHERE family_id = ?', args: [familyId] });
+    await turso.execute({ sql: 'DELETE FROM recurring_templates WHERE family_id = ?', args: [familyId] });
+    await turso.execute({ sql: 'DELETE FROM fuel_logs WHERE family_id = ?', args: [familyId] });
+    await turso.execute({ sql: 'DELETE FROM credit_cards WHERE family_id = ?', args: [familyId] });
+    await turso.execute({ sql: 'DELETE FROM categories WHERE family_id = ?', args: [familyId] });
+  }
+
+  if (data.settings && typeof data.settings === 'object') {
+    for (const [k, v] of Object.entries(data.settings)) {
+      if (v === undefined) continue;
+      await turso.execute({
+        sql: 'INSERT OR REPLACE INTO settings (family_id, key, value) VALUES (?, ?, ?)',
+        args: [familyId, k, String(v)],
+      });
     }
   }
-  if (Array.isArray(data.creditCards)) {
-    for (const c of data.creditCards) {
-      if (!c.id) continue;
-      await saveCreditCard(familyId, c);
-    }
-  }
+
   if (Array.isArray(data.categories)) {
     for (const c of data.categories) {
       if (!c.id) continue;
       await saveCategory(familyId, c);
     }
   }
-  if (Array.isArray(data.fuelLogs)) {
-    for (const f of data.fuelLogs) {
-      if (!f.id) continue;
-      await saveFuelLog(familyId, f);
+
+  if (Array.isArray(data.creditCards)) {
+    for (const c of data.creditCards) {
+      if (!c.id) continue;
+      await saveCreditCard(familyId, c);
     }
   }
+
   if (Array.isArray(data.recurringTemplates)) {
     for (const r of data.recurringTemplates) {
       if (!r.id) continue;
       await saveRecurring(familyId, r);
     }
   }
+
+  if (Array.isArray(data.fuelLogs)) {
+    for (const f of data.fuelLogs) {
+      if (!f.id) continue;
+      await saveFuelLog(familyId, f);
+    }
+  }
+
+  if (Array.isArray(data.transactions)) {
+    for (const t of data.transactions) {
+      if (!t.id) continue;
+      await saveTransaction(familyId, t);
+    }
+  }
+
   return getFullState(familyId);
 }

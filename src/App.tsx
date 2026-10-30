@@ -32,6 +32,13 @@ import {
   shiftMonth,
 } from './utils/format';
 import { TRANSLATIONS } from './utils/i18n';
+import {
+  applyBackupPreferences,
+  buildBackupPayload,
+  downloadBackupFile,
+  mergeBackupIntoState,
+  parseBackupPayload,
+} from './utils/backup';
 import { DashboardView } from './components/DashboardView';
 import { TransactionsView } from './components/TransactionsView';
 import { CreditCardsView } from './components/CreditCardsView';
@@ -799,17 +806,87 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleImportBackup = async (backupData: Partial<AppState>, mode: 'merge' | 'replace') => {
-    const res = await apiFetch('/api/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...backupData, mode }),
-    });
-    if (res.ok) {
+  const handleExportBackup = () => {
+    const payload = buildBackupPayload(state, { familyId, pendingOfflineTx });
+    downloadBackupFile(payload);
+    return payload.summary;
+  };
+
+  const handleImportBackup = async (
+    backupData: unknown,
+    mode: 'merge' | 'replace'
+  ): Promise<{ warnings: string[]; offline: boolean }> => {
+    // 1. Validate + normalize (accepts legacy v1 and full v2 backups)
+    const backup = parseBackupPayload(backupData);
+
+    // 2. Zero-Knowledge pipeline: every sensitive entity is encrypted on this device
+    //    before leaving the browser. Card links (cardId, invoiceMonth, purchaseDate,
+    //    settledInvoiceKey) travel inside the encrypted transaction payload.
+    const encryptAll = async () => {
+      if (!masterKey || !familyId) {
+        return {
+          categories: backup.categories,
+          creditCards: backup.creditCards,
+          transactions: backup.transactions,
+          recurringTemplates: backup.recurringTemplates,
+          fuelLogs: backup.fuelLogs,
+        };
+      }
+      const categories = [];
+      for (const c of backup.categories) categories.push(await encryptCategory(c, masterKey, familyId));
+      const creditCards = [];
+      for (const c of backup.creditCards) creditCards.push(await encryptCreditCard(c, masterKey, familyId));
+      const transactions = [];
+      for (const tx of backup.transactions) transactions.push(await encryptTransaction(tx, masterKey, familyId));
+      const recurringTemplates = [];
+      for (const r of backup.recurringTemplates) {
+        recurringTemplates.push({
+          ...(await encryptRecurringTemplate(r, masterKey, familyId)),
+          dayOfMonth: r.dayOfMonth,
+          isInstallment: r.isInstallment,
+        });
+      }
+      const fuelLogs = [];
+      for (const f of backup.fuelLogs) {
+        fuelLogs.push({
+          ...(await encryptFuelLog(f, masterKey, familyId)),
+          isFullTank: f.isFullTank,
+          fuelType: f.fuelType,
+        });
+      }
+      return { categories, creditCards, transactions, recurringTemplates, fuelLogs };
+    };
+
+    applyBackupPreferences(backup.preferences);
+
+    try {
+      const encrypted = await encryptAll();
+      const res = await apiFetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, settings: backup.settings, ...encrypted }),
+      });
+      if (!res.ok) throw new Error(`Import failed (${res.status})`);
       const rawData = await res.json();
       const data =
         masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
+      if (data?.settings?.theme) document.documentElement.setAttribute('data-theme', data.settings.theme);
+      setIsOnlineWithServer(true);
+      return { warnings: backup.warnings, offline: false };
+    } catch (err) {
+      console.error('[Backup] Remote restore failed, applying locally:', err);
+      setIsOnlineWithServer(false);
+      saveStateToCache(mergeBackupIntoState(state, backup, mode));
+      return {
+        warnings: [
+          ...backup.warnings,
+          language === 'pt-BR'
+            ? 'Sem conexão com o servidor: dados restaurados apenas neste dispositivo.'
+            : 'Server unreachable: data restored on this device only.',
+        ],
+        offline: true,
+      };
     }
   };
 
@@ -1376,6 +1453,7 @@ export const App: React.FC = () => {
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}
         onImportBackup={handleImportBackup}
+        onExportBackup={handleExportBackup}
         onResetAccount={handleResetAccount}
       />
     </div>

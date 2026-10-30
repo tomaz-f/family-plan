@@ -40,6 +40,7 @@ import {
 } from '../utils/exportReport';
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon, AVAILABLE_ICONS } from './CategoryIcon';
+import { BackupSummary } from '../utils/backup';
 
 interface MobileSyncModalProps {
   isOpen: boolean;
@@ -69,7 +70,11 @@ interface MobileSyncModalProps {
     cat: { name: string; type: TransactionType; color: string; icon: string }
   ) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
-  onImportBackup: (data: Partial<AppState>, mode: 'merge' | 'replace') => Promise<void>;
+  onImportBackup: (
+    data: unknown,
+    mode: 'merge' | 'replace'
+  ) => Promise<{ warnings: string[]; offline: boolean }>;
+  onExportBackup: () => BackupSummary;
   onResetAccount: () => Promise<void>;
 }
 
@@ -105,6 +110,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   onUpdateCategory,
   onDeleteCategory,
   onImportBackup,
+  onExportBackup,
   onResetAccount,
 }) => {
   const t = TRANSLATIONS[language];
@@ -321,21 +327,21 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   };
 
   const handleExportJSON = () => {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      settings: state.settings,
-      categories: state.categories,
-      transactions: state.transactions,
-      recurringTemplates: state.recurringTemplates,
-      fuelLogs: state.fuelLogs || [],
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `familyplan-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const summary = onExportBackup();
+      const countMsg =
+        language === 'pt-BR'
+          ? `Backup baixado: ${summary.transactions} transações (${summary.cardTransactions} em cartões), ${summary.creditCards} cartões, ${summary.fuelLogs} abastecimentos.`
+          : `Backup downloaded: ${summary.transactions} transactions (${summary.cardTransactions} on cards), ${summary.creditCards} cards, ${summary.fuelLogs} fuel logs.`;
+      setImportStatus(countMsg);
+      setTimeout(() => setImportStatus(''), 7000);
+    } catch (err: any) {
+      console.error('Export failed:', err);
+      setImportStatus(
+        err?.message ||
+          (language === 'pt-BR' ? 'Erro ao gerar backup.' : 'Failed to export backup.')
+      );
+    }
   };
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>, mode: 'merge' | 'replace') => {
@@ -345,14 +351,25 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
     reader.onload = async (ev) => {
       try {
         const parsed = JSON.parse(String(ev.target?.result || '{}'));
-        await onImportBackup(parsed, mode);
-        setImportStatus(t.backupImportedSuccess);
-        setTimeout(() => setImportStatus(''), 3000);
-      } catch {
-        setImportStatus(t.backupInvalidError);
+        const result = await onImportBackup(parsed, mode);
+        let msg = t.backupImportedSuccess;
+        if (result?.warnings?.length) {
+          msg += ` (${result.warnings.join(' • ')})`;
+        }
+        if (result?.offline) {
+          msg +=
+            language === 'pt-BR'
+              ? ' [Salvo localmente (offline)]'
+              : ' [Saved locally (offline)]';
+        }
+        setImportStatus(msg);
+        setTimeout(() => setImportStatus(''), 8000);
+      } catch (err: any) {
+        setImportStatus(err?.message || t.backupInvalidError);
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   return (
@@ -1310,24 +1327,100 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
 
           {tab === 'backup' && (
             <div className="space-y-4">
+              {/* Current Data Overview Pill Grid */}
+              <div className="p-3.5 rounded-2xl bg-slate-100/80 border border-slate-200">
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  {language === 'pt-BR' ? 'Dados Atuais no Espaço Familiar' : 'Current Family Space Data'}
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="block text-base font-extrabold text-slate-900">
+                      {state.transactions.length}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                      {language === 'pt-BR' ? 'Transações' : 'Transactions'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="block text-base font-extrabold text-indigo-600">
+                      {(state.creditCards || []).length}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                      {language === 'pt-BR' ? 'Cartões' : 'Cards'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="block text-base font-extrabold text-emerald-600">
+                      {(state.fuelLogs || []).length}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                      {language === 'pt-BR' ? 'Abastecimentos' : 'Fuel Logs'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="block text-base font-extrabold text-amber-600">
+                      {state.recurringTemplates.length}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                      {language === 'pt-BR' ? 'Recorrências' : 'Recurring'}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-xl border border-slate-200 col-span-2 sm:col-span-1">
+                    <span className="block text-base font-extrabold text-slate-700">
+                      {state.categories.length}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase">
+                      {language === 'pt-BR' ? 'Categorias' : 'Categories'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Export Full Backup Box */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
-                <h3 className="text-sm font-bold text-slate-900">{t.exportFullBackupTitle}</h3>
-                <p className="text-xs text-slate-600">{t.exportFullBackupDesc}</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
+                    <Download size={14} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">{t.exportFullBackupTitle}</h3>
+                    <p className="text-[11px] text-slate-500">
+                      {language === 'pt-BR'
+                        ? 'Formato completo v2: transações, cartões de crédito, limites, faturas, combustíveis e configurações.'
+                        : 'Complete format v2: transactions, credit cards, limits, invoices, fuel logs, and settings.'}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">{t.exportFullBackupDesc}</p>
                 <button
                   type="button"
                   onClick={handleExportJSON}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-all shadow-sm active:scale-95"
                 >
                   <Download size={15} />
                   {t.downloadBackupBtn}
                 </button>
               </div>
 
+              {/* Restore / Import Backup Box */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
-                <h3 className="text-sm font-bold text-slate-900">{t.restoreImportTitle}</h3>
-                <p className="text-xs text-slate-600">{t.restoreImportDesc}</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                    <Upload size={14} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">{t.restoreImportTitle}</h3>
+                    <p className="text-[11px] text-slate-500">
+                      {language === 'pt-BR'
+                        ? 'Compatível com backups v1 legados e v2 completos. Criptografia E2EE automática no envio.'
+                        : 'Compatible with legacy v1 and complete v2 backups. Automatic client-side E2EE encryption.'}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">{t.restoreImportDesc}</p>
+
                 <div className="flex flex-wrap gap-2.5 pt-1">
-                  <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-100">
+                  <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer hover:bg-slate-100 transition-all shadow-sm active:scale-95">
                     <Upload size={15} />
                     {t.mergeBackupBtn}
                     <input
@@ -1337,7 +1430,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                       onChange={(e) => handleFileImport(e, 'merge')}
                     />
                   </label>
-                  <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold cursor-pointer hover:bg-rose-100">
+                  <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold cursor-pointer hover:bg-rose-100 transition-all shadow-sm active:scale-95">
                     <Upload size={15} />
                     {t.replaceAllDataBtn}
                     <input
@@ -1348,7 +1441,13 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                     />
                   </label>
                 </div>
-                {importStatus && <p className="text-xs font-semibold text-emerald-600 pt-1">{importStatus}</p>}
+
+                {importStatus && (
+                  <div className="mt-2 p-3 rounded-xl bg-slate-900 text-white text-xs font-medium flex items-start gap-2 border border-slate-700">
+                    <Sparkles size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{importStatus}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
