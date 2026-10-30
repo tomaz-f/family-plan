@@ -11,6 +11,10 @@ import {
   CreditCard as CreditCardIcon,
   Repeat,
   RotateCcw,
+  ArrowUpRight,
+  ArrowDownRight,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { AppLanguage, Category, CreditCard, Transaction, TransactionType } from '../types';
 import {
@@ -22,7 +26,384 @@ import {
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
 
+export type FilterChipId = 'all' | 'pending-expense' | 'pending-income' | 'paid-expense' | 'paid-income';
+
 const PAGE_SIZE = 30;
+const SWIPE_REVEAL_WIDTH = 140;
+const SWIPE_SNAP_THRESHOLD = 55;
+const SWIPE_MAX_DRAG = 165;
+
+interface SwipeableTransactionRowProps {
+  tx: Transaction;
+  cat?: Category;
+  cardObj?: CreditCard | null;
+  currency: string;
+  language: AppLanguage;
+  isOpen: boolean;
+  anyRowOpen: boolean;
+  onSetOpenRow: (id: string | null) => void;
+  onOpenEditModal: (tx: Transaction) => void;
+  onDeleteTransaction: (id: string) => Promise<void>;
+  onToggleTransactionStatus: (tx: Transaction) => Promise<void>;
+}
+
+const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
+  tx,
+  cat,
+  cardObj,
+  currency,
+  language,
+  isOpen,
+  anyRowOpen,
+  onSetOpenRow,
+  onOpenEditModal,
+  onDeleteTransaction,
+  onToggleTransactionStatus,
+}) => {
+  const t = TRANSLATIONS[language];
+  const isUnpaid = tx.status === 'unpaid';
+
+  const [dragOffset, setDragOffset] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    initialOffset: number;
+    lock: 'none' | 'horizontal' | 'vertical';
+    currentOffset: number;
+    active: boolean;
+  }>({
+    startX: 0,
+    startY: 0,
+    initialOffset: 0,
+    lock: 'none',
+    currentOffset: 0,
+    active: false,
+  });
+
+  const lastSwipeTimeRef = useRef<number>(0);
+
+  const clampSwipeOffset = (rawOffset: number): number => {
+    if (rawOffset > 0) return 0;
+    if (rawOffset < -SWIPE_REVEAL_WIDTH) {
+      const extra = rawOffset + SWIPE_REVEAL_WIDTH;
+      return Math.max(-SWIPE_MAX_DRAG, -SWIPE_REVEAL_WIDTH + extra * 0.25);
+    }
+    return rawOffset;
+  };
+
+  const finishSwipeGesture = () => {
+    const g = gestureRef.current;
+    if (!g.active) return;
+    g.active = false;
+
+    if (g.lock === 'horizontal') {
+      lastSwipeTimeRef.current = Date.now();
+      const finalOffset = g.currentOffset;
+      if (g.initialOffset === 0) {
+        if (finalOffset <= -SWIPE_SNAP_THRESHOLD) {
+          onSetOpenRow(tx.id);
+        } else {
+          onSetOpenRow(null);
+        }
+      } else {
+        // Started open (-SWIPE_REVEAL_WIDTH): close if user dragged right by > 35px
+        if (finalOffset > -SWIPE_REVEAL_WIDTH + 35) {
+          onSetOpenRow(null);
+        } else {
+          onSetOpenRow(tx.id);
+        }
+      }
+    }
+
+    g.lock = 'none';
+    setIsDragging(false);
+    setDragOffset(null);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    if (anyRowOpen && !isOpen) {
+      onSetOpenRow(null);
+    }
+    const initial = isOpen ? -SWIPE_REVEAL_WIDTH : 0;
+    gestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      initialOffset: initial,
+      lock: 'none',
+      currentOffset: initial,
+      active: true,
+    };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const g = gestureRef.current;
+    if (!g.active || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - g.startX;
+    const deltaY = touch.clientY - g.startY;
+
+    if (g.lock === 'none') {
+      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        g.lock = 'vertical';
+        g.active = false;
+        return;
+      }
+      g.lock = 'horizontal';
+      setIsDragging(true);
+    }
+
+    if (g.lock === 'horizontal') {
+      const next = clampSwipeOffset(g.initialOffset + deltaX);
+      g.currentOffset = next;
+      setDragOffset(next);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    finishSwipeGesture();
+  };
+
+  // Desktop mouse click-and-drag fallback
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if (anyRowOpen && !isOpen) {
+      onSetOpenRow(null);
+    }
+    const initial = isOpen ? -SWIPE_REVEAL_WIDTH : 0;
+    gestureRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialOffset: initial,
+      lock: 'none',
+      currentOffset: initial,
+      active: true,
+    };
+
+    const handleWindowMouseMove = (ev: MouseEvent) => {
+      const g = gestureRef.current;
+      if (!g.active) return;
+      const deltaX = ev.clientX - g.startX;
+      const deltaY = ev.clientY - g.startY;
+
+      if (g.lock === 'none') {
+        if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          g.lock = 'vertical';
+          g.active = false;
+          return;
+        }
+        g.lock = 'horizontal';
+        setIsDragging(true);
+      }
+
+      if (g.lock === 'horizontal') {
+        const next = clampSwipeOffset(g.initialOffset + deltaX);
+        g.currentOffset = next;
+        setDragOffset(next);
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      finishSwipeGesture();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  const handleRowClick = () => {
+    if (Date.now() - lastSwipeTimeRef.current < 260) return;
+    if (isOpen || anyRowOpen) {
+      onSetOpenRow(null);
+      return;
+    }
+    onOpenEditModal(tx);
+  };
+
+  const translateX = dragOffset !== null ? dragOffset : isOpen ? -SWIPE_REVEAL_WIDTH : 0;
+
+  return (
+    <div
+      data-swipe-row-id={tx.id}
+      className="relative overflow-hidden select-none"
+    >
+      {/* Background Action Layer (Revealed beneath on left-swipe) */}
+      <div
+        className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-2 pr-3 pl-2 z-0"
+        style={{ width: `${SWIPE_REVEAL_WIDTH}px` }}
+        aria-hidden={!isOpen && dragOffset === null}
+      >
+        {/* 1. Status Toggle (Paid / Pending) */}
+        <button
+          type="button"
+          tabIndex={isOpen ? 0 : -1}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetOpenRow(null);
+            onToggleTransactionStatus(tx);
+          }}
+          className="swipe-action-btn w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
+        >
+          {isUnpaid ? (
+            <Clock size={15} className="text-amber-500" />
+          ) : (
+            <ThumbsUp size={15} className="text-emerald-500" />
+          )}
+        </button>
+
+        {/* 2. Edit Transaction */}
+        <button
+          type="button"
+          tabIndex={isOpen ? 0 : -1}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetOpenRow(null);
+            onOpenEditModal(tx);
+          }}
+          className="swipe-action-btn w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          title={t.editTooltip}
+        >
+          <Pencil size={15} />
+        </button>
+
+        {/* 3. Delete Transaction */}
+        <button
+          type="button"
+          tabIndex={isOpen ? 0 : -1}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetOpenRow(null);
+            onDeleteTransaction(tx.id);
+          }}
+          className="swipe-action-btn-danger w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          title={t.deleteTooltip}
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+
+      {/* Foreground Content Layer (Swipeable solid surface card) */}
+      <div
+        role="button"
+        tabIndex={0}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onSetOpenRow(isOpen ? null : tx.id);
+        }}
+        onClick={handleRowClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpenEditModal(tx);
+          } else if (e.key === 'ArrowLeft') {
+            onSetOpenRow(tx.id);
+          } else if (e.key === 'ArrowRight' || e.key === 'Escape') {
+            onSetOpenRow(null);
+          }
+        }}
+        style={{
+          transform: `translate3d(${translateX}px, 0, 0)`,
+          transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          willChange: isDragging || isOpen ? 'transform' : 'auto',
+        }}
+        className="swipe-foreground-layer relative z-10 flex items-center justify-between p-3 sm:p-3.5 transition-colors gap-2 sm:gap-3 select-none cursor-pointer"
+      >
+        {/* Left: Category Icon + Transaction Details */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+          <CategoryIcon
+            icon={cat?.icon || 'Tag'}
+            color={cat?.color || '#64748b'}
+            size={16}
+            badgeSize="md"
+          />
+
+          <div className="min-w-0 flex-1">
+            <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
+              {tx.description}
+            </p>
+
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
+              <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
+                {getCategoryDisplayName(cat, language)}
+              </span>
+              <span>•</span>
+              <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
+
+              {cardObj && (
+                <>
+                  <span>•</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                    <CreditCardIcon size={9} />
+                    <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
+                  </span>
+                </>
+              )}
+
+              {tx.installmentTotal && tx.installmentTotal > 1 && (
+                <>
+                  <span>•</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
+                    {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                  </span>
+                </>
+              )}
+
+              {isUnpaid && (
+                <>
+                  <span>•</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
+                    <Clock size={9} />
+                    <span>{t.pendingBadge}</span>
+                  </span>
+                </>
+              )}
+
+              {tx.recurringId && !tx.installmentTotal && (
+                <>
+                  <span>•</span>
+                  <Repeat size={10} className="text-slate-400" />
+                </>
+              )}
+
+              {tx.notes && (
+                <>
+                  <span>•</span>
+                  <span className="italic truncate max-w-[90px] sm:max-w-[180px]">{tx.notes}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Formatted Transaction Amount Only (Action buttons hidden behind foreground) */}
+        <div className="flex items-center shrink-0 pl-1">
+          <span
+            className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
+              tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
+            }`}
+          >
+            {tx.type === 'income' ? '+' : '-'}
+            {formatCurrency(tx.amount, currency)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface TransactionsViewProps {
   selectedMonth: string;
@@ -36,6 +417,14 @@ interface TransactionsViewProps {
   onDeleteTransaction: (id: string) => Promise<void>;
   onToggleTransactionStatus: (tx: Transaction) => Promise<void>;
   balanceCard?: React.ReactNode;
+  currentBankBalance?: number;
+  monthStats?: {
+    income: number;
+    expense: number;
+    pendingIncome: number;
+    pendingExpense: number;
+  };
+  onOpenBalanceModal?: () => void;
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
@@ -49,8 +438,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onDeleteTransaction,
   onToggleTransactionStatus,
   balanceCard,
+  currentBankBalance,
+  monthStats,
+  onOpenBalanceModal,
 }) => {
   const t = TRANSLATIONS[language];
+  const [activeFilterChip, setActiveFilterChip] = useState<FilterChipId>('all');
   const [scope, setScope] = useState<'month' | 'all'>('month');
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
@@ -59,27 +452,59 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'>('date-desc');
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const [openSwipeRowId, setOpenSwipeRowId] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  const filterChips: { id: FilterChipId; label: string }[] = useMemo(
+    () => [
+      { id: 'all', label: language === 'pt-BR' ? 'Todos' : 'All' },
+      { id: 'pending-expense', label: language === 'pt-BR' ? 'Despesas pendentes' : 'Pending expenses' },
+      { id: 'pending-income', label: language === 'pt-BR' ? 'Entradas pendentes' : 'Pending income' },
+      { id: 'paid-expense', label: language === 'pt-BR' ? 'Despesas pagas' : 'Paid expenses' },
+      { id: 'paid-income', label: language === 'pt-BR' ? 'Entradas pagas' : 'Paid income' },
+    ],
+    [language]
+  );
 
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
-  // Reset pagination when filters or month change
+  // Reset pagination & open swipe row when filters or month change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [selectedMonth, scope, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy]);
+    setOpenSwipeRowId(null);
+  }, [selectedMonth, scope, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy]);
+
+  // Close open swipe row when tapping outside of it
+  useEffect(() => {
+    if (!openSwipeRowId) return;
+    const handleOutsidePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const rowEl = target.closest(`[data-swipe-row-id="${openSwipeRowId}"]`);
+      if (!rowEl) {
+        setOpenSwipeRowId(null);
+      }
+    };
+    document.addEventListener('pointerdown', handleOutsidePointerDown, { passive: true });
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+    };
+  }, [openSwipeRowId]);
 
   // Count active non-default filters
   const activeFilterCount = useMemo(() => {
     let count = 0;
+    if (activeFilterChip !== 'all') count++;
     if (scope === 'all') count++;
     if (typeFilter !== 'all') count++;
     if (statusFilter !== 'all') count++;
     if (categoryFilter !== 'all') count++;
     if (sortBy !== 'date-desc') count++;
     return count;
-  }, [scope, typeFilter, statusFilter, categoryFilter, sortBy]);
+  }, [activeFilterChip, scope, typeFilter, statusFilter, categoryFilter, sortBy]);
 
   const handleResetFilters = () => {
+    setActiveFilterChip('all');
     setScope('month');
     setTypeFilter('all');
     setStatusFilter('all');
@@ -91,6 +516,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return transactions
       .filter((tx) => {
         if (scope === 'month' && !tx.date.startsWith(selectedMonth)) return false;
+
+        const isUnpaid = tx.status === 'unpaid';
+        if (activeFilterChip === 'pending-expense' && !(tx.type === 'expense' && isUnpaid)) return false;
+        if (activeFilterChip === 'pending-income' && !(tx.type === 'income' && isUnpaid)) return false;
+        if (activeFilterChip === 'paid-expense' && !(tx.type === 'expense' && !isUnpaid)) return false;
+        if (activeFilterChip === 'paid-income' && !(tx.type === 'income' && !isUnpaid)) return false;
+
         if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
         const txStatus = tx.status === 'unpaid' ? 'unpaid' : 'paid';
         if (statusFilter !== 'all' && txStatus !== statusFilter) return false;
@@ -112,7 +544,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         if (sortBy === 'amount-desc') return b.amount - a.amount;
         return a.amount - b.amount;
       });
-  }, [transactions, scope, selectedMonth, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy, categoryMap, language]);
+  }, [transactions, scope, selectedMonth, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy, categoryMap, language]);
 
   const summary = useMemo(() => {
     let income = 0;
@@ -164,131 +596,216 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return () => observer.disconnect();
   }, [hasMore, filteredTransactions.length]);
 
+  // Privacy state for balance and figures masking
+  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('prumo_hide_balance') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleBalancePrivacy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsBalanceHidden((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('prumo_hide_balance', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const computedFallbackStats = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    let pendingIncome = 0;
+    let pendingExpense = 0;
+    let allPaidIncome = 0;
+    let allPaidExpense = 0;
+
+    for (const tx of transactions) {
+      if (tx.status === 'unpaid') {
+        if (tx.date.startsWith(selectedMonth)) {
+          if (tx.type === 'income') pendingIncome += tx.amount;
+          else pendingExpense += tx.amount;
+        }
+        continue;
+      }
+      if (tx.cardId) continue;
+      if (tx.type === 'income') allPaidIncome += tx.amount;
+      else allPaidExpense += tx.amount;
+
+      if (tx.date.startsWith(selectedMonth)) {
+        if (tx.type === 'income') income += tx.amount;
+        else expense += tx.amount;
+      }
+    }
+
+    return {
+      stats: { income, expense, pendingIncome, pendingExpense },
+      balance: allPaidIncome - allPaidExpense,
+    };
+  }, [transactions, selectedMonth]);
+
+  const effectiveStats = monthStats ?? computedFallbackStats.stats;
+  const effectiveBankBalance = currentBankBalance ?? computedFallbackStats.balance;
+
   // Preserve summary reference so TypeScript keeps calculation logic active
   void summary;
 
   return (
-    <div className="space-y-4">
-      {/* 1. SLIM TOOLBAR: Busca Minimalista + Botão de Filtros */}
-      <div className="flex items-center gap-2">
-        {/* Campo de Busca Compacto */}
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder={language === 'pt-BR' ? 'Pesquisar...' : 'Search...'}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
-              title={language === 'pt-BR' ? 'Limpar busca' : 'Clear search'}
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
+    <div className="space-y-3.5 sm:space-y-4">
+      {/* 1. UNIFIED 2-COLUMN BALANCE, SEARCH & STATS CARD (PRUMO MOCKUP) */}
+      <div className="oled-main-card rounded-2xl sm:rounded-3xl bg-[#0D1117] text-white p-4 sm:p-5 border border-[#21262D] shadow-xs">
+        <div className="flex items-center justify-between gap-3.5 sm:gap-5">
+          {/* Left Column: Balance, Search, Filter Chips */}
+          <div className="flex-1 min-w-0 flex flex-col justify-between space-y-2.5 sm:space-y-3">
+            {/* Row 1: Balance Amount & Privacy Toggle */}
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <h1
+                role={onOpenBalanceModal ? 'button' : undefined}
+                tabIndex={onOpenBalanceModal ? 0 : undefined}
+                onClick={onOpenBalanceModal}
+                onKeyDown={(e) => {
+                  if (onOpenBalanceModal && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onOpenBalanceModal();
+                  }
+                }}
+                className={`text-[28px] min-[375px]:text-3xl min-[410px]:text-[34px] sm:text-4xl font-black tracking-tight leading-none truncate ${
+                  onOpenBalanceModal ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
+                } ${effectiveBankBalance < 0 ? 'text-rose-400' : 'text-[#F8FAFC]'}`}
+                title={
+                  onOpenBalanceModal
+                    ? language === 'pt-BR'
+                      ? 'Ajustar saldo inicial'
+                      : 'Adjust initial balance'
+                    : undefined
+                }
+              >
+                {isBalanceHidden ? 'R$ ••••••' : formatCurrency(effectiveBankBalance, currency)}
+              </h1>
 
-        {/* Botão de Filtros (Abre Bottom Sheet) */}
-        <button
-          type="button"
-          onClick={() => setIsFilterSheetOpen(true)}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-all shrink-0 active:scale-95 active:opacity-85 ${
-            activeFilterCount > 0
-              ? 'border-[#6E5440] bg-[#6E5440]/20 text-[#D0B595] shadow-xs'
-              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          <SlidersHorizontal size={14} />
-          <span>{t.filtersBtn}</span>
-          {activeFilterCount > 0 && (
-            <span className="w-4 h-4 rounded-full bg-[#6E5440] text-[#FFFDF5] text-[10px] font-bold flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
+              <button
+                type="button"
+                onClick={toggleBalancePrivacy}
+                className="p-1 rounded-lg text-slate-400 hover:text-white active:scale-90 transition-all shrink-0 focus:outline-none flex items-center justify-center"
+                title={
+                  isBalanceHidden
+                    ? language === 'pt-BR'
+                      ? 'Mostrar saldo'
+                      : 'Show balance'
+                    : language === 'pt-BR'
+                    ? 'Ocultar saldo'
+                    : 'Hide balance'
+                }
+                aria-label={isBalanceHidden ? 'Show balance' : 'Hide balance'}
+              >
+                {isBalanceHidden ? (
+                  <EyeOff size={22} className="stroke-[2.2]" />
+                ) : (
+                  <Eye size={22} className="stroke-[2.2]" />
+                )}
+              </button>
+            </div>
+
+            {/* Row 2: Integrated WhatsApp-style Search Input */}
+            <div className="relative w-full">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 z-10 w-4 h-4"
+              />
+              <input
+                type="text"
+                placeholder={language === 'pt-BR' ? 'Pesquisar lançamentos...' : 'Search transactions...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="whatsapp-search-input w-full h-9 sm:h-9.5 pl-11 pr-10 rounded-full text-xs sm:text-sm text-[#F8FAFC] placeholder:text-slate-400 focus:outline-none transition-all shadow-inner-xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-white transition-colors z-10"
+                  title={language === 'pt-BR' ? 'Limpar busca' : 'Clear search'}
+                >
+                  <X size={14} className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Row 3: Horizontal Scrollable Filter Chips Carousel */}
+            <div className="w-full flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5 -my-0.5 min-w-0">
+              {filterChips.map((chip) => {
+                const isSelected = activeFilterChip === chip.id;
+                return (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => setActiveFilterChip(chip.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap border shrink-0 transition-all active:scale-95 select-none ${
+                      isSelected ? 'filter-chip-active font-semibold shadow-xs' : 'filter-chip-inactive'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Column: Stacked Income & Expenses Summary (Anchored Right) */}
+          <div className="shrink-0 text-right flex flex-col items-end justify-between space-y-3 sm:space-y-3.5 pl-2 sm:pl-3">
+            {/* Top Group: ENTRADAS */}
+            <div className="flex flex-col items-end text-right">
+              <div className="flex items-center gap-1 text-[#10B981] mb-0.5 justify-end">
+                <ArrowUpRight size={14} strokeWidth={2.5} className="shrink-0" />
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-300">
+                  {language === 'pt-BR' ? 'ENTRADAS' : 'INCOME'}
+                </span>
+              </div>
+              <p className="text-base sm:text-lg font-black text-[#10B981] tracking-tight leading-tight">
+                {isBalanceHidden ? '+R$ ••••••' : `+${formatCurrency(effectiveStats.income, currency)}`}
+              </p>
+              <p
+                className="text-[11px] sm:text-xs font-medium text-[#94A3B8] mt-0.5 whitespace-nowrap"
+                title={`${language === 'pt-BR' ? 'A receber:' : 'To receive:'} ${formatCurrency(effectiveStats.pendingIncome, currency)}`}
+              >
+                {language === 'pt-BR' ? 'A receber:' : 'To receive:'}{' '}
+                <span className="text-white font-bold ml-0.5">
+                  {isBalanceHidden ? 'R$ ••••' : formatCurrency(effectiveStats.pendingIncome, currency)}
+                </span>
+              </p>
+            </div>
+
+            {/* Bottom Group: DESPESAS */}
+            <div className="flex flex-col items-end text-right">
+              <div className="flex items-center gap-1 text-[#EF4444] mb-0.5 justify-end">
+                <ArrowDownRight size={14} strokeWidth={2.5} className="shrink-0" />
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-300">
+                  {language === 'pt-BR' ? 'DESPESAS' : 'EXPENSES'}
+                </span>
+              </div>
+              <p className="text-base sm:text-lg font-black text-[#EF4444] tracking-tight leading-tight">
+                {isBalanceHidden ? '-R$ ••••••' : `-${formatCurrency(effectiveStats.expense, currency)}`}
+              </p>
+              <p
+                className="text-[11px] sm:text-xs font-medium text-[#94A3B8] mt-0.5 whitespace-nowrap"
+                title={`${language === 'pt-BR' ? 'A pagar:' : 'To pay:'} ${formatCurrency(effectiveStats.pendingExpense, currency)}`}
+              >
+                {language === 'pt-BR' ? 'A pagar:' : 'To pay:'}{' '}
+                <span className="text-white font-bold ml-0.5">
+                  {isBalanceHidden ? 'R$ ••••' : formatCurrency(effectiveStats.pendingExpense, currency)}
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Active Filter Pills (quando houver filtros aplicados) */}
-      {activeFilterCount > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
-          {scope === 'all' && (
-            <button
-              type="button"
-              onClick={() => setScope('month')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
-            >
-              <span>{t.allTime}</span>
-              <X size={11} className="text-slate-400" />
-            </button>
-          )}
-
-          {typeFilter !== 'all' && (
-            <button
-              type="button"
-              onClick={() => setTypeFilter('all')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
-            >
-              <span>{typeFilter === 'income' ? t.filterInputsOnly : t.filterExpensesOnly}</span>
-              <X size={11} className="text-slate-400" />
-            </button>
-          )}
-
-          {statusFilter !== 'all' && (
-            <button
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
-            >
-              <span>{statusFilter === 'paid' ? t.filterPaidOnly : t.filterPendingOnly}</span>
-              <X size={11} className="text-slate-400" />
-            </button>
-          )}
-
-          {selectedCategoryObj && (
-            <button
-              type="button"
-              onClick={() => setCategoryFilter('all')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
-            >
-              <span>{getCategoryDisplayName(selectedCategoryObj, language)}</span>
-              <X size={11} className="text-slate-400" />
-            </button>
-          )}
-
-          {sortBy !== 'date-desc' && (
-            <button
-              type="button"
-              onClick={() => setSortBy('date-desc')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium shrink-0 hover:bg-slate-200"
-            >
-              <span>
-                {sortBy === 'date-asc'
-                  ? t.sortOldest
-                  : sortBy === 'amount-desc'
-                  ? t.sortHighest
-                  : t.sortLowest}
-              </span>
-              <X size={11} className="text-slate-400" />
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleResetFilters}
-            className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 px-1 shrink-0 ml-1"
-          >
-            {t.clearFiltersBtn}
-          </button>
-        </div>
-      )}
-
-      {/* 2. MAIN BALANCE CARD (Rendered between Search and Transactions List) */}
-      {balanceCard}
+      {/* Fallback legacy balance card if provided without monthStats */}
+      {balanceCard && !monthStats && balanceCard}
 
       {/* 3. CLEAN TRANSACTIONS LIST: Visual Neutro e Elegante */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
@@ -312,155 +829,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <div className="divide-y divide-slate-100">
               {visibleTransactions.map((tx) => {
                 const cat = categoryMap.get(tx.categoryId);
-                const isUnpaid = tx.status === 'unpaid';
                 const cardObj = tx.cardId ? creditCards.find((c) => c.id === tx.cardId) : null;
 
                 return (
-                  <div
+                  <SwipeableTransactionRow
                     key={tx.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onOpenEditModal(tx)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onOpenEditModal(tx);
-                      }
-                    }}
-                    className="flex items-center justify-between p-3 sm:p-3.5 hover:bg-slate-50/70 active:bg-slate-100/60 transition-colors gap-2 sm:gap-3 select-none cursor-pointer"
-                  >
-                    {/* Left: Category Icon with custom category color + Clean Info */}
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                      {/* Category Icon with category color tint & vibrant icon drawing */}
-                      <CategoryIcon
-                        icon={cat?.icon || 'Tag'}
-                        color={cat?.color || '#64748b'}
-                        size={16}
-                        badgeSize="md"
-                      />
-
-                      {/* Text info */}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
-                          {tx.description}
-                        </p>
-
-                        {/* Subtitle / Details: Neutral typography */}
-                        <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-0.5 leading-none">
-                          <span className="text-slate-500 font-medium truncate max-w-[110px] sm:max-w-none">
-                            {getCategoryDisplayName(cat, language)}
-                          </span>
-                          <span>•</span>
-                          <span className="whitespace-nowrap">{formatShortDate(tx.date, language)}</span>
-
-                          {cardObj && (
-                            <>
-                              <span>•</span>
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                                <CreditCardIcon size={9} />
-                                <span className="truncate max-w-[70px] sm:max-w-none">{cardObj.name}</span>
-                              </span>
-                            </>
-                          )}
-
-                          {tx.installmentTotal && tx.installmentTotal > 1 && (
-                            <>
-                              <span>•</span>
-                              <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                                {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                              </span>
-                            </>
-                          )}
-
-                          {isUnpaid && (
-                            <>
-                              <span>•</span>
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                                <Clock size={9} />
-                                <span>{t.pendingBadge}</span>
-                              </span>
-                            </>
-                          )}
-
-                          {tx.recurringId && !tx.installmentTotal && (
-                            <>
-                              <span>•</span>
-                              <Repeat size={10} className="text-slate-400" />
-                            </>
-                          )}
-
-                          {tx.notes && (
-                            <>
-                              <span>•</span>
-                              <span className="italic truncate max-w-[90px] sm:max-w-[180px]">{tx.notes}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: Semantic Value + Minimal Quick Action Buttons */}
-                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                      {/* Exclusive semantic color for financial value */}
-                      <span
-                        className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
-                          tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
-                        }`}
-                      >
-                        {tx.type === 'income' ? '+' : '-'}
-                        {formatCurrency(tx.amount, currency)}
-                      </span>
-
-                      {/* Minimalist discreet action buttons */}
-                      <div
-                        className="flex items-center gap-0.5"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {/* Status toggle (pago / pendente) */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleTransactionStatus(tx);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
-                          title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
-                        >
-                          {isUnpaid ? (
-                            <Clock size={14} className="text-amber-500" />
-                          ) : (
-                            <ThumbsUp size={14} className="text-slate-400 hover:text-slate-600" />
-                          )}
-                        </button>
-
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenEditModal(tx);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-90 active:opacity-75 transition-all"
-                          title={t.editTooltip}
-                        >
-                          <Pencil size={14} />
-                        </button>
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteTransaction(tx.id);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 active:scale-90 active:opacity-75 transition-all"
-                          title={t.deleteTooltip}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    tx={tx}
+                    cat={cat}
+                    cardObj={cardObj}
+                    currency={currency}
+                    language={language}
+                    isOpen={openSwipeRowId === tx.id}
+                    anyRowOpen={openSwipeRowId !== null}
+                    onSetOpenRow={setOpenSwipeRowId}
+                    onOpenEditModal={onOpenEditModal}
+                    onDeleteTransaction={onDeleteTransaction}
+                    onToggleTransactionStatus={onToggleTransactionStatus}
+                  />
                 );
               })}
             </div>

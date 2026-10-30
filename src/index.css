@@ -91,7 +91,7 @@ header {
 
 /* Tactile active feedback on touch controls */
 button:active:not(:disabled),
-[role="button"]:active:not([aria-disabled="true"]) {
+[role="button"]:not(.swipe-foreground-layer):active:not([aria-disabled="true"]) {
   transform: scale(0.97);
   opacity: 0.85;
   transition: transform 0.08s ease, opacity 0.08s ease;
@@ -114,7 +114,8 @@ html[data-theme="light"] .oled-main-card .text-white {
   color: #0F172A !important;
 }
 
-html[data-theme="light"] .oled-main-card .text-zinc-400 {
+html[data-theme="light"] .oled-main-card .text-zinc-400,
+html[data-theme="light"] .oled-main-card .text-slate-300 {
   color: #64748B !important;
 }
 
@@ -199,8 +200,11 @@ html[data-theme="oled"] {
   color-scheme: dark;
 }
 
+html[data-theme="oled"],
 html[data-theme="oled"] body,
-html[data-theme="oled"] .app-shell {
+html[data-theme="oled"] #root,
+html[data-theme="oled"] .app-shell,
+html[data-theme="oled"] main {
   background-color: #000000 !important;
   color: #F8FAFC !important;
 }
@@ -212,7 +216,7 @@ html[data-theme="oled"] header {
 }
 
 html[data-theme="oled"] .fixed.bottom-0 {
-  background-color: rgba(0, 0, 0, 0.95) !important;
+  background-color: rgba(13, 17, 23, 0.96) !important;
   border-color: #21262D !important;
 }
 
@@ -239,7 +243,7 @@ html[data-theme="oled"] .bg-white\/95 {
 }
 
 /* Interactive Elements, Secondary Surfaces & Pills (#161B22) */
-html[data-theme="oled"] .bg-slate-50,
+html[data-theme="oled"] .bg-slate-50:not(.app-shell),
 html[data-theme="oled"] .bg-slate-50\/70,
 html[data-theme="oled"] .bg-slate-100,
 html[data-theme="oled"] .bg-slate-100\/80,
@@ -394,6 +398,160 @@ html[data-theme="oled"] .bg-amber-500\/10 {
 
 html[data-theme="oled"] .bg-rose-500\/10 {
   background-color: rgba(239, 68, 68, 0.14) !important;
+}
+
+/* =========================================================
+   WhatsApp-Style Search Bar & Horizontal Filter Chips
+   ========================================================= */
+.whatsapp-search-input {
+  min-height: 36px !important;
+  height: 38px !important;
+  padding-left: 2.75rem !important;
+  padding-right: 2.5rem !important;
+  background-color: #1C222B !important;
+  border: 1px solid #2B3441 !important;
+  color: #F8FAFC !important;
+}
+.whatsapp-search-input::placeholder {
+  color: #94A3B8 !important;
+}
+.whatsapp-search-input:focus {
+  border-color: #6E5440 !important;
+  box-shadow: 0 0 0 1px #6E5440 !important;
+  outline: none !important;
+}
+
+html[data-theme="light"] .whatsapp-search-input {
+  min-height: 36px !important;
+  height: 38px !important;
+  padding-left: 2.75rem !important;
+  padding-right: 2.5rem !important;
+  background-color: #F1F5F9 !important;
+  border: 1px solid #E2E8F0 !important;
+  color: #0F172A !important;
+}
+html[data-theme="light"] .whatsapp-search-input::placeholder {
+  color: #94A3B8 !important;
+}
+html[data-theme="light"] .whatsapp-search-input:focus {
+  border-color: #6E5440 !important;
+  box-shadow: 0 0 0 1px #6E5440 !important;
+}
+
+/* Horizontal Filter Chips */
+.filter-chip-active {
+  background-color: #6E5440 !important;
+  border-color: #7E624B !important;
+  color: #F8FAFC !important;
+}
+
+.filter-chip-inactive {
+  background-color: #161B22 !important;
+  border-color: #21262D !important;
+  color: #94A3B8 !important;
+}
+.filter-chip-inactive:hover {
+  background-color: #1C222B !important;
+  color: #F8FAFC !important;
+}
+
+html[data-theme="light"] .filter-chip-active {
+  background-color: #6E5440 !important;
+  border-color: #7E624B !important;
+  color: #FFFDF5 !important;
+}
+
+html[data-theme="light"] .filter-chip-inactive {
+  background-color: #F1F5F9 !important;
+  border-color: #E2E8F0 !important;
+  color: #64748B !important;
+}
+html[data-theme="light"] .filter-chip-inactive:hover {
+  background-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+/* Hide scrollbars for horizontal chip carousels */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* =========================================================
+   Swipeable Transaction Row Layers (OLED & Claro)
+   ========================================================= */
+.swipe-actions-layer {
+  background-color: #06080C !important;
+}
+
+.swipe-foreground-layer {
+  background-color: #0D1117 !important;
+  touch-action: pan-y;
+}
+
+.swipe-foreground-layer:hover {
+  background-color: #121720 !important;
+}
+
+.swipe-action-btn {
+  background-color: #161B22 !important;
+  border: 1px solid #21262D !important;
+  color: #CBD5E1 !important;
+}
+
+.swipe-action-btn:hover {
+  background-color: #21262D !important;
+  color: #F8FAFC !important;
+}
+
+.swipe-action-btn-danger {
+  background-color: #161B22 !important;
+  border: 1px solid #21262D !important;
+  color: #F87171 !important;
+}
+
+.swipe-action-btn-danger:hover {
+  background-color: rgba(239, 68, 68, 0.16) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  color: #FCA5A5 !important;
+}
+
+html[data-theme="light"] .swipe-actions-layer {
+  background-color: #F1F5F9 !important;
+}
+
+html[data-theme="light"] .swipe-foreground-layer {
+  background-color: #FFFFFF !important;
+}
+
+html[data-theme="light"] .swipe-foreground-layer:hover {
+  background-color: #F8FAFC !important;
+}
+
+html[data-theme="light"] .swipe-action-btn {
+  background-color: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .swipe-action-btn:hover {
+  background-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+html[data-theme="light"] .swipe-action-btn-danger {
+  background-color: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  color: #EF4444 !important;
+}
+
+html[data-theme="light"] .swipe-action-btn-danger:hover {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #DC2626 !important;
 }
 
 @media print {

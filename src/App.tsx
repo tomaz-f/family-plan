@@ -1391,7 +1391,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="app-shell min-h-[100dvh] w-full flex flex-col bg-slate-50 text-slate-900 pb-28 transition-colors">
+    <div className="app-shell min-h-[100dvh] w-full flex flex-col bg-[#F8FAFC] text-slate-900 pb-28 transition-colors">
       {/* TOP NAVIGATION HEADER (Mobile-First Centered Container) */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 print:hidden pt-[env(safe-area-inset-top,0px)]">
         <div className="max-w-lg w-full mx-auto px-4 h-16 flex items-center justify-between gap-2">

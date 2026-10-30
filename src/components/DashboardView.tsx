@@ -1,9 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
-  ArrowUpRight,
-  ArrowDownRight,
-  Eye,
-  EyeOff,
   TrendingUp,
   TrendingDown,
   Plus,
@@ -433,130 +429,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     CategoryIcon,
   };
 
-  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('prumo_hide_balance') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const toggleBalancePrivacy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsBalanceHidden((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('prumo_hide_balance', String(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  // Main Balance Card Element (Rendered between Search and Transactions List)
-  const balanceCardElement = (
-    <div className="oled-main-card rounded-2xl bg-[#0D1117] text-white px-4 py-4 sm:px-6 sm:py-5 border border-[#21262D]">
-      {/* Centered Main Balance with Proportional Privacy Toggle */}
-      <div className="flex items-center justify-center gap-2.5 py-0.5">
-        <h1
-          role={onOpenBalanceModal ? 'button' : undefined}
-          tabIndex={onOpenBalanceModal ? 0 : undefined}
-          onClick={onOpenBalanceModal}
-          onKeyDown={(e) => {
-            if (onOpenBalanceModal && (e.key === 'Enter' || e.key === ' ')) {
-              e.preventDefault();
-              onOpenBalanceModal();
-            }
-          }}
-          className={`text-[32px] sm:text-[38px] font-black tracking-tight leading-none text-center truncate ${
-            onOpenBalanceModal ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
-          } ${(currentBankBalance ?? 0) < 0 ? 'text-rose-400' : 'text-white'}`}
-          title={
-            onOpenBalanceModal
-              ? language === 'pt-BR'
-                ? 'Ajustar saldo inicial'
-                : 'Adjust initial balance'
-              : undefined
-          }
-        >
-          {isBalanceHidden ? '••••••' : formatCurrency(currentBankBalance ?? 0, currency)}
-        </h1>
-
-        <button
-          type="button"
-          onClick={toggleBalancePrivacy}
-          className="p-1 rounded-lg text-zinc-400 hover:text-white active:scale-90 transition-all shrink-0 focus:outline-none"
-          title={
-            isBalanceHidden
-              ? language === 'pt-BR'
-                ? 'Mostrar saldo'
-                : 'Show balance'
-              : language === 'pt-BR'
-              ? 'Ocultar saldo'
-              : 'Hide balance'
-          }
-          aria-label={isBalanceHidden ? 'Show balance' : 'Hide balance'}
-        >
-          {isBalanceHidden ? (
-            <EyeOff size={22} className="stroke-[2.2]" />
-          ) : (
-            <Eye size={22} className="stroke-[2.2]" />
-          )}
-        </button>
-      </div>
-
-      {/* Monthly Summary Section (Two Centered Columns with Enhanced Typography) */}
-      <div className="mt-3.5 pt-3 border-t border-[#21262D] flex justify-center gap-10 sm:gap-16">
-        {/* Column 1 (ENTRADAS) */}
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
-            <div className="w-4.5 h-4.5 rounded-full bg-emerald-500/15 text-[#10B981] flex items-center justify-center shrink-0">
-              <ArrowUpRight size={12} strokeWidth={2.5} />
-            </div>
-            <span className="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-zinc-400 truncate">
-              {language === 'pt-BR' ? 'ENTRADAS' : 'INCOME'}
-            </span>
-          </div>
-          <p className="text-lg sm:text-xl font-black text-[#10B981] tracking-tight truncate">
-            {isBalanceHidden ? '+••••••' : `+${formatCurrency(monthStats.income, currency)}`}
-          </p>
-          <p
-            className="text-xs sm:text-sm font-medium text-[#94A3B8] truncate mt-0.5"
-            title={`${language === 'pt-BR' ? 'A receber:' : 'To receive:'} ${formatCurrency(monthStats.pendingIncome, currency)}`}
-          >
-            {language === 'pt-BR' ? 'A receber:' : 'To receive:'}{' '}
-            <span className="text-zinc-200 font-bold ml-0.5">
-              {isBalanceHidden ? '••••' : formatCurrency(monthStats.pendingIncome, currency)}
-            </span>
-          </p>
-        </div>
-
-        {/* Column 2 (DESPESAS) */}
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 mb-1">
-            <div className="w-4.5 h-4.5 rounded-full bg-rose-500/15 text-[#EF4444] flex items-center justify-center shrink-0">
-              <ArrowDownRight size={12} strokeWidth={2.5} />
-            </div>
-            <span className="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-zinc-400 truncate">
-              {language === 'pt-BR' ? 'DESPESAS' : 'EXPENSES'}
-            </span>
-          </div>
-          <p className="text-lg sm:text-xl font-black text-[#EF4444] tracking-tight truncate">
-            {isBalanceHidden ? '-••••••' : `-${formatCurrency(monthStats.expense, currency)}`}
-          </p>
-          <p
-            className="text-xs sm:text-sm font-medium text-[#94A3B8] truncate mt-0.5"
-            title={`${language === 'pt-BR' ? 'A pagar:' : 'To pay:'} ${formatCurrency(monthStats.pendingExpense, currency)}`}
-          >
-            {language === 'pt-BR' ? 'A pagar:' : 'To pay:'}{' '}
-            <span className="text-zinc-200 font-bold ml-0.5">
-              {isBalanceHidden ? '••••' : formatCurrency(monthStats.pendingExpense, currency)}
-            </span>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <TransactionsView
       selectedMonth={selectedMonth}
@@ -569,7 +441,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       onOpenEditModal={onOpenEditModal}
       onDeleteTransaction={onDeleteTransaction}
       onToggleTransactionStatus={onToggleTransactionStatus}
-      balanceCard={balanceCardElement}
+      currentBankBalance={currentBankBalance}
+      monthStats={monthStats}
+      onOpenBalanceModal={onOpenBalanceModal}
     />
   );
 };
