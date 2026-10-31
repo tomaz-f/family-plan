@@ -497,62 +497,60 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     return creditCards.map((card) => {
       const cardTxs = transactions.filter((tx) => tx.cardId === card.id);
 
-      // Identify settled billing cycles
-      const settledMonths = new Set<string>();
-      transactions.forEach((tx) => {
-        if (
-          tx.settledInvoiceKey &&
-          tx.status === 'paid' &&
-          tx.settledInvoiceKey.startsWith(`${card.id}__`)
-        ) {
-          const monthPart = tx.settledInvoiceKey.split('__')[1];
-          if (monthPart) settledMonths.add(monthPart);
-        }
-      });
-
-      // Used limit: active unpaid purchases
-      const usedLimit = Number(
-        cardTxs
-          .reduce((sum, tx) => {
-            const invMonth = getTxInvoiceMonth(tx, card);
-            const isPaid = tx.status === 'paid' || settledMonths.has(invMonth);
-            if (!isPaid) {
-              return sum + Number(tx.amount || 0);
-            }
-            return sum;
-          }, 0)
-          .toFixed(2)
+      // Total Unsettled Obligations:
+      // In credit card accounting, installment purchases immediately hold/block their full
+      // total value against the credit line upon creation.
+      // Sum all pending transactions where status !== 'paid' (one-time purchases, current/closed unpaid
+      // invoice charges, and all remaining future installments belonging to this card).
+      const unpaidCardTxs = cardTxs.filter((tx) => tx.status !== 'paid');
+      const usedLimit = Math.max(
+        0,
+        Number(
+          unpaidCardTxs
+            .reduce((sum, tx) => {
+              const amt = Number(tx.amount || 0);
+              return sum + (tx.type === 'income' ? -amt : amt);
+            }, 0)
+            .toFixed(2)
+        )
       );
 
+      // Real Available Limit = Total Credit Limit - Total Unsettled Obligations
       const availableLimit = Math.max(0, Number((card.totalLimit - usedLimit).toFixed(2)));
+
+      // Used Percentage = (Total Used / Total Card Limit) * 100
       const usedPercentage =
         card.totalLimit > 0 ? Math.min(100, Math.round((usedLimit / card.totalLimit) * 100)) : 0;
+      const usedPercentFloat =
+        card.totalLimit > 0 ? Math.min(100, (usedLimit / card.totalLimit) * 100) : 0;
 
       // Current month invoice total
-      const currentInvoiceTotal = Number(
-        cardTxs
-          .reduce((sum, tx) => {
-            const invMonth = getTxInvoiceMonth(tx, card);
-            if (invMonth === currentMonthStr) {
-              return sum + Number(tx.amount || 0);
-            }
-            return sum;
-          }, 0)
-          .toFixed(2)
+      const currentInvoiceTotal = Math.max(
+        0,
+        Number(
+          cardTxs
+            .filter((tx) => getTxInvoiceMonth(tx, card) === currentMonthStr)
+            .reduce((sum, tx) => {
+              const amt = Number(tx.amount || 0);
+              return sum + (tx.type === 'income' ? -amt : amt);
+            }, 0)
+            .toFixed(2)
+        )
       );
 
       // Next month invoice total
       const nextMonthStr = shiftMonth(currentMonthStr, 1);
-      const nextInvoiceTotal = Number(
-        cardTxs
-          .reduce((sum, tx) => {
-            const invMonth = getTxInvoiceMonth(tx, card);
-            if (invMonth === nextMonthStr) {
-              return sum + Number(tx.amount || 0);
-            }
-            return sum;
-          }, 0)
-          .toFixed(2)
+      const nextInvoiceTotal = Math.max(
+        0,
+        Number(
+          cardTxs
+            .filter((tx) => getTxInvoiceMonth(tx, card) === nextMonthStr)
+            .reduce((sum, tx) => {
+              const amt = Number(tx.amount || 0);
+              return sum + (tx.type === 'income' ? -amt : amt);
+            }, 0)
+            .toFixed(2)
+        )
       );
 
       // Check current invoice settlement
@@ -566,6 +564,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         usedLimit,
         availableLimit,
         usedPercentage,
+        usedPercentFloat,
         currentInvoiceTotal,
         nextInvoiceTotal,
         settlementTx,
@@ -579,15 +578,17 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const consolidated = useMemo(() => {
     let totalLimit = 0;
     let totalUsed = 0;
+    let totalAvailable = 0;
 
     cardsMetrics.forEach((m) => {
       totalLimit += m.card.totalLimit;
       totalUsed += m.usedLimit;
+      totalAvailable += m.availableLimit;
     });
 
     totalLimit = Number(totalLimit.toFixed(2));
     totalUsed = Number(totalUsed.toFixed(2));
-    const totalAvailable = Math.max(0, Number((totalLimit - totalUsed).toFixed(2)));
+    totalAvailable = Number(totalAvailable.toFixed(2));
     const combinedPercentage =
       totalLimit > 0 ? Math.min(100, Math.round((totalUsed / totalLimit) * 100)) : 0;
 
@@ -876,6 +877,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                     usedLimit: 0,
                     availableLimit: card.totalLimit,
                     usedPercentage: 0,
+                    usedPercentFloat: 0,
                     currentInvoiceTotal: 0,
                   };
 
@@ -976,7 +978,14 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                                     ? 'bg-[#F59E0B]'
                                     : 'bg-[#10B981]'
                                 }`}
-                                style={{ width: `${Math.min(100, metric.usedPercentage)}%` }}
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    metric.usedPercentFloat !== undefined
+                                      ? metric.usedPercentFloat
+                                      : metric.usedPercentage
+                                  )}%`,
+                                }}
                               />
                             </div>
 
