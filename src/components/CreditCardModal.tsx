@@ -65,6 +65,7 @@ export const CreditCardModal: React.FC<CreditCardModalProps> = ({
 
   const prevIsOpenRef = useRef<boolean>(false);
   const prevEditingIdRef = useRef<string | null | undefined>(undefined);
+  const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -132,10 +133,24 @@ export const CreditCardModal: React.FC<CreditCardModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className={`border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col ${
-        isOled ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]' : 'bg-white border-slate-200 text-slate-900'
-      }`}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn"
+      onMouseDown={(e) => {
+        mouseDownTargetRef.current = e.target;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className={`border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col ${
+          isOled ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]' : 'bg-white border-slate-200 text-slate-900'
+        }`}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={`flex items-center justify-between px-5 py-4 border-b ${
           isOled ? 'border-[#21262D]' : 'border-slate-200'
         }`}>

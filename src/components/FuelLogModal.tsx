@@ -53,6 +53,7 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
 
   const prevIsOpenRef = useRef<boolean>(false);
   const prevEditingIdRef = useRef<string | null | undefined>(undefined);
+  const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -188,12 +189,20 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        mouseDownTargetRef.current = e.target;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
       <div
         className={`tx-compact-modal w-[92%] max-w-[420px] mx-auto rounded-2xl shadow-2xl border overflow-hidden max-h-[85vh] flex flex-col ${
           isOled ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]' : 'bg-white border-slate-200 text-slate-900'
         }`}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}

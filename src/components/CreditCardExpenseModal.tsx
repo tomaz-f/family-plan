@@ -127,6 +127,8 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
   // Track modal visibility transitions to prevent background polling from resetting user input
   const prevIsOpenRef = useRef<boolean>(false);
   const prevEditingIdRef = useRef<string | null | undefined>(undefined);
+  const backdropMouseDownTargetRef = useRef<EventTarget | null>(null);
+  const categoryMouseDownTargetRef = useRef<EventTarget | null>(null);
 
   // Initialize form values ONLY when modal opens or target editing transaction changes
   useEffect(() => {
@@ -342,13 +344,25 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn">
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+        onMouseDown={(e) => {
+          backdropMouseDownTargetRef.current = e.target;
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && backdropMouseDownTargetRef.current === e.currentTarget) {
+            onClose();
+          }
+        }}
+      >
         <div
           className={`w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[92vh] ${
             isOled
               ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]'
               : 'bg-white border-slate-200 text-slate-900 shadow-xl'
           }`}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div
@@ -833,13 +847,25 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
 
       {/* CATEGORY PICKER BOTTOMSHEET / POPOVER MODAL */}
       {categoryPickerOpen && (
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn">
+        <div
+          className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+          onMouseDown={(e) => {
+            categoryMouseDownTargetRef.current = e.target;
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && categoryMouseDownTargetRef.current === e.currentTarget) {
+              setCategoryPickerOpen(false);
+            }
+          }}
+        >
           <div
             className={`w-full max-w-md rounded-t-3xl sm:rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[80vh] ${
               isOled
                 ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]'
                 : 'bg-white border-slate-200 text-slate-900'
             }`}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Sheet Header */}
             <div
@@ -874,7 +900,8 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setCategoryId(cat.id);
                       setCategoryPickerOpen(false);
                     }}

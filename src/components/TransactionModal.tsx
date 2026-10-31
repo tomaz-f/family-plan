@@ -132,6 +132,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   // Track modal visibility transitions to prevent background polling from resetting user input
   const prevIsOpenRef = useRef<boolean>(false);
   const prevEditingIdRef = useRef<string | null | undefined>(undefined);
+  const backdropMouseDownTargetRef = useRef<EventTarget | null>(null);
+  const categoryMouseDownTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -405,14 +407,23 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   void { Calendar, FileText, ThumbsDown };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
-      onClick={onClose}
-    >
+    <>
       <div
-        className="tx-compact-modal bg-white w-[92%] max-w-[420px] mx-auto rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
+        onMouseDown={(e) => {
+          backdropMouseDownTargetRef.current = e.target;
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && backdropMouseDownTargetRef.current === e.currentTarget) {
+            onClose();
+          }
+        }}
       >
+        <div
+          className="tx-compact-modal bg-white w-[92%] max-w-[420px] mx-auto rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Compact Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
           <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
@@ -884,88 +895,105 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </div>
         </form>
       </div>
+    </div>
 
-      {/* Category Picker BottomSheet Modal */}
-      {categoryPickerOpen && (
-        <div className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
-              <div>
-                <h4 className="text-sm font-bold">
-                  {language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category'}
-                </h4>
-                <p className="text-[11px] text-slate-500">
-                  {language === 'pt-BR' ? 'Toque para escolher' : 'Tap to select'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCategoryPickerOpen(false)}
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                <X size={18} />
-              </button>
+    {/* Category Picker BottomSheet Modal */}
+    {categoryPickerOpen && (
+      <div
+        className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+        onMouseDown={(e) => {
+          categoryMouseDownTargetRef.current = e.target;
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (e.target === e.currentTarget && categoryMouseDownTargetRef.current === e.currentTarget) {
+            setCategoryPickerOpen(false);
+          }
+        }}
+      >
+        <div
+          className="w-full max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+            <div>
+              <h4 className="text-sm font-bold">
+                {language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category'}
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                {language === 'pt-BR' ? 'Toque para escolher' : 'Tap to select'}
+              </p>
             </div>
-            <div className="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2.5">
-              {filteredCategories.map((cat) => {
-                const selected = cat.id === categoryId;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => {
-                      setCategoryId(cat.id);
-                      setCategoryPickerOpen(false);
-                    }}
-                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 gap-2 ${
-                      selected
-                        ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <CategoryIcon
-                      icon={cat.icon}
-                      color={selected ? '#ffffff' : cat.color}
-                      size={20}
-                      badgeSize="md"
-                    />
-                    <span className="text-xs font-bold text-center truncate max-w-full">
-                      {getCategoryDisplayName(cat, language)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              type="button"
+              onClick={() => setCategoryPickerOpen(false)}
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+            {filteredCategories.map((cat) => {
+              const selected = cat.id === categoryId;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCategoryId(cat.id);
+                    setCategoryPickerOpen(false);
+                  }}
+                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 gap-2 ${
+                    selected
+                      ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <CategoryIcon
+                    icon={cat.icon}
+                    color={selected ? '#ffffff' : cat.color}
+                    size={20}
+                    badgeSize="md"
+                  />
+                  <span className="text-xs font-bold text-center truncate max-w-full">
+                    {getCategoryDisplayName(cat, language)}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
-      )}
+      </div>
+    )}
 
-      <SeriesConfirmModal
-        isOpen={showSeriesEditConfirm}
-        mode="edit"
-        transaction={
-          editingTransaction
-            ? {
-                ...editingTransaction,
-                type,
-                amount:
-                  recurrenceMode === 'installment' && parsedInstTot > 1
-                    ? parsedInstCur === 1
-                      ? installmentBreakdown.firstInstallmentAmount
-                      : installmentBreakdown.regularInstallmentAmount
-                    : parseFloat(amount.replace(',', '.')) || editingTransaction.amount,
-                description: description.trim() || editingTransaction.description,
-                date,
-              }
-            : null
-        }
-        subsequentCount={subsequentSeriesCount}
-        currency={currency}
-        language={language}
-        submitting={submitting}
-        onSelectScope={(scope) => executeSave(scope)}
-        onCancel={() => setShowSeriesEditConfirm(false)}
-      />
-    </div>
-  );
+    <SeriesConfirmModal
+      isOpen={showSeriesEditConfirm}
+      mode="edit"
+      transaction={
+        editingTransaction
+          ? {
+              ...editingTransaction,
+              type,
+              amount:
+                recurrenceMode === 'installment' && parsedInstTot > 1
+                  ? parsedInstCur === 1
+                    ? installmentBreakdown.firstInstallmentAmount
+                    : installmentBreakdown.regularInstallmentAmount
+                  : parseFloat(amount.replace(',', '.')) || editingTransaction.amount,
+              description: description.trim() || editingTransaction.description,
+              date,
+            }
+          : null
+      }
+      subsequentCount={subsequentSeriesCount}
+      currency={currency}
+      language={language}
+      submitting={submitting}
+      onSelectScope={(scope) => executeSave(scope)}
+      onCancel={() => setShowSeriesEditConfirm(false)}
+    />
+  </>
+);
 };
