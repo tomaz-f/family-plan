@@ -32,9 +32,11 @@ import {
 } from './types';
 import {
   computeCardFirstInvoiceMonth,
+  computeInvoiceDueDate,
   formatMonthLabel,
   formatShortMonthLabel,
   getCurrentMonthStr,
+  getTodayDateStr,
   shiftMonth,
 } from './utils/format';
 import { TRANSLATIONS } from './utils/i18n';
@@ -366,6 +368,163 @@ export const App: React.FC = () => {
     const interval = setInterval(syncWithServer, 15000);
     return () => clearInterval(interval);
   }, [syncWithServer]);
+
+  // Automatic Pending Invoice Sync for Closed Card Invoices (Cash Flow Forecast)
+  useEffect(() => {
+    if (!state.creditCards || state.creditCards.length === 0) return;
+
+    const todayStr = getTodayDateStr();
+    const todayYm = todayStr.slice(0, 7);
+    const todayDay = Number(todayStr.slice(8, 10)) || 1;
+
+    let hasChanges = false;
+    let nextTxs = [...state.transactions];
+    const txsToSaveToServer: Transaction[] = [];
+    const txsToUpdateOnServer: Transaction[] = [];
+    const idsToDeleteOnServer: string[] = [];
+
+    const getTxInvoiceMonth = (tx: Transaction, card: CreditCard): string => {
+      if (tx.invoiceMonth) return tx.invoiceMonth;
+      const firstMonth = computeCardFirstInvoiceMonth(
+        tx.purchaseDate || tx.date,
+        card.closingDay
+      ).invoiceMonth;
+      if (
+        tx.installmentTotal &&
+        tx.installmentTotal > 1 &&
+        tx.installmentCurrent &&
+        tx.installmentCurrent > 1
+      ) {
+        return shiftMonth(firstMonth, tx.installmentCurrent - 1);
+      }
+      return firstMonth;
+    };
+
+    for (const card of state.creditCards) {
+      const cardTxs = state.transactions.filter((tx) => tx.cardId === card.id);
+      const invoiceMonths = new Set<string>();
+      for (const tx of cardTxs) {
+        invoiceMonths.add(getTxInvoiceMonth(tx, card));
+      }
+
+      for (const invMonth of invoiceMonths) {
+        const isClosed =
+          invMonth < todayYm || (invMonth === todayYm && todayDay >= card.closingDay);
+
+        if (!isClosed) continue;
+
+        const cycleTxs = cardTxs.filter((tx) => getTxInvoiceMonth(tx, card) === invMonth);
+        const cycleTotal = Number(
+          cycleTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0).toFixed(2)
+        );
+        const settlementKey = `${card.id}__${invMonth}`;
+        const existingTx = nextTxs.find((tx) => tx.settledInvoiceKey === settlementKey);
+
+        if (existingTx) {
+          // Keep unpaid invoice aligned with cycle purchases
+          if (existingTx.status === 'unpaid') {
+            if (cycleTotal <= 0) {
+              nextTxs = nextTxs.filter((tx) => tx.id !== existingTx.id);
+              idsToDeleteOnServer.push(existingTx.id);
+              hasChanges = true;
+            } else if (
+              Math.abs(existingTx.amount - cycleTotal) > 0.001 ||
+              existingTx.description !== `Fatura ${card.name}`
+            ) {
+              const updated: Transaction = {
+                ...existingTx,
+                amount: cycleTotal,
+                description: `Fatura ${card.name}`,
+                notes: `Fatura fechada (${cycleTxs.length} compras)`,
+              };
+              nextTxs = nextTxs.map((tx) => (tx.id === existingTx.id ? updated : tx));
+              txsToUpdateOnServer.push(updated);
+              hasChanges = true;
+            }
+          }
+        } else if (cycleTotal > 0) {
+          // If all card purchases in this cycle are already paid, do not recreate an unpaid invoice
+          const hasUnpaidPurchases = cycleTxs.some((tx) => (tx.status || 'paid') === 'unpaid');
+          if (!hasUnpaidPurchases) continue;
+
+          const invoiceCategory =
+            state.categories.find(
+              (c) =>
+                c.type === 'expense' &&
+                (c.name.toLowerCase().includes('cartão') ||
+                 c.name.toLowerCase().includes('fatura') ||
+                 c.id === 'exp-bills' ||
+                 c.name.toLowerCase() === 'contas')
+            ) ||
+            state.categories.find((c) => c.id === 'exp-bills') ||
+            state.categories.find((c) => c.id === 'exp-other') ||
+            state.categories[0];
+
+          const dueDate = computeInvoiceDueDate(invMonth, card.closingDay, card.dueDay);
+
+          const newPendingTx: Transaction = {
+            id: `tx-fatura-${card.id}-${invMonth}`,
+            type: 'expense',
+            status: 'unpaid',
+            amount: cycleTotal,
+            description: `Fatura ${card.name}`,
+            categoryId: invoiceCategory?.id || 'exp-bills',
+            date: dueDate,
+            notes: `Fatura fechada (${cycleTxs.length} compras)`,
+            dueDay: card.dueDay,
+            cardId: null,
+            settledInvoiceKey: settlementKey,
+            createdAt: new Date().toISOString(),
+          };
+
+          nextTxs = [newPendingTx, ...nextTxs];
+          txsToSaveToServer.push(newPendingTx);
+          hasChanges = true;
+        }
+      }
+    }
+
+    if (hasChanges) {
+      saveStateToCache({
+        ...state,
+        transactions: nextTxs,
+      });
+
+      (async () => {
+        try {
+          for (const newTx of txsToSaveToServer) {
+            const payload =
+              masterKey && familyId
+                ? await encryptTransaction(newTx, masterKey, familyId)
+                : newTx;
+            await apiFetch('/api/transactions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+          }
+          for (const updTx of txsToUpdateOnServer) {
+            const payload =
+              masterKey && familyId
+                ? await encryptTransaction(updTx, masterKey, familyId)
+                : updTx;
+            await apiFetch(`/api/transactions/${updTx.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+          }
+          for (const delId of idsToDeleteOnServer) {
+            await apiFetch(`/api/transactions/${delId}`, {
+              method: 'DELETE',
+            });
+          }
+        } catch {
+          // Local cache already updated optimistically
+        }
+      })();
+    }
+  }, [state.creditCards, state.transactions, state.categories, masterKey, familyId, saveStateToCache]);
 
   // Balance Impact Rule: Only transactions marked as 'paid' and not credit card purchases affect the current bank balance
   const currentBankBalance = useMemo(() => {
@@ -702,10 +861,39 @@ export const App: React.FC = () => {
     const nextStatus: TransactionStatus = tx.status === 'unpaid' ? 'paid' : 'unpaid';
     const updatedTx: Transaction = { ...tx, status: nextStatus };
 
+    let nextTransactions = state.transactions.map((item) => (item.id === tx.id ? updatedTx : item));
+    const cycleTxsToSync: Transaction[] = [];
+
+    // If this transaction is a consolidated card invoice, synchronize all card purchases for this cycle
+    if (tx.settledInvoiceKey) {
+      const [cardId, invoiceMonth] = tx.settledInvoiceKey.split('__');
+      const card = (state.creditCards || []).find((c) => c.id === cardId);
+      if (card) {
+        nextTransactions = nextTransactions.map((item) => {
+          if (item.cardId === cardId) {
+            const firstMonth = computeCardFirstInvoiceMonth(
+              item.purchaseDate || item.date,
+              card.closingDay
+            ).invoiceMonth;
+            const m =
+              item.invoiceMonth ||
+              (item.installmentTotal && item.installmentTotal > 1 && item.installmentCurrent && item.installmentCurrent > 1
+                ? shiftMonth(firstMonth, item.installmentCurrent - 1)
+                : firstMonth);
+            if (m === invoiceMonth) {
+              cycleTxsToSync.push({ ...item, status: nextStatus });
+              return { ...item, status: nextStatus };
+            }
+          }
+          return item;
+        });
+      }
+    }
+
     // Optimistic UI update so balance & badge respond immediately
     saveStateToCache({
       ...state,
-      transactions: state.transactions.map((item) => (item.id === tx.id ? updatedTx : item)),
+      transactions: nextTransactions,
     });
 
     try {
@@ -715,6 +903,16 @@ export const App: React.FC = () => {
         body: JSON.stringify({ status: nextStatus }),
       });
       if (!res.ok) throw new Error('Failed');
+
+      // Synchronize associated credit card purchase statuses
+      for (const cTx of cycleTxsToSync) {
+        await apiFetch(`/api/transactions/${cTx.id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus }),
+        });
+      }
+
       const rawData: AppState = await res.json();
       const data =
         masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
@@ -1289,34 +1487,77 @@ export const App: React.FC = () => {
   const handlePayCardInvoice = async (cardId: string, invoiceMonth: string) => {
     const card = (state.creditCards || []).find((c) => c.id === cardId);
     if (!card) return;
+
+    const getTxInvoiceMonth = (tx: Transaction): string => {
+      if (tx.invoiceMonth) return tx.invoiceMonth;
+      const firstMonth = computeCardFirstInvoiceMonth(
+        tx.purchaseDate || tx.date,
+        card.closingDay
+      ).invoiceMonth;
+      if (
+        tx.installmentTotal &&
+        tx.installmentTotal > 1 &&
+        tx.installmentCurrent &&
+        tx.installmentCurrent > 1
+      ) {
+        return shiftMonth(firstMonth, tx.installmentCurrent - 1);
+      }
+      return firstMonth;
+    };
+
     const cardTxs = state.transactions.filter((tx) => {
       if (tx.cardId !== cardId) return false;
-      const invMonth =
-        tx.invoiceMonth ||
-        computeCardFirstInvoiceMonth(tx.purchaseDate || tx.date, card.closingDay).invoiceMonth;
-      return invMonth === invoiceMonth;
+      return getTxInvoiceMonth(tx) === invoiceMonth;
     });
+
     const total = Number(cardTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0).toFixed(2));
     if (total <= 0) return;
 
-    const [invYear, invMonth] = invoiceMonth.split('-').map(Number);
-    const nextMonthDate = new Date(invYear, invMonth, 0);
-    const dueDayClamped = Math.min(card.dueDay, nextMonthDate.getDate() || 28);
-    const dueDate = `${invoiceMonth}-${String(dueDayClamped).padStart(2, '0')}`;
     const settlementKey = `${cardId}__${invoiceMonth}`;
-    const settlementTx: Transaction = {
-      id: `tx-fatura-${cardId}-${invoiceMonth}`,
-      type: 'expense',
-      status: 'paid',
-      amount: total,
-      description: `Fatura Cartão ${card.name} - ${formatMonthLabel(invoiceMonth, language)}`,
-      categoryId: 'exp-other',
-      date: dueDate,
-      notes: `Pagamento de fatura consolidada (${cardTxs.length} compras)`,
-      dueDay: card.dueDay,
-      settledInvoiceKey: settlementKey,
-      createdAt: new Date().toISOString(),
-    };
+    const todayStr = getTodayDateStr();
+
+    // Check if a pending or existing invoice transaction with this settlementKey already exists to prevent duplicate entries
+    const existingSettlementTx = state.transactions.find(
+      (tx) => tx.settledInvoiceKey === settlementKey
+    );
+
+    // Standardize Category for invoice payment:
+    // Prefer "Cartão de Crédito" or "Contas / Fatura" or fallback to "Contas" (exp-bills) or "Outros" (exp-other)
+    const invoiceCategory =
+      state.categories.find(
+        (c) =>
+          c.type === 'expense' &&
+          (c.name.toLowerCase().includes('cartão') ||
+           c.name.toLowerCase().includes('fatura') ||
+           c.id === 'exp-bills' ||
+           c.name.toLowerCase() === 'contas')
+      ) ||
+      state.categories.find((c) => c.id === 'exp-bills') ||
+      state.categories.find((c) => c.id === 'exp-other');
+
+    const settlementTx: Transaction = existingSettlementTx
+      ? {
+          ...existingSettlementTx,
+          status: 'paid',
+          amount: total,
+          description: `Pagamento de Fatura - ${card.name}`,
+          date: todayStr,
+          notes: `Pagamento de fatura consolidada (${cardTxs.length} compras)`,
+        }
+      : {
+          id: `tx-fatura-${cardId}-${invoiceMonth}`,
+          type: 'expense',
+          status: 'paid',
+          amount: total,
+          description: `Pagamento de Fatura - ${card.name}`,
+          categoryId: invoiceCategory?.id || 'exp-bills',
+          date: todayStr,
+          notes: `Pagamento de fatura consolidada (${cardTxs.length} compras)`,
+          dueDay: card.dueDay,
+          cardId: null,
+          settledInvoiceKey: settlementKey,
+          createdAt: new Date().toISOString(),
+        };
 
     const cardTxIds = new Set(cardTxs.map((t) => t.id));
     const optimisticTxs = [
@@ -1335,11 +1576,21 @@ export const App: React.FC = () => {
         masterKey && familyId
           ? await encryptTransaction(settlementTx, masterKey, familyId)
           : settlementTx;
-      await apiFetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(txPayload),
-      });
+
+      if (existingSettlementTx) {
+        await apiFetch(`/api/transactions/${existingSettlementTx.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(txPayload),
+        });
+      } else {
+        await apiFetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(txPayload),
+        });
+      }
+
       for (const cTx of cardTxs) {
         if (cTx.status !== 'paid') {
           await apiFetch(`/api/transactions/${cTx.id}/status`, {
@@ -1859,6 +2110,7 @@ export const App: React.FC = () => {
         }
         currency={state.settings.currency}
         language={language}
+        theme={theme}
         onSelectScope={async (scope) => {
           if (!deletingSeriesTx) return;
           const idToDel = deletingSeriesTx.id;

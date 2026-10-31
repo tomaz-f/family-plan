@@ -132,6 +132,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     let pendingExpense = 0;
 
     for (const tx of monthTransactions) {
+      // Strictly exclude individual credit card transactions from cash flow
+      if (tx.cardId) continue;
+
       if (tx.status === 'unpaid') {
         if (tx.type === 'income') {
           pendingIncome += tx.amount;
@@ -141,23 +144,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         continue;
       }
 
-      if (tx.cardId) continue;
-
       if (tx.type === 'income') {
         income += tx.amount;
         incomeCount++;
       } else {
         expense += tx.amount;
         expenseCount++;
-      }
-    }
-
-    // Also include any pending card transactions assigned to this invoice cycle that might have a date outside selectedMonth
-    for (const tx of transactions) {
-      if (tx.status === 'unpaid' && tx.type === 'expense' && tx.cardId) {
-        if (tx.invoiceMonth === selectedMonth && !tx.date.startsWith(selectedMonth)) {
-          pendingExpense += tx.amount;
-        }
       }
     }
 
@@ -184,13 +176,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       prevExpense,
       expenseDiffPct,
     };
-  }, [monthTransactions, prevMonthTransactions, transactions, selectedMonth]);
+  }, [monthTransactions, prevMonthTransactions]);
 
   // Category Breakdown for Paid Expenses in selectedMonth
   const expenseCategoryBreakdown = useMemo(() => {
     const totals = new Map<string, { amount: number; count: number }>();
     for (const tx of monthTransactions) {
-      if (tx.type !== 'expense' || tx.status === 'unpaid') continue;
+      if (tx.type !== 'expense' || tx.status === 'unpaid' || tx.cardId) continue;
       const prev = totals.get(tx.categoryId) || { amount: 0, count: 0 };
       totals.set(tx.categoryId, { amount: prev.amount + tx.amount, count: prev.count + 1 });
     }
@@ -332,7 +324,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       let inc = 0;
       let exp = 0;
       for (const tx of transactions) {
-        if (tx.status === 'unpaid') continue;
+        if (tx.status === 'unpaid' || tx.cardId) continue;
         if (tx.date.startsWith(m)) {
           if (tx.type === 'income') inc += tx.amount;
           else exp += tx.amount;
@@ -359,7 +351,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     for (const tx of monthTransactions) {
-      if (tx.status === 'unpaid') continue;
+      if (tx.status === 'unpaid' || tx.cardId) continue;
       const day = Number(tx.date.split('-')[2]);
       const entry = dailyMap.get(day);
       if (entry) {

@@ -360,6 +360,13 @@ const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
                 </span>
               )}
 
+              {tx.settledInvoiceKey && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[10px] font-semibold">
+                  <CreditCardIcon size={9} />
+                  <span>{language === 'pt-BR' ? 'Fatura Cartão' : 'Card Invoice'}</span>
+                </span>
+              )}
+
               {tx.installmentTotal && tx.installmentTotal > 1 && (
                 <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
                   {tx.installmentCurrent || 1}/{tx.installmentTotal}
@@ -518,6 +525,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter((tx) => {
+        // 1. Strictly isolate credit card purchases from the main statement:
+        // Individual card purchases belong exclusively to the Cards tab invoice statement.
+        if (tx.cardId) return false;
+
         if (scope === 'month' && !tx.date.startsWith(selectedMonth)) return false;
 
         const isUnpaid = tx.status === 'unpaid';
@@ -628,6 +639,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     let allPaidExpense = 0;
 
     for (const tx of transactions) {
+      // Strictly exclude individual credit card purchases from cash flow & checking stats
+      if (tx.cardId) continue;
+
       if (tx.status === 'unpaid') {
         if (tx.date.startsWith(selectedMonth)) {
           if (tx.type === 'income') pendingIncome += tx.amount;
@@ -635,7 +649,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         }
         continue;
       }
-      if (tx.cardId) continue;
+
       if (tx.type === 'income') allPaidIncome += tx.amount;
       else allPaidExpense += tx.amount;
 

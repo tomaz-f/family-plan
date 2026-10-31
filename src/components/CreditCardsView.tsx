@@ -122,9 +122,9 @@ export const CardBrandBadge: React.FC<{ brand?: CreditCardBrand; className?: str
 };
 
 /* Swipe configuration for invoice statement items */
-const INVOICE_SWIPE_WIDTH = 96;
-const INVOICE_SWIPE_SNAP = 40;
-const INVOICE_SWIPE_MAX = 120;
+const INVOICE_SWIPE_WIDTH = 110;
+const INVOICE_SWIPE_SNAP = 50;
+const INVOICE_SWIPE_MAX = 130;
 
 interface SwipeableInvoiceItemProps {
   tx: Transaction;
@@ -193,7 +193,7 @@ const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
           onSetOpenRow(null);
         }
       } else {
-        if (finalOffset > -INVOICE_SWIPE_WIDTH + 25) {
+        if (finalOffset > -INVOICE_SWIPE_WIDTH + 30) {
           onSetOpenRow(null);
         } else {
           onSetOpenRow(tx.id);
@@ -256,10 +256,10 @@ const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
   const hasInstallment = tx.installmentTotal && tx.installmentTotal > 1;
 
   return (
-    <div className="relative overflow-hidden select-none rounded-xl">
+    <div className="relative overflow-hidden select-none rounded-xl group">
       {/* Background action buttons (Revealed on left swipe) */}
       <div
-        className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-1.5 pr-2.5 z-0"
+        className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-2 pr-3 z-0"
         style={{ width: `${INVOICE_SWIPE_WIDTH}px` }}
       >
         <button
@@ -269,10 +269,10 @@ const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
             onSetOpenRow(null);
             onEditTransaction(tx);
           }}
-          className="swipe-action-btn w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          className="swipe-action-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0 shadow-xs"
           title="Editar compra"
         >
-          <Pencil size={13} />
+          <Pencil size={15} />
         </button>
         <button
           type="button"
@@ -281,10 +281,10 @@ const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
             onSetOpenRow(null);
             onDeleteTransaction(tx);
           }}
-          className="swipe-action-btn-danger w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          className="swipe-action-btn-danger w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0 shadow-xs"
           title="Excluir compra"
         >
-          <Trash2 size={13} />
+          <Trash2 size={15} />
         </button>
       </div>
 
@@ -359,16 +359,52 @@ const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
           </div>
         </div>
 
-        {/* Right: Amount & Short Numeric Date Stack */}
-        <div className="flex flex-col items-end justify-center text-right shrink-0 pl-1">
-          <span className="text-sm font-semibold text-[#EF4444] whitespace-nowrap leading-tight">
-            -{formatCurrency(tx.amount, currency)}
-          </span>
-          <span className={`text-xs mt-0.5 whitespace-nowrap leading-none ${
-            isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-          }`}>
-            {formatShortNumericDate(tx.purchaseDate || tx.date)}
-          </span>
+        {/* Right: Amount & Short Numeric Date Stack + Desktop Hover Fallback */}
+        <div className="flex items-center gap-2 shrink-0 pl-1">
+          <div className="flex flex-col items-end justify-center text-right">
+            <span className="text-sm font-semibold text-[#EF4444] whitespace-nowrap leading-tight">
+              -{formatCurrency(tx.amount, currency)}
+            </span>
+            <span className={`text-xs mt-0.5 whitespace-nowrap leading-none ${
+              isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+            }`}>
+              {formatShortNumericDate(tx.purchaseDate || tx.date)}
+            </span>
+          </div>
+
+          {/* Desktop Fallback Hover Actions (Visible on mouse hover, hidden on mobile touch) */}
+          <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditTransaction(tx);
+              }}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${
+                isOled
+                  ? 'bg-[#161B22] border-[#21262D] text-[#94A3B8] hover:text-[#F8FAFC]'
+                  : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+              }`}
+              title="Editar compra"
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteTransaction(tx);
+              }}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${
+                isOled
+                  ? 'bg-[#161B22] border-[#21262D] text-[#EF4444] hover:bg-rose-500/20'
+                  : 'bg-slate-100 border-slate-200 text-[#EF4444] hover:bg-rose-50'
+              }`}
+              title="Excluir compra"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1524,7 +1560,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
               <p className={`font-semibold ${isOled ? 'text-[#D0B595]' : 'text-[#6E5440]'}`}>Como funciona:</p>
               <p className={`text-[11px] leading-relaxed ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
                 {t.payInvoiceHowItWorksDesc ||
-                  'Uma despesa consolidada será criada no extrato principal com a data de vencimento da fatura. Ao marcá-la como paga, seu saldo bancário será debitado e o limite do cartão será liberado.'}
+                  'Uma despesa consolidada será criada no extrato principal com a data do pagamento da fatura. Seu saldo bancário será debitado e o limite do cartão será liberado.'}
               </p>
             </div>
 

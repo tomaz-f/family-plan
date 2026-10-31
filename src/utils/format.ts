@@ -100,6 +100,20 @@ export function computeCardFirstInvoiceMonth(
   return { invoiceMonth: shiftMonth(ym, 1), rolledToNext: true };
 }
 
+/**
+ * Computes the due date (YYYY-MM-DD) for a credit card invoice cycle.
+ * - If dueDay <= closingDay, due date falls into the subsequent month (shiftMonth(invoiceMonth, 1)).
+ * - If dueDay > closingDay, due date falls within the same month (invoiceMonth).
+ */
+export function computeInvoiceDueDate(
+  invoiceMonth: string,
+  closingDay: number,
+  dueDay: number
+): string {
+  const targetMonth = dueDay <= closingDay ? shiftMonth(invoiceMonth, 1) : invoiceMonth;
+  return formatMonthDay(targetMonth, dueDay);
+}
+
 export function exportTransactionsToCSV(
   transactions: Transaction[],
   categories: Category[],
