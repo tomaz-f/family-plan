@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Landmark, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 import { AppLanguage } from '../types';
 import { formatCurrency } from '../utils/format';
@@ -28,14 +28,21 @@ export const BalanceModal: React.FC<BalanceModalProps> = ({
   const [amountInput, setAmountInput] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
 
+  const prevIsOpenRef = useRef<boolean>(false);
+
   useEffect(() => {
-    if (!isOpen) return;
-    setMode('current');
-    const safeCurrent = typeof currentBalance === 'number' && !Number.isNaN(currentBalance) ? currentBalance : 0;
-    setAmountInput(safeCurrent.toFixed(2));
-    // Only reset when modal opens
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+
+    if (!prevIsOpenRef.current) {
+      prevIsOpenRef.current = true;
+      setMode('current');
+      const safeCurrent = typeof currentBalance === 'number' && !Number.isNaN(currentBalance) ? currentBalance : 0;
+      setAmountInput(safeCurrent.toFixed(2));
+    }
+  }, [isOpen, currentBalance]);
 
   if (!isOpen) return null;
 

@@ -18,6 +18,7 @@ import {
   getTodayDateStr,
 } from '../utils/format';
 import { TRANSLATIONS } from '../utils/i18n';
+import { FuelLogModal } from './FuelLogModal';
 
 const SWIPE_REVEAL_WIDTH = 100;
 const SWIPE_SNAP_THRESHOLD = 45;
@@ -57,6 +58,7 @@ interface FuelViewProps {
   onDeleteFuelLog: (id: string) => Promise<void>;
   onUpdateTankCapacity: (tankCapacity: number) => Promise<void>;
   openRefuelTrigger?: number;
+  onModalOpenChange?: (open: boolean) => void;
 }
 
 interface EnrichedFuelLog extends FuelLog {
@@ -406,30 +408,16 @@ export const FuelView: React.FC<FuelViewProps> = ({
   onDeleteFuelLog,
   onUpdateTankCapacity,
   openRefuelTrigger,
+  onModalOpenChange,
 }) => {
   const t = TRANSLATIONS[language];
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingLog, setEditingLog] = useState<FuelLog | null>(null);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
 
-  // Form states
-  const [date, setDate] = useState(getTodayDateStr());
-  const [fuelType, setFuelType] = useState<FuelType>('gasoline');
-  const [odometer, setOdometer] = useState('');
-  const [pricePerLiter, setPricePerLiter] = useState('');
-  const [totalCost, setTotalCost] = useState('');
-  const [liters, setLiters] = useState('');
-  const [stationName, setStationName] = useState('');
-  const [isFullTank, setIsFullTank] = useState(true);
-  const [tankInput, setTankInput] = useState(String(tankCapacity || 54));
-  const [submitting, setSubmitting] = useState(false);
-
-  // Keep tank input synchronized with prop
   useEffect(() => {
-    if (tankCapacity > 0) {
-      setTankInput(String(tankCapacity));
-    }
-  }, [tankCapacity]);
+    onModalOpenChange?.(showForm);
+  }, [showForm, onModalOpenChange]);
 
   // Click outside to dismiss any open swipe row
   useEffect(() => {
@@ -519,60 +507,8 @@ export const FuelView: React.FC<FuelViewProps> = ({
     return Math.max(...fuelLogs.map((f) => f.odometer));
   }, [fuelLogs]);
 
-  // Smart auto-calculation when typing Price/L, Total Cost, or Liters
-  const handlePriceChange = (val: string) => {
-    setPricePerLiter(val);
-    const p = parseFloat(val.replace(',', '.'));
-    const c = parseFloat(totalCost.replace(',', '.'));
-    const l = parseFloat(liters.replace(',', '.'));
-    if (!Number.isNaN(p) && p > 0) {
-      if (!Number.isNaN(c) && c > 0) {
-        setLiters((c / p).toFixed(2));
-      } else if (!Number.isNaN(l) && l > 0) {
-        setTotalCost((p * l).toFixed(2));
-      }
-    }
-  };
-
-  const handleTotalCostChange = (val: string) => {
-    setTotalCost(val);
-    const c = parseFloat(val.replace(',', '.'));
-    const p = parseFloat(pricePerLiter.replace(',', '.'));
-    const l = parseFloat(liters.replace(',', '.'));
-    if (!Number.isNaN(c) && c > 0) {
-      if (!Number.isNaN(p) && p > 0) {
-        setLiters((c / p).toFixed(2));
-      } else if (!Number.isNaN(l) && l > 0) {
-        setPricePerLiter((c / l).toFixed(3));
-      }
-    }
-  };
-
-  const handleLitersChange = (val: string) => {
-    setLiters(val);
-    const l = parseFloat(val.replace(',', '.'));
-    const p = parseFloat(pricePerLiter.replace(',', '.'));
-    const c = parseFloat(totalCost.replace(',', '.'));
-    if (!Number.isNaN(l) && l > 0) {
-      if (!Number.isNaN(p) && p > 0) {
-        setTotalCost((p * l).toFixed(2));
-      } else if (!Number.isNaN(c) && c > 0) {
-        setPricePerLiter((c / l).toFixed(3));
-      }
-    }
-  };
-
   const handleOpenNew = () => {
-    setEditingId(null);
-    setDate(getTodayDateStr());
-    setFuelType('gasoline');
-    setOdometer('');
-    setPricePerLiter('');
-    setTotalCost('');
-    setLiters('');
-    setStationName('');
-    setIsFullTank(true);
-    setTankInput(String(tankCapacity || 54));
+    setEditingLog(null);
     setShowForm(true);
   };
 
@@ -583,62 +519,8 @@ export const FuelView: React.FC<FuelViewProps> = ({
   }, [openRefuelTrigger]);
 
   const handleOpenEdit = (log: FuelLog) => {
-    setEditingId(log.id);
-    setDate(log.date);
-    setFuelType(log.fuelType);
-    setOdometer(String(log.odometer));
-    setPricePerLiter(String(log.pricePerLiter));
-    setTotalCost(String(log.totalCost));
-    setLiters(String(log.liters));
-    setStationName(log.stationName || '');
-    setIsFullTank(log.isFullTank);
-    setTankInput(String(tankCapacity || 54));
+    setEditingLog(log);
     setShowForm(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const odo = parseFloat(odometer.replace(',', '.'));
-    const price = parseFloat(pricePerLiter.replace(',', '.'));
-    const cost = parseFloat(totalCost.replace(',', '.'));
-    const lit = parseFloat(liters.replace(',', '.'));
-    const tankSizeParsed = parseFloat(tankInput.replace(',', '.'));
-
-    if (
-      Number.isNaN(odo) ||
-      Number.isNaN(price) ||
-      Number.isNaN(cost) ||
-      Number.isNaN(lit) ||
-      price <= 0 ||
-      cost <= 0 ||
-      lit <= 0
-    ) {
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      // Persist tank capacity update if changed inside the modal
-      if (!Number.isNaN(tankSizeParsed) && tankSizeParsed > 0 && tankSizeParsed !== tankCapacity) {
-        await onUpdateTankCapacity(tankSizeParsed);
-      }
-
-      await onSaveFuelLog({
-        id: editingId || undefined,
-        date,
-        odometer: odo,
-        pricePerLiter: price,
-        totalCost: cost,
-        liters: lit,
-        fuelType,
-        stationName: stationName.trim(),
-        isFullTank,
-      });
-      setShowForm(false);
-      setEditingId(null);
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   // Consolidated Key Metrics
@@ -878,257 +760,28 @@ export const FuelView: React.FC<FuelViewProps> = ({
         )}
       </div>
 
-      {/* 3. REFUELING MODAL (Compact Centered Modal Pattern) */}
-      {showForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
-          onClick={() => {
-            setShowForm(false);
-            setEditingId(null);
-          }}
-        >
-          <div
-            className="tx-compact-modal bg-white w-[92%] max-w-[420px] mx-auto rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-2">
-                <Fuel size={17} className="text-amber-500 shrink-0" />
-                <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-                  {editingId ? t.editRefuelTitle : t.newRefuelTitle}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingId(null);
-                }}
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                aria-label={t.cancelBtn}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto no-scrollbar">
-              {/* Fuel Type Selector: Segmented Pill */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  {t.fuelTypeLabel}
-                </label>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
-                  <button
-                    type="button"
-                    onClick={() => setFuelType('gasoline')}
-                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
-                      fuelType === 'gasoline'
-                        ? 'bg-[#F59E0B] text-slate-950 shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <span>⛽ {t.fuelGasoline}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFuelType('ethanol')}
-                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
-                      fuelType === 'ethanol'
-                        ? 'bg-[#10B981] text-white shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <span>🌱 {t.fuelEthanol}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Fill Type Selector: Segmented Pill */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  {t.fillTypeLabel}
-                </label>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
-                  <button
-                    type="button"
-                    onClick={() => setIsFullTank(true)}
-                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
-                      isFullTank
-                        ? 'bg-[#6E5440] text-[#FFFDF5] shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <CheckCircle2 size={13} />
-                    <span>{t.fullTankLabel}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsFullTank(false)}
-                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
-                      !isFullTank
-                        ? 'bg-[#6E5440] text-[#FFFDF5] shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <CircleDashed size={13} />
-                    <span>{t.partialTankLabel}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Row 1: Preço/L & Valor Total */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                    {t.pricePerLiterLabel}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0.01"
-                    required
-                    placeholder="5.89"
-                    value={pricePerLiter}
-                    onChange={(e) => handlePriceChange(e.target.value)}
-                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                    {t.totalCostLabel}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    placeholder="250.00"
-                    value={totalCost}
-                    onChange={(e) => handleTotalCostChange(e.target.value)}
-                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-rose-500"
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Litros & Odômetro */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                    {t.litersLabel}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    required
-                    placeholder="42.44"
-                    value={liters}
-                    onChange={(e) => handleLitersChange(e.target.value)}
-                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-sky-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                    {t.odometerLabel}
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    required
-                    placeholder={t.odometerPlaceholder}
-                    value={odometer}
-                    onChange={(e) => setOdometer(e.target.value)}
-                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-slate-900"
-                  />
-                  {highestOdometer !== null && (
-                    <span className="block text-[10px] text-slate-400 mt-1 truncate">
-                      {t.lastOdometerHint(highestOdometer)}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 3: Capacidade do Tanque (Litros) & Data */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1 truncate">
-                    {language === 'pt-BR'
-                      ? 'Capacidade Tanque (L)'
-                      : 'Tank Capacity (L)'}
-                  </label>
-                  <input
-                    type="number"
-                    min="10"
-                    max="300"
-                    step="1"
-                    required
-                    placeholder="54"
-                    value={tankInput}
-                    onChange={(e) => setTankInput(e.target.value)}
-                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                    {t.dateLabel}
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium bg-slate-50 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              {/* Row 4: Posto de Combustível */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                  {t.stationNameLabel}
-                </label>
-                <div className="relative">
-                  <MapPin
-                    size={16}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder={t.stationPlaceholder}
-                    value={stationName}
-                    onChange={(e) => setStationName(e.target.value)}
-                    className="h-11 w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              {/* Compact Footer Actions */}
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingId(null);
-                  }}
-                  className="flex-1 h-11 py-2.5 px-3 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors active:scale-95"
-                >
-                  {t.cancelBtn}
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 h-11 py-2.5 px-3 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-xs hover:bg-slate-800 transition-colors active:scale-95"
-                >
-                  {submitting ? t.savingBtn : t.saveRefuelBtn}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* 3. REFUELING MODAL */}
+      <FuelLogModal
+        isOpen={showForm}
+        editingLog={editingLog}
+        highestOdometer={highestOdometer}
+        tankCapacity={tankCapacity}
+        language={language}
+        theme={theme}
+        onClose={() => {
+          setShowForm(false);
+          setEditingLog(null);
+        }}
+        onSaveFuelLog={async (data) => {
+          await onSaveFuelLog({
+            ...data,
+            stationName: data.stationName || '',
+          });
+          setShowForm(false);
+          setEditingLog(null);
+        }}
+        onUpdateTankCapacity={onUpdateTankCapacity}
+      />
     </div>
   );
 };

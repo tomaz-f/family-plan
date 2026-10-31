@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   CreditCard as CreditCardIcon,
   X,
@@ -124,14 +124,31 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
     [categories]
   );
 
-  // Initialize or reset form values
+  // Track modal visibility transitions to prevent background polling from resetting user input
+  const prevIsOpenRef = useRef<boolean>(false);
+  const prevEditingIdRef = useRef<string | null | undefined>(undefined);
+
+  // Initialize form values ONLY when modal opens or target editing transaction changes
   useEffect(() => {
     if (!isOpen) {
+      prevIsOpenRef.current = false;
       setCategoryPickerOpen(false);
       setShowSeriesEditConfirm(false);
       setShowSeriesDeleteConfirm(false);
       return;
     }
+
+    const currentEditingId = editingTransaction?.id || null;
+    const isOpening = !prevIsOpenRef.current;
+    const isTargetChanged = prevEditingIdRef.current !== currentEditingId;
+
+    if (!isOpening && !isTargetChanged) {
+      // Modal is already open and target hasn't changed; strictly preserve active user input
+      return;
+    }
+
+    prevIsOpenRef.current = true;
+    prevEditingIdRef.current = currentEditingId;
 
     if (editingTransaction) {
       // Editing existing credit card transaction

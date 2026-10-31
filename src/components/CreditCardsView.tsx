@@ -31,6 +31,7 @@ import {
   shiftMonth,
 } from '../utils/format';
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
+import { CreditCardModal } from './CreditCardModal';
 
 interface CreditCardsViewProps {
   creditCards: CreditCard[];
@@ -46,6 +47,7 @@ interface CreditCardsViewProps {
   onEditTransaction: (tx: Transaction) => void;
   onDeleteTransaction: (tx: Transaction) => void;
   onActiveCardChange?: (cardId: string | null) => void;
+  onModalOpenChange?: (open: boolean) => void;
 }
 
 const BRAND_OPTIONS: { id: CreditCardBrand; name: string }[] = [
@@ -425,6 +427,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   onEditTransaction,
   onDeleteTransaction,
   onActiveCardChange,
+  onModalOpenChange,
 }) => {
   const t = TRANSLATIONS[language];
   const isOled = theme === 'oled';
@@ -443,14 +446,10 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   // Card Add/Edit Modal state
   const [cardModalOpen, setCardModalOpen] = useState<boolean>(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
-  const [cardFormName, setCardFormName] = useState<string>('');
-  const [cardFormLimit, setCardFormLimit] = useState<string>('');
-  const [cardFormClosingDay, setCardFormClosingDay] = useState<string>('25');
-  const [cardFormDueDay, setCardFormDueDay] = useState<string>('5');
-  const [cardFormBrand, setCardFormBrand] = useState<CreditCardBrand>('mastercard');
-  const [cardFormColor, setCardFormColor] = useState<string>(PRESET_COLORS[0]);
-  const [cardFormLastDigits, setCardFormLastDigits] = useState<string>('');
-  const [cardFormSubmitting, setCardFormSubmitting] = useState<boolean>(false);
+
+  useEffect(() => {
+    onModalOpenChange?.(cardModalOpen);
+  }, [cardModalOpen, onModalOpenChange]);
 
   // Delete Card modal state
   const [deleteConfirmCardId, setDeleteConfirmCardId] = useState<string | null>(null);
@@ -733,53 +732,13 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   // Handlers for Add/Edit Card Modal
   const openAddCardModal = () => {
     setEditingCard(null);
-    setCardFormName('');
-    setCardFormLimit('5000');
-    setCardFormClosingDay('25');
-    setCardFormDueDay('5');
-    setCardFormBrand('mastercard');
-    setCardFormColor(PRESET_COLORS[creditCards.length % PRESET_COLORS.length]);
-    setCardFormLastDigits('');
     setCardModalOpen(true);
   };
 
   const openEditCardModal = (card: CreditCard, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingCard(card);
-    setCardFormName(card.name);
-    setCardFormLimit(String(card.totalLimit));
-    setCardFormClosingDay(String(card.closingDay));
-    setCardFormDueDay(String(card.dueDay));
-    setCardFormBrand(card.brand || 'mastercard');
-    setCardFormColor(card.color || PRESET_COLORS[0]);
-    setCardFormLastDigits(card.lastDigits || '');
     setCardModalOpen(true);
-  };
-
-  const handleSaveCardSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsedLimit = parseFloat(cardFormLimit.replace(',', '.'));
-    const parsedClosing = Math.min(31, Math.max(1, parseInt(cardFormClosingDay, 10) || 1));
-    const parsedDue = Math.min(31, Math.max(1, parseInt(cardFormDueDay, 10) || 1));
-
-    if (!cardFormName.trim() || Number.isNaN(parsedLimit) || parsedLimit <= 0) return;
-
-    setCardFormSubmitting(true);
-    try {
-      await onSaveCard({
-        id: editingCard?.id,
-        name: cardFormName.trim(),
-        totalLimit: parsedLimit,
-        closingDay: parsedClosing,
-        dueDay: parsedDue,
-        brand: cardFormBrand,
-        color: cardFormColor,
-        lastDigits: cardFormLastDigits.trim().slice(-4),
-      });
-      setCardModalOpen(false);
-    } finally {
-      setCardFormSubmitting(false);
-    }
   };
 
   // Handlers for Pay Invoice
@@ -1279,220 +1238,19 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       )}
 
       {/* MODAL: Register / Edit Credit Card */}
-      {cardModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className={`border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col ${
-            isOled ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]' : 'bg-white border-slate-200 text-slate-900'
-          }`}>
-            <div className={`flex items-center justify-between px-5 py-4 border-b ${
-              isOled ? 'border-[#21262D]' : 'border-slate-200'
-            }`}>
-              <h3 className={`text-base font-bold flex items-center gap-2 ${
-                isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
-              }`}>
-                <CreditCardIcon size={18} className="text-[#D0B595]" />
-                <span>{editingCard ? t.editCardModalTitle || 'Editar Cartão' : t.addCardModalTitle || 'Novo Cartão'}</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setCardModalOpen(false)}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  isOled ? 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161B22]' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100'
-                }`}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCardSubmit} className="p-5 space-y-4">
-              {/* Card Name */}
-              <div>
-                <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                  isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                }`}>
-                  {t.cardNameLabel || 'Nome do Cartão'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Nubank Felipe, Inter Isabelle"
-                  value={cardFormName}
-                  onChange={(e) => setCardFormName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                    isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                  }`}
-                />
-              </div>
-
-              {/* Total Limit */}
-              <div>
-                <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                  isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                }`}>
-                  {t.totalLimitLabel || 'Limite Total'} ({currency})
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  placeholder="5000.00"
-                  value={cardFormLimit}
-                  onChange={(e) => setCardFormLimit(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-bold focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                    isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                  }`}
-                />
-              </div>
-
-              {/* Closing Day & Due Day */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                    isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                  }`}>
-                    {t.closingDayLabel || 'Dia Fechamento'} (1-31)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    required
-                    value={cardFormClosingDay}
-                    onChange={(e) => setCardFormClosingDay(e.target.value)}
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                      isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                    }`}
-                  />
-                  <span className={`text-[10px] mt-1 block ${
-                    isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-                  }`}>
-                    {t.closingDayHint || 'Compras a partir deste dia vão para o mês seguinte'}
-                  </span>
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                    isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                  }`}>
-                    {t.dueDayLabel || 'Dia Vencimento'} (1-31)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    required
-                    value={cardFormDueDay}
-                    onChange={(e) => setCardFormDueDay(e.target.value)}
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                      isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                    }`}
-                  />
-                  <span className={`text-[10px] mt-1 block ${
-                    isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-                  }`}>
-                    {t.dueDayHint || 'Data limite para pagamento da fatura'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card Brand */}
-              <div>
-                <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                  isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                }`}>
-                  {t.cardBrandLabel || 'Bandeira'}
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {BRAND_OPTIONS.map((brand) => (
-                    <button
-                      key={brand.id}
-                      type="button"
-                      onClick={() => setCardFormBrand(brand.id)}
-                      className={`p-2 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                        cardFormBrand === brand.id
-                          ? 'bg-[#6E5440] text-white border-[#8A6F57] shadow-xs'
-                          : isOled
-                          ? 'bg-[#161B22] border-[#21262D] text-[#E2E8F0] hover:bg-[#21262D]'
-                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <CardBrandBadge brand={brand.id} />
-                      <span className="truncate">{brand.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Color & Last 4 Digits */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                    isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                  }`}>
-                    {t.cardColorLabel || 'Cor do Cartão'}
-                  </label>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {PRESET_COLORS.map((col) => (
-                      <button
-                        key={col}
-                        type="button"
-                        onClick={() => setCardFormColor(col)}
-                        className={`w-6 h-6 rounded-full transition-transform ${
-                          cardFormColor === col
-                            ? 'ring-2 ring-white scale-110 shadow-xs'
-                            : 'opacity-70 hover:opacity-100'
-                        }`}
-                        style={{ backgroundColor: col }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                    isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                  }`}>
-                    {t.cardLastDigitsLabel || 'Últimos 4 Dígitos'}
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={4}
-                    placeholder="1234"
-                    value={cardFormLastDigits}
-                    onChange={(e) => setCardFormLastDigits(e.target.value.replace(/\D/g, ''))}
-                    className={`w-full px-3.5 py-2 rounded-xl border text-sm font-mono text-center focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                      isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              {/* Modal Actions */}
-              <div className={`flex items-center gap-3 pt-3 border-t ${
-                isOled ? 'border-[#21262D]' : 'border-slate-200'
-              }`}>
-                <button
-                  type="button"
-                  onClick={() => setCardModalOpen(false)}
-                  className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-colors ${
-                    isOled ? 'border-[#21262D] text-[#94A3B8] hover:bg-[#161B22]' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {t.cancelBtn || 'Cancelar'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={cardFormSubmitting}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-[#6E5440] hover:bg-[#7E624B] text-white text-xs font-bold shadow-xs transition-all active:scale-95"
-                >
-                  {cardFormSubmitting ? (t.savingBtn || 'Salvando...') : (t.saveCardBtn || 'Salvar Cartão')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <CreditCardModal
+        isOpen={cardModalOpen}
+        editingCard={editingCard}
+        existingCardsCount={creditCards.length}
+        currency={currency}
+        language={language}
+        theme={theme}
+        onClose={() => {
+          setCardModalOpen(false);
+          setEditingCard(null);
+        }}
+        onSaveCard={onSaveCard}
+      />
 
       {/* MODAL: Delete Card Confirmation */}
       {deleteConfirmCardId && (

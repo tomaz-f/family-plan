@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X,
   ArrowUpRight,
@@ -129,12 +129,30 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     [creditCards, effectiveCardId]
   );
 
+  // Track modal visibility transitions to prevent background polling from resetting user input
+  const prevIsOpenRef = useRef<boolean>(false);
+  const prevEditingIdRef = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
     if (!isOpen) {
+      prevIsOpenRef.current = false;
       setShowSeriesEditConfirm(false);
       return;
     }
+
+    const currentEditingId = editingTransaction?.id || null;
+    const isOpening = !prevIsOpenRef.current;
+    const isTargetChanged = prevEditingIdRef.current !== currentEditingId;
+
+    if (!isOpening && !isTargetChanged) {
+      // Modal is already open and target hasn't changed; strictly preserve active user input
+      return;
+    }
+
+    prevIsOpenRef.current = true;
+    prevEditingIdRef.current = currentEditingId;
     setShowSeriesEditConfirm(false);
+
     if (editingTransaction) {
       setType(editingTransaction.type);
       setStatus(editingTransaction.status === 'unpaid' ? 'unpaid' : 'paid');
@@ -188,14 +206,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setInstallmentTotal('12');
     }
     // Only initialize form state when the modal opens or target transaction changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, initialType, initialCardId, editingTransaction?.id]);
+  }, [isOpen, initialType, initialCardId, editingTransaction?.id, categories, creditCards]);
 
   useEffect(() => {
-    if (!filteredCategories.some((c) => c.id === categoryId)) {
+    // Only adjust categoryId if it is completely empty or does not belong to the current type
+    if (!categoryId || !filteredCategories.some((c) => c.id === categoryId)) {
       setCategoryId(filteredCategories[0]?.id || '');
     }
-  }, [type, filteredCategories, categoryId]);
+  }, [type]);
 
   const handleSelectCard = (cardId: string | null) => {
     setSelectedCardId(cardId);

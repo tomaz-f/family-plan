@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   LayoutDashboard,
   ListOrdered,
@@ -231,6 +231,24 @@ export const App: React.FC = () => {
   const [fabMenuOpen, setFabMenuOpen] = useState<boolean>(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [openRefuelTrigger, setOpenRefuelTrigger] = useState<number>(0);
+  const [cardModalOpen, setCardModalOpen] = useState<boolean>(false);
+  const [fuelModalOpen, setFuelModalOpen] = useState<boolean>(false);
+
+  // Global indicator for any open modal dialog (used to pause background sync and avoid overwriting user keystrokes)
+  const isAnyModalOpen =
+    txModalOpen ||
+    cardExpenseModalOpen ||
+    balanceModalOpen ||
+    syncModalOpen ||
+    Boolean(deletingSeriesTx) ||
+    cardModalOpen ||
+    fuelModalOpen;
+
+  const isAnyModalOpenRef = useRef<boolean>(isAnyModalOpen);
+  isAnyModalOpenRef.current = isAnyModalOpen;
+
+  const stateRef = useRef<AppState>(state);
+  stateRef.current = state;
 
   const language: AppLanguage = state.settings.language === 'en' ? 'en' : 'pt-BR';
   const theme: AppTheme = state.settings.theme === 'light' ? 'light' : 'oled';
@@ -270,7 +288,18 @@ export const App: React.FC = () => {
           theme: normalizedTheme,
         },
       };
-      setState(normalizedState);
+      // Avoid triggering zero-diff state updates if cached data matches current state
+      const prevState = stateRef.current;
+      const isSettingsSame = JSON.stringify(prevState.settings) === JSON.stringify(normalizedState.settings);
+      const isCategoriesSame = JSON.stringify(prevState.categories) === JSON.stringify(normalizedState.categories);
+      const isCreditCardsSame = JSON.stringify(prevState.creditCards) === JSON.stringify(normalizedState.creditCards);
+      const isTransactionsSame = JSON.stringify(prevState.transactions) === JSON.stringify(normalizedState.transactions);
+      const isFuelLogsSame = JSON.stringify(prevState.fuelLogs) === JSON.stringify(normalizedState.fuelLogs);
+      const isRecurringSame = JSON.stringify(prevState.recurringTemplates) === JSON.stringify(normalizedState.recurringTemplates);
+
+      if (!isSettingsSame || !isCategoriesSame || !isCreditCardsSame || !isTransactionsSame || !isFuelLogsSame || !isRecurringSame) {
+        setState(normalizedState);
+      }
       try {
         const key = familyId ? `${STORAGE_STATE_KEY}_${familyId}` : STORAGE_STATE_KEY;
         localStorage.setItem(key, JSON.stringify(normalizedState));
@@ -310,6 +339,8 @@ export const App: React.FC = () => {
 
   const syncWithServer = useCallback(async () => {
     if (!familyId) return;
+    // Pause background polling while any modal is actively open to preserve user typing focus and state
+    if (isAnyModalOpenRef.current) return;
     try {
       let pending: Transaction[] = [];
       const pendingKey = `${STORAGE_PENDING_TX_KEY}_${familyId}`;
@@ -368,10 +399,15 @@ export const App: React.FC = () => {
   }, [familyId, masterKey, saveStateToCache]);
 
   useEffect(() => {
+    if (isAnyModalOpen) return;
     syncWithServer();
-    const interval = setInterval(syncWithServer, 15000);
+    const interval = setInterval(() => {
+      if (!isAnyModalOpenRef.current) {
+        syncWithServer();
+      }
+    }, 15000);
     return () => clearInterval(interval);
-  }, [syncWithServer]);
+  }, [isAnyModalOpen, syncWithServer]);
 
   // Automatic Pending Invoice Sync for Closed Card Invoices (Cash Flow Forecast)
   useEffect(() => {
@@ -1880,6 +1916,7 @@ export const App: React.FC = () => {
               onEditTransaction={handleOpenEditCardExpenseModal}
               onDeleteTransaction={(tx) => handleDeleteTransaction(tx.id)}
               onActiveCardChange={setActiveCardId}
+              onModalOpenChange={setCardModalOpen}
             />
           </ErrorBoundary>
         )}
@@ -1896,6 +1933,7 @@ export const App: React.FC = () => {
             onDeleteFuelLog={handleDeleteFuelLog}
             onUpdateTankCapacity={(cap) => handleUpdateSettings({ tankCapacity: cap })}
             openRefuelTrigger={openRefuelTrigger}
+            onModalOpenChange={setFuelModalOpen}
           />
         )}
 

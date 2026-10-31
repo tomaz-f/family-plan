@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ArrowLeft,
   Check,
@@ -244,8 +244,16 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
     [exportFilterOptions]
   );
 
+  const prevIsOpenRef = useRef<boolean>(false);
+
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      prevIsOpenRef.current = false;
+      return;
+    }
+
+    if (!prevIsOpenRef.current) {
+      prevIsOpenRef.current = true;
       const target = mapInitialTabToSubScreen(activeTabInitial);
       setSubScreen(target);
       setCameFromIndex(false);
@@ -263,8 +271,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
       setSavedFeedback(false);
       setBalanceSavedFeedback(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, activeTabInitial]);
+  }, [isOpen, activeTabInitial, state.settings.familyName, state.settings.currency, language, theme]);
 
   useEffect(() => {
     setSelectedTheme(theme);
