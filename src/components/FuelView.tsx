@@ -1,44 +1,39 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Fuel,
   Plus,
-  Gauge,
-  Droplets,
-  MapPin,
-  TrendingUp,
-  Compass,
   Pencil,
   Trash2,
   CheckCircle2,
   CircleDashed,
-  Calendar,
-  BarChart3,
-  Activity,
+  MapPin,
+  Zap,
   X,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-} from 'recharts';
 import { AppLanguage, AppTheme, FuelLog, FuelType } from '../types';
 import {
   formatCurrency,
   formatMonthLabel,
-  formatShortDate,
-  formatShortMonthLabel,
   getCurrentMonthStr,
   getTodayDateStr,
-  shiftMonth,
 } from '../utils/format';
 import { TRANSLATIONS } from '../utils/i18n';
+
+const SWIPE_REVEAL_WIDTH = 100;
+const SWIPE_SNAP_THRESHOLD = 45;
+const SWIPE_MAX_DRAG = 125;
+
+const formatShortNumericDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const day = parts[2].padStart(2, '0');
+    const month = parts[1].padStart(2, '0');
+    const year = parts[0].slice(-2);
+    return `${day}/${month}/${year}`;
+  }
+  return dateStr;
+};
 
 interface FuelViewProps {
   selectedMonth: string;
@@ -70,6 +65,336 @@ interface EnrichedFuelLog extends FuelLog {
   costPerKm: number | null;
 }
 
+interface SwipeableFuelRowProps {
+  log: EnrichedFuelLog;
+  currency: string;
+  language: AppLanguage;
+  isOpen: boolean;
+  anyRowOpen: boolean;
+  onSetOpenRow: (id: string | null) => void;
+  onOpenEdit: (log: FuelLog) => void;
+  onDeleteFuelLog: (id: string) => Promise<void>;
+}
+
+const SwipeableFuelRow: React.FC<SwipeableFuelRowProps> = ({
+  log,
+  currency,
+  language,
+  isOpen,
+  anyRowOpen,
+  onSetOpenRow,
+  onOpenEdit,
+  onDeleteFuelLog,
+}) => {
+  const t = TRANSLATIONS[language];
+  const [dragOffset, setDragOffset] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    initialOffset: number;
+    lock: 'none' | 'horizontal' | 'vertical';
+    currentOffset: number;
+    active: boolean;
+  }>({
+    startX: 0,
+    startY: 0,
+    initialOffset: 0,
+    lock: 'none',
+    currentOffset: 0,
+    active: false,
+  });
+
+  const lastSwipeTimeRef = useRef<number>(0);
+
+  const clampSwipeOffset = (rawOffset: number): number => {
+    if (rawOffset > 0) return 0;
+    if (rawOffset < -SWIPE_REVEAL_WIDTH) {
+      const extra = rawOffset + SWIPE_REVEAL_WIDTH;
+      return Math.max(-SWIPE_MAX_DRAG, -SWIPE_REVEAL_WIDTH + extra * 0.25);
+    }
+    return rawOffset;
+  };
+
+  const finishSwipeGesture = () => {
+    const g = gestureRef.current;
+    if (!g.active) return;
+    g.active = false;
+
+    if (g.lock === 'horizontal') {
+      lastSwipeTimeRef.current = Date.now();
+      const finalOffset = g.currentOffset;
+      if (g.initialOffset === 0) {
+        if (finalOffset <= -SWIPE_SNAP_THRESHOLD) {
+          onSetOpenRow(log.id);
+        } else {
+          onSetOpenRow(null);
+        }
+      } else {
+        if (finalOffset > -SWIPE_REVEAL_WIDTH + 25) {
+          onSetOpenRow(null);
+        } else {
+          onSetOpenRow(log.id);
+        }
+      }
+    }
+
+    g.lock = 'none';
+    setIsDragging(false);
+    setDragOffset(null);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    if (anyRowOpen && !isOpen) {
+      onSetOpenRow(null);
+    }
+    const initial = isOpen ? -SWIPE_REVEAL_WIDTH : 0;
+    gestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      initialOffset: initial,
+      lock: 'none',
+      currentOffset: initial,
+      active: true,
+    };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const g = gestureRef.current;
+    if (!g.active || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - g.startX;
+    const deltaY = touch.clientY - g.startY;
+
+    if (g.lock === 'none') {
+      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        g.lock = 'vertical';
+        g.active = false;
+        return;
+      }
+      g.lock = 'horizontal';
+      setIsDragging(true);
+    }
+
+    if (g.lock === 'horizontal') {
+      const next = clampSwipeOffset(g.initialOffset + deltaX);
+      g.currentOffset = next;
+      setDragOffset(next);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    finishSwipeGesture();
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if (anyRowOpen && !isOpen) {
+      onSetOpenRow(null);
+    }
+    const initial = isOpen ? -SWIPE_REVEAL_WIDTH : 0;
+    gestureRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialOffset: initial,
+      lock: 'none',
+      currentOffset: initial,
+      active: true,
+    };
+
+    const handleWindowMouseMove = (ev: MouseEvent) => {
+      const g = gestureRef.current;
+      if (!g.active) return;
+      const deltaX = ev.clientX - g.startX;
+      const deltaY = ev.clientY - g.startY;
+
+      if (g.lock === 'none') {
+        if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          g.lock = 'vertical';
+          g.active = false;
+          return;
+        }
+        g.lock = 'horizontal';
+        setIsDragging(true);
+      }
+
+      if (g.lock === 'horizontal') {
+        const next = clampSwipeOffset(g.initialOffset + deltaX);
+        g.currentOffset = next;
+        setDragOffset(next);
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      finishSwipeGesture();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  const handleRowClick = () => {
+    if (Date.now() - lastSwipeTimeRef.current < 260) return;
+    if (isOpen || anyRowOpen) {
+      onSetOpenRow(null);
+      return;
+    }
+    onOpenEdit(log);
+  };
+
+  const translateX = dragOffset !== null ? dragOffset : isOpen ? -SWIPE_REVEAL_WIDTH : 0;
+
+  return (
+    <div
+      data-swipe-row-id={log.id}
+      className="relative overflow-hidden select-none"
+    >
+      {/* Background Action Layer (Revealed beneath on left-swipe) */}
+      <div
+        className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-2 pr-3 pl-2 z-0"
+        style={{ width: `${SWIPE_REVEAL_WIDTH}px` }}
+        aria-hidden={!isOpen && dragOffset === null}
+      >
+        {/* 1. Edit Refueling */}
+        <button
+          type="button"
+          tabIndex={isOpen ? 0 : -1}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetOpenRow(null);
+            onOpenEdit(log);
+          }}
+          className="swipe-action-btn w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          title={t.editTooltip}
+        >
+          <Pencil size={15} />
+        </button>
+
+        {/* 2. Delete Refueling */}
+        <button
+          type="button"
+          tabIndex={isOpen ? 0 : -1}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetOpenRow(null);
+            onDeleteFuelLog(log.id);
+          }}
+          className="swipe-action-btn-danger w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          title={t.deleteTooltip}
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+
+      {/* Foreground Content Layer (Swipeable surface card) */}
+      <div
+        role="button"
+        tabIndex={0}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onSetOpenRow(isOpen ? null : log.id);
+        }}
+        onClick={handleRowClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpenEdit(log);
+          } else if (e.key === 'ArrowLeft') {
+            onSetOpenRow(log.id);
+          } else if (e.key === 'ArrowRight' || e.key === 'Escape') {
+            onSetOpenRow(null);
+          }
+        }}
+        style={{
+          transform: `translate3d(${translateX}px, 0, 0)`,
+          transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          willChange: isDragging || isOpen ? 'transform' : 'auto',
+        }}
+        className="swipe-foreground-layer relative z-10 flex items-center justify-between p-3 sm:p-3.5 transition-colors gap-3 select-none cursor-pointer"
+      >
+        {/* Left/Center: Fuel Icon + Station, Badges & Efficiency */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-bold text-xs ${
+              log.fuelType === 'ethanol'
+                ? 'bg-emerald-500/15 text-emerald-500'
+                : 'bg-amber-500/15 text-amber-500'
+            }`}
+          >
+            <Fuel size={19} />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-sm font-bold text-slate-900 truncate max-w-[170px] sm:max-w-xs">
+                {log.stationName ||
+                  (log.fuelType === 'ethanol'
+                    ? language === 'pt-BR'
+                      ? 'Posto • Etanol'
+                      : 'Station • Ethanol'
+                    : language === 'pt-BR'
+                    ? 'Posto • Gasolina'
+                    : 'Station • Gasoline')}
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  log.fuelType === 'ethanol'
+                    ? 'bg-emerald-500/15 text-emerald-500'
+                    : 'bg-amber-500/15 text-amber-500'
+                }`}
+              >
+                {log.fuelType === 'ethanol' ? t.fuelEthanol : t.fuelGasoline}
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                {log.isFullTank ? t.fullTankLabel : t.partialTankLabel}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 mt-0.5">
+              <span className="font-semibold text-slate-700">
+                {log.odometer.toLocaleString(language === 'pt-BR' ? 'pt-BR' : 'en-US')} km
+              </span>
+              {log.distanceSinceLast !== null && (
+                <span>
+                  • +{log.distanceSinceLast.toLocaleString(language === 'pt-BR' ? 'pt-BR' : 'en-US')} km
+                </span>
+              )}
+              {log.kmPerLiter !== null && (
+                <span className="font-bold text-emerald-500 flex items-center gap-0.5">
+                  • <Zap size={11} className="inline shrink-0" /> {log.kmPerLiter.toFixed(2)} km/L
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Amount & Date strictly DD/MM/AA stacked vertically */}
+        <div className="flex flex-col items-end justify-center text-right shrink-0">
+          <span className="text-sm sm:text-base font-bold text-rose-500 block leading-tight">
+            -{formatCurrency(log.totalCost, currency)}
+          </span>
+          <span className="text-xs text-slate-400 font-medium mt-0.5 block leading-tight">
+            {formatShortNumericDate(log.date)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const FuelView: React.FC<FuelViewProps> = ({
   selectedMonth,
   currency,
@@ -85,6 +410,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
   const t = TRANSLATIONS[language];
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   // Form states
   const [date, setDate] = useState(getTodayDateStr());
@@ -95,28 +421,40 @@ export const FuelView: React.FC<FuelViewProps> = ({
   const [liters, setLiters] = useState('');
   const [stationName, setStationName] = useState('');
   const [isFullTank, setIsFullTank] = useState(true);
+  const [tankInput, setTankInput] = useState(String(tankCapacity || 54));
   const [submitting, setSubmitting] = useState(false);
 
-  // Tank size inline input
-  const [tankInput, setTankInput] = useState(String(tankCapacity || 50));
+  // Keep tank input synchronized with prop
+  useEffect(() => {
+    if (tankCapacity > 0) {
+      setTankInput(String(tankCapacity));
+    }
+  }, [tankCapacity]);
 
-  const gridStroke = theme === 'oled' ? '#21262D' : '#E2E8F0';
-  const axisTickColor = theme === 'oled' ? '#94A3B8' : '#64748B';
-  const tooltipStyle = useMemo(
-    () => ({
-      borderRadius: '12px',
-      border: `1px solid ${theme === 'oled' ? '#21262D' : '#E2E8F0'}`,
-      backgroundColor: theme === 'oled' ? '#0D1117' : '#FFFFFF',
-      color: theme === 'oled' ? '#F8FAFC' : '#0F172A',
-      fontSize: '12px',
-    }),
-    [theme]
-  );
+  // Click outside to dismiss any open swipe row
+  useEffect(() => {
+    if (!openRowId) return;
+    const handleDocClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest(`[data-swipe-row-id="${openRowId}"]`)) {
+        setOpenRowId(null);
+      }
+    };
+    window.addEventListener('touchstart', handleDocClick);
+    window.addEventListener('mousedown', handleDocClick);
+    return () => {
+      window.removeEventListener('touchstart', handleDocClick);
+      window.removeEventListener('mousedown', handleDocClick);
+    };
+  }, [openRowId]);
 
   // Enrich fuel logs in chronological order (by odometer asc, date asc)
   const enrichedLogsDesc = useMemo<EnrichedFuelLog[]>(() => {
     const sortedAsc = [...fuelLogs].sort(
-      (a, b) => a.odometer - b.odometer || a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)
+      (a, b) =>
+        a.odometer - b.odometer ||
+        a.date.localeCompare(b.date) ||
+        a.createdAt.localeCompare(b.createdAt)
     );
 
     const enrichedAsc: EnrichedFuelLog[] = [];
@@ -144,7 +482,6 @@ export const FuelView: React.FC<FuelViewProps> = ({
 
       if (distanceSinceLast && current.liters > 0) {
         if (current.isFullTank && lastFullTankIndex >= 0) {
-          // True full-tank to full-tank consumption calculation (including any partial top-ups in between)
           const totalDistSinceFull = current.odometer - sortedAsc[lastFullTankIndex].odometer;
           let accumulatedLiters = 0;
           let accumulatedCost = 0;
@@ -157,7 +494,6 @@ export const FuelView: React.FC<FuelViewProps> = ({
             costPerKm = accumulatedCost / totalDistSinceFull;
           }
         } else {
-          // Segment estimate between consecutive refuelings
           kmPerLiter = distanceSinceLast / current.liters;
           costPerKm = current.totalCost / distanceSinceLast;
         }
@@ -236,6 +572,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
     setLiters('');
     setStationName('');
     setIsFullTank(true);
+    setTankInput(String(tankCapacity || 54));
     setShowForm(true);
   };
 
@@ -255,6 +592,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
     setLiters(String(log.liters));
     setStationName(log.stationName || '');
     setIsFullTank(log.isFullTank);
+    setTankInput(String(tankCapacity || 54));
     setShowForm(true);
   };
 
@@ -264,6 +602,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
     const price = parseFloat(pricePerLiter.replace(',', '.'));
     const cost = parseFloat(totalCost.replace(',', '.'));
     const lit = parseFloat(liters.replace(',', '.'));
+    const tankSizeParsed = parseFloat(tankInput.replace(',', '.'));
 
     if (
       Number.isNaN(odo) ||
@@ -279,6 +618,11 @@ export const FuelView: React.FC<FuelViewProps> = ({
 
     setSubmitting(true);
     try {
+      // Persist tank capacity update if changed inside the modal
+      if (!Number.isNaN(tankSizeParsed) && tankSizeParsed > 0 && tankSizeParsed !== tankCapacity) {
+        await onUpdateTankCapacity(tankSizeParsed);
+      }
+
       await onSaveFuelLog({
         id: editingId || undefined,
         date,
@@ -297,7 +641,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
     }
   };
 
-  // Monthly & All-Time Metrics + Projections
+  // Consolidated Key Metrics
   const metrics = useMemo(() => {
     const monthLogs = enrichedLogsDesc.filter((l) => l.date.startsWith(selectedMonth));
 
@@ -317,7 +661,6 @@ export const FuelView: React.FC<FuelViewProps> = ({
       }
     }
 
-    // Overall Car Efficiency (km/L) and Cost/km
     const logsWithEfficiency = enrichedLogsDesc.filter(
       (l) => l.kmPerLiter !== null && l.kmPerLiter > 0 && l.kmPerLiter < 60
     );
@@ -334,21 +677,13 @@ export const FuelView: React.FC<FuelViewProps> = ({
         ? activeEffList.reduce((acc, l) => acc + (l.kmPerLiter || 0), 0) / activeEffList.length
         : null;
 
-    const avgCostPerKm =
-      activeEffList.length > 0
-        ? activeEffList.reduce((acc, l) => acc + (l.costPerKm || 0), 0) / activeEffList.length
-        : null;
-
-    // Estimated Full Tank Range (km) = Average km/L * Tank Capacity (L)
-    const effectiveTankSize = tankCapacity > 0 ? tankCapacity : 50;
+    const effectiveTankSize = tankCapacity > 0 ? tankCapacity : 54;
     const estimatedFullTankRange = avgKmPerLiter ? avgKmPerLiter * effectiveTankSize : null;
 
-    // Monthly Spend Projection
     const currentMonthStr = getCurrentMonthStr();
     const [selYear, selMon] = selectedMonth.split('-').map(Number);
     const daysInSelectedMonth = new Date(selYear, selMon, 0).getDate();
 
-    // Calculate historical monthly average fuel spend across months that have fuel logs
     const monthTotalsMap = new Map<string, number>();
     for (const l of fuelLogs) {
       const m = l.date.slice(0, 7);
@@ -360,12 +695,8 @@ export const FuelView: React.FC<FuelViewProps> = ({
         : 0;
 
     let projectedMonthlySpend = monthSpend;
-    let isCurrentMonthProjection = false;
-
     if (selectedMonth === currentMonthStr) {
-      isCurrentMonthProjection = true;
       const todayDay = new Date().getDate();
-      // If we have multiple fill-ups with dates, estimate daily cost burn rate
       if (monthSpend > 0) {
         const effectiveElapsedDays = Math.max(todayDay, 7);
         const paceProjection = (monthSpend / effectiveElapsedDays) * daysInSelectedMonth;
@@ -385,120 +716,188 @@ export const FuelView: React.FC<FuelViewProps> = ({
       monthEthanolLiters,
       monthDistance,
       avgKmPerLiter,
-      avgCostPerKm,
       estimatedFullTankRange,
       effectiveTankSize,
       projectedMonthlySpend,
-      isCurrentMonthProjection,
     };
   }, [enrichedLogsDesc, selectedMonth, tankCapacity, fuelLogs]);
 
-  // 6-Month Fuel Spending & Liters Chart Data
-  const sixMonthFuelChart = useMemo(() => {
-    const months: string[] = [];
-    for (let i = 5; i >= 0; i--) {
-      months.push(shiftMonth(selectedMonth, -i));
-    }
-
-    return months.map((m) => {
-      let spend = 0;
-      let vol = 0;
-      let dist = 0;
-      for (const l of enrichedLogsDesc) {
-        if (l.date.startsWith(m)) {
-          spend += l.totalCost;
-          vol += l.liters;
-          if (l.distanceSinceLast) dist += l.distanceSinceLast;
-        }
-      }
-      return {
-        month: m,
-        label: formatShortMonthLabel(m, language),
-        Spend: Number(spend.toFixed(2)),
-        Liters: Number(vol.toFixed(2)),
-        Distance: Number(dist.toFixed(0)),
-      };
-    });
-  }, [enrichedLogsDesc, selectedMonth, language]);
-
-  // Efficiency & Price/L Evolution Chart Data (chronological)
-  const efficiencyChartData = useMemo(() => {
-    return [...enrichedLogsDesc]
-      .reverse()
-      .slice(-12)
-      .map((l) => ({
-        date: formatShortDate(l.date, language),
-        kmPerLiter: l.kmPerLiter ? Number(l.kmPerLiter.toFixed(2)) : null,
-        pricePerLiter: Number(l.pricePerLiter.toFixed(2)),
-      }));
-  }, [enrichedLogsDesc, language]);
-
   return (
-    <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-500">
-            <Fuel size={15} />
-            {t.fuelHeaderBadge}
-          </div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-900">{t.fuelTitle}</h1>
-          <p className="text-xs text-slate-500 max-w-2xl">{t.fuelSubtitle}</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Tank Capacity Setting */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs">
-            <Droplets size={14} className="text-sky-500 shrink-0" />
-            <span className="font-semibold text-slate-600">{t.tankSizeLabel}:</span>
-            <input
-              type="number"
-              min="10"
-              max="200"
-              step="1"
-              value={tankInput}
-              onChange={(e) => setTankInput(e.target.value)}
-              onBlur={() => {
-                const parsed = parseFloat(tankInput);
-                if (!Number.isNaN(parsed) && parsed > 0 && parsed !== tankCapacity) {
-                  onUpdateTankCapacity(parsed);
-                }
-              }}
-              className="w-14 px-2 py-1 rounded-lg border border-slate-200 text-center font-bold text-slate-900 bg-white"
-            />
+    <div className="space-y-4">
+      {/* 1. SINGLE UNIFIED FUEL METRICS CARD (Clean 2x3 / 3-column Responsive Grid) */}
+      <div className="oled-main-card p-4 rounded-2xl border border-slate-200/90 shadow-sm space-y-3">
+        <div className="flex items-center justify-between pb-0.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
+              <Fuel size={17} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 leading-none">
+                {language === 'pt-BR' ? 'Resumo de Combustível' : 'Fuel Summary'}
+              </h2>
+              <span className="text-[11px] text-slate-400 capitalize">
+                {formatMonthLabel(selectedMonth, language)}
+              </span>
+            </div>
           </div>
 
           <button
             type="button"
-            onClick={() => (showForm ? setShowForm(false) : handleOpenNew())}
-            className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-sm transition-all"
+            onClick={handleOpenNew}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-xs active:scale-95 transition-all"
           >
-            {showForm ? t.closeForm : t.newRefuelBtn}
+            <Plus size={14} strokeWidth={2.5} />
+            <span>{language === 'pt-BR' ? 'Abastecer' : 'Refuel'}</span>
           </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {/* 1. Gasto no Mês */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between min-h-[72px]">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              {language === 'pt-BR' ? 'Gasto no Mês' : 'Month Spend'}
+            </span>
+            <p className="text-base sm:text-lg font-extrabold text-rose-500 mt-1 truncate">
+              {formatCurrency(metrics.monthSpend, currency)}
+            </p>
+          </div>
+
+          {/* 2. Projeção no Mês */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between min-h-[72px]">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              {language === 'pt-BR' ? 'Projeção no Mês' : 'Month Projection'}
+            </span>
+            <p className="text-base sm:text-lg font-extrabold text-slate-900 mt-1 truncate">
+              {metrics.projectedMonthlySpend > 0
+                ? formatCurrency(metrics.projectedMonthlySpend, currency)
+                : '—'}
+            </p>
+          </div>
+
+          {/* 3. Volume Total */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between min-h-[72px]">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              {language === 'pt-BR' ? 'Volume Total' : 'Total Volume'}
+            </span>
+            <div className="mt-1">
+              <p className="text-base sm:text-lg font-extrabold text-sky-500 truncate leading-tight">
+                {metrics.monthLiters.toLocaleString(
+                  language === 'pt-BR' ? 'pt-BR' : 'en-US',
+                  { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+                )}{' '}
+                L
+              </p>
+              {(metrics.monthGasolineLiters > 0 || metrics.monthEthanolLiters > 0) && (
+                <span className="text-[10px] text-slate-400 truncate block mt-0.5">
+                  {metrics.monthGasolineLiters.toFixed(0)}L Gas • {metrics.monthEthanolLiters.toFixed(0)}L Eta
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Distância Percorrida */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between min-h-[72px]">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              {language === 'pt-BR' ? 'Distância Percorrida' : 'Distance Driven'}
+            </span>
+            <p className="text-base sm:text-lg font-extrabold text-slate-900 mt-1 truncate">
+              {metrics.monthDistance.toLocaleString(language === 'pt-BR' ? 'pt-BR' : 'en-US')} km
+            </p>
+          </div>
+
+          {/* 5. Consumo Médio */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between min-h-[72px]">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              {language === 'pt-BR' ? 'Consumo Médio' : 'Avg Efficiency'}
+            </span>
+            <p className="text-base sm:text-lg font-extrabold text-emerald-500 mt-1 truncate flex items-center gap-1">
+              <Zap size={14} className="shrink-0 text-emerald-500" />
+              <span>{metrics.avgKmPerLiter ? `${metrics.avgKmPerLiter.toFixed(2)} km/L` : '—'}</span>
+            </p>
+          </div>
+
+          {/* 6. Autonomia Estimada */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between min-h-[72px]">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+              {language === 'pt-BR' ? 'Autonomia Estimada' : 'Projected Range'}
+            </span>
+            <p className="text-base sm:text-lg font-extrabold text-purple-400 mt-1 truncate">
+              {metrics.estimatedFullTankRange
+                ? `~${Math.round(metrics.estimatedFullTankRange).toLocaleString(
+                    language === 'pt-BR' ? 'pt-BR' : 'en-US'
+                  )} km`
+                : '—'}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Add / Edit Refueling Modal */}
+      {/* 2. REFUELING HISTORY LIST (Swipeable Mobile Architecture) */}
+      <div className="oled-main-card rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900">
+            {t.refuelingHistoryTitle}
+          </h3>
+          <span className="text-xs font-semibold text-slate-400">
+            {t.fillUpsCount(enrichedLogsDesc.length)}
+          </span>
+        </div>
+
+        {enrichedLogsDesc.length === 0 ? (
+          <div className="py-12 px-4 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center mx-auto">
+              <Fuel size={24} />
+            </div>
+            <p className="text-sm font-bold text-slate-800">{t.noRefuelingsTitle}</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">{t.noRefuelingsDesc}</p>
+            <button
+              type="button"
+              onClick={handleOpenNew}
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold active:scale-95 transition-all shadow-xs"
+            >
+              <Plus size={14} className="mr-1" />
+              {t.newRefuelBtn}
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {enrichedLogsDesc.map((log) => (
+              <SwipeableFuelRow
+                key={log.id}
+                log={log}
+                currency={currency}
+                language={language}
+                isOpen={openRowId === log.id}
+                anyRowOpen={openRowId !== null}
+                onSetOpenRow={setOpenRowId}
+                onOpenEdit={handleOpenEdit}
+                onDeleteFuelLog={onDeleteFuelLog}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 3. REFUELING MODAL (Compact Centered Modal Pattern) */}
       {showForm && (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
           onClick={() => {
             setShowForm(false);
             setEditingId(null);
           }}
         >
-          <form
+          <div
+            className="tx-compact-modal bg-white w-[92%] max-w-[420px] mx-auto rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
-            onSubmit={handleSubmit}
-            className="w-full max-w-2xl bg-white p-5 sm:p-6 rounded-t-3xl sm:rounded-2xl border border-amber-500/40 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Fuel size={18} className="text-amber-500" />
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <Fuel size={17} className="text-amber-500 shrink-0" />
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
                   {editingId ? t.editRefuelTitle : t.newRefuelTitle}
                 </h2>
-                <span className="text-[11px] font-medium text-emerald-500">{t.autoExpenseNote}</span>
               </div>
               <button
                 type="button"
@@ -506,524 +905,230 @@ export const FuelView: React.FC<FuelViewProps> = ({
                   setShowForm(false);
                   setEditingId(null);
                 }}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                aria-label={t.cancelBtn}
               >
                 <X size={18} />
               </button>
             </div>
 
-          {/* Fuel Type & Full/Partial Tank Toggle */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                {t.fuelTypeLabel}
-              </label>
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setFuelType('gasoline')}
-                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                    fuelType === 'gasoline'
-                      ? 'bg-amber-500 text-slate-950 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  ⛽ {t.fuelGasoline}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFuelType('ethanol')}
-                  className={`py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                    fuelType === 'ethanol'
-                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  🌱 {t.fuelEthanol}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                {t.fillTypeLabel}
-              </label>
-              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setIsFullTank(true)}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                    isFullTank
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <CheckCircle2 size={14} />
-                  {t.fullTankLabel}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsFullTank(false)}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                    !isFullTank
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <CircleDashed size={14} />
-                  {t.partialTankLabel}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Price per Liter, Total Cost, Liters (Auto-linked!), and Odometer */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                {t.pricePerLiterLabel}
-              </label>
-              <input
-                type="number"
-                step="0.001"
-                min="0.01"
-                required
-                placeholder="5.89"
-                value={pricePerLiter}
-                onChange={(e) => handlePriceChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                {t.totalCostLabel}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                placeholder="250.00"
-                value={totalCost}
-                onChange={(e) => handleTotalCostChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-rose-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                {t.litersLabel}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                placeholder="42.44"
-                value={liters}
-                onChange={(e) => handleLitersChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-sky-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                {t.odometerLabel}
-              </label>
-              <input
-                type="number"
-                step="1"
-                min="0"
-                required
-                placeholder={t.odometerPlaceholder}
-                value={odometer}
-                onChange={(e) => setOdometer(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold"
-              />
-              {highestOdometer !== null && (
-                <span className="block text-[11px] text-slate-400 mt-1">
-                  {t.lastOdometerHint(highestOdometer)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Gas Station Name & Date */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-500 mb-1">
-                {t.stationNameLabel}
-              </label>
-              <div className="relative">
-                <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder={t.stationPlaceholder}
-                  value={stationName}
-                  onChange={(e) => setStationName(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">{t.dateLabel}</label>
-              <div className="relative">
-                <Calendar size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setEditingId(null);
-              }}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-100"
-            >
-              {t.cancelBtn}
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-sm"
-            >
-              {submitting ? t.savingBtn : t.saveRefuelBtn}
-            </button>
-          </div>
-          </form>
-        </div>
-      )}
-
-      {/* 6 KPI REPORT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* 1. Monthly Fuel Spend */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.monthlyFuelSpend} ({formatShortMonthLabel(selectedMonth, language)})
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center">
-              <Fuel size={17} />
-            </div>
-          </div>
-          <p className="text-2xl font-extrabold text-rose-500">
-            {formatCurrency(metrics.monthSpend, currency)}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {t.fillUpsCount(metrics.monthLogs.length)}
-          </p>
-        </div>
-
-        {/* 2. Projected Monthly Fuel Spend */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.projectedMonthlySpend}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
-              <TrendingUp size={17} />
-            </div>
-          </div>
-          <p className="text-2xl font-extrabold text-slate-900">
-            {metrics.projectedMonthlySpend > 0
-              ? formatCurrency(metrics.projectedMonthlySpend, currency)
-              : '—'}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {metrics.isCurrentMonthProjection ? t.basedOnPace : t.historicalMonthAvg}
-          </p>
-        </div>
-
-        {/* 3. Total Volume Purchased in Month */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.monthlyVolume}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-500 flex items-center justify-center">
-              <Droplets size={17} />
-            </div>
-          </div>
-          <p className="text-2xl font-extrabold text-sky-500">
-            {metrics.monthLiters.toFixed(2)} L
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {t.fuelGasoline}: {metrics.monthGasolineLiters.toFixed(1)}L • {t.fuelEthanol}:{' '}
-            {metrics.monthEthanolLiters.toFixed(1)}L
-          </p>
-        </div>
-
-        {/* 4. Distance Covered in Month */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.monthlyDistance}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
-              <Gauge size={17} />
-            </div>
-          </div>
-          <p className="text-2xl font-extrabold text-slate-900">
-            {metrics.monthDistance.toLocaleString(language === 'pt-BR' ? 'pt-BR' : 'en-US')} km
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {highestOdometer !== null ? t.lastOdometerHint(highestOdometer) : '—'}
-          </p>
-        </div>
-
-        {/* 5. Car Average Fuel Efficiency (km/L) */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.avgEfficiency}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-              <Activity size={17} />
-            </div>
-          </div>
-          <p className="text-2xl font-extrabold text-emerald-500">
-            {metrics.avgKmPerLiter ? `${metrics.avgKmPerLiter.toFixed(2)} km/L` : '—'}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {metrics.avgCostPerKm
-              ? `${t.costPerKmLabel}: ${formatCurrency(metrics.avgCostPerKm, currency)}/km`
-              : language === 'pt-BR'
-              ? 'Registre 2+ abastecimentos com odômetro'
-              : 'Log 2+ fill-ups with odometer'}
-          </p>
-        </div>
-
-        {/* 6. Estimated Range on a Full Tank */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {t.estimatedFullTankRange}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center">
-              <Compass size={17} />
-            </div>
-          </div>
-          <p className="text-2xl font-extrabold text-slate-900">
-            {metrics.estimatedFullTankRange
-              ? `~${Math.round(metrics.estimatedFullTankRange).toLocaleString(
-                  language === 'pt-BR' ? 'pt-BR' : 'en-US'
-                )} km`
-              : '—'}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {t.basedOnTankSize(metrics.effectiveTankSize)}
-          </p>
-        </div>
-      </div>
-
-      {/* CHARTS ROW */}
-      {fuelLogs.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* 6-Month Fuel Spend & Volume */}
-          <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-4">
-              <BarChart3 size={18} className="text-amber-500" />
-              {t.fuelMonthlyChartTitle}
-            </h2>
-            <div className="h-60 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sixMonthFuelChart} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                  <RechartsTooltip
-                    formatter={(value: number, name: string) => [
-                      name === 'Spend' ? formatCurrency(Number(value), currency) : `${value} L`,
-                      name === 'Spend' ? t.totalCostLabel : t.litersLabel,
-                    ]}
-                    contentStyle={tooltipStyle}
-                  />
-                  <Legend
-                    formatter={(val) => (val === 'Spend' ? t.totalCostLabel : t.litersLabel)}
-                    wrapperStyle={{ fontSize: '12px' }}
-                  />
-                  <Bar dataKey="Spend" fill="#f43f5e" radius={[6, 6, 0, 0]} maxBarSize={30} />
-                  <Bar dataKey="Liters" fill="#0ea5e9" radius={[6, 6, 0, 0]} maxBarSize={30} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Efficiency (km/L) & Price/L Evolution */}
-          <div className="lg:col-span-6 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 mb-4">
-              <Activity size={18} className="text-emerald-500" />
-              {t.fuelEfficiencyChartTitle}
-            </h2>
-            <div className="h-60 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={efficiencyChartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: axisTickColor }} axisLine={false} tickLine={false} />
-                  <RechartsTooltip contentStyle={tooltipStyle} />
-                  <Legend
-                    formatter={(val) => (val === 'kmPerLiter' ? 'km/L' : t.pricePerLiterLabel)}
-                    wrapperStyle={{ fontSize: '12px' }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="kmPerLiter"
-                    stroke="#10b981"
-                    strokeWidth={2.5}
-                    dot={{ r: 4 }}
-                    connectNulls
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="pricePerLiter"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* REFUELING HISTORY & DISTANCE BETWEEN FILL-UPS */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">{t.refuelingHistoryTitle}</h2>
-          <span className="text-xs font-semibold text-slate-500">
-            {t.fillUpsCount(enrichedLogsDesc.length)}
-          </span>
-        </div>
-
-        {enrichedLogsDesc.length === 0 ? (
-          <div className="py-16 px-4 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
-              <Fuel size={24} />
-            </div>
-            <p className="text-sm font-bold text-slate-800">{t.noRefuelingsTitle}</p>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">{t.noRefuelingsDesc}</p>
-            <button
-              type="button"
-              onClick={handleOpenNew}
-              className="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold"
-            >
-              {t.newRefuelBtn}
-            </button>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {enrichedLogsDesc.map((log) => (
-              <div
-                key={log.id}
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-5 gap-3 hover:bg-slate-50/70 transition-colors"
-              >
-                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-                  <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 font-bold text-xs ${
-                      log.fuelType === 'ethanol'
-                        ? 'bg-emerald-500/15 text-emerald-500'
-                        : 'bg-amber-500/15 text-amber-500'
+            {/* Modal Form */}
+            <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto no-scrollbar">
+              {/* Fuel Type Selector: Segmented Pill */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  {t.fuelTypeLabel}
+                </label>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={() => setFuelType('gasoline')}
+                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
+                      fuelType === 'gasoline'
+                        ? 'bg-[#F59E0B] text-slate-950 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    <Fuel size={20} />
-                  </div>
-
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-slate-900">
-                        {log.stationName ||
-                          (log.fuelType === 'ethanol' ? t.fuelEthanol : t.fuelGasoline)}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          log.fuelType === 'ethanol'
-                            ? 'bg-emerald-500/15 text-emerald-500'
-                            : 'bg-amber-500/15 text-amber-500'
-                        }`}
-                      >
-                        {log.fuelType === 'ethanol' ? t.fuelEthanol : t.fuelGasoline}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                        {log.isFullTank ? t.fullTankLabel : t.partialTankLabel}
-                      </span>
-                      {log.kmPerLiter !== null && (
-                        <span className="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-500 text-[10px] font-bold">
-                          ⚡ {t.efficiencyBadge(log.kmPerLiter.toFixed(2))}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500">
-                      <span>{formatShortDate(log.date, language)}</span>
-                      <span>•</span>
-                      <span className="font-semibold text-slate-700">
-                        {log.odometer.toLocaleString(language === 'pt-BR' ? 'pt-BR' : 'en-US')} km
-                      </span>
-                      <span>•</span>
-                      {log.distanceSinceLast !== null ? (
-                        <span className="font-semibold text-emerald-500">
-                          {t.distanceTraveledBadge(log.distanceSinceLast)}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">{t.firstOdometerBadge}</span>
-                      )}
-                      <span>•</span>
-                      <span>
-                        {log.liters.toFixed(2)} L × {formatCurrency(log.pricePerLiter, currency)}/L
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-4 pl-14 sm:pl-0 shrink-0">
-                  <div className="text-right">
-                    <span className="text-base font-extrabold text-rose-500 block">
-                      -{formatCurrency(log.totalCost, currency)}
-                    </span>
-                    {log.costPerKm !== null && (
-                      <span className="text-[11px] text-slate-400">
-                        {formatCurrency(log.costPerKm, currency)}/km
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEdit(log)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                      title={t.editTooltip}
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteFuelLog(log.id)}
-                      className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-                      title={t.deleteTooltip}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                    <span>⛽ {t.fuelGasoline}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFuelType('ethanol')}
+                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
+                      fuelType === 'ethanol'
+                        ? 'bg-[#10B981] text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>🌱 {t.fuelEthanol}</span>
+                  </button>
                 </div>
               </div>
-            ))}
+
+              {/* Fill Type Selector: Segmented Pill */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  {t.fillTypeLabel}
+                </label>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={() => setIsFullTank(true)}
+                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
+                      isFullTank
+                        ? 'bg-[#6E5440] text-[#FFFDF5] shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <CheckCircle2 size={13} />
+                    <span>{t.fullTankLabel}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsFullTank(false)}
+                    className={`h-9 flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-bold transition-all ${
+                      !isFullTank
+                        ? 'bg-[#6E5440] text-[#FFFDF5] shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <CircleDashed size={13} />
+                    <span>{t.partialTankLabel}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 1: Preço/L & Valor Total */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    {t.pricePerLiterLabel}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0.01"
+                    required
+                    placeholder="5.89"
+                    value={pricePerLiter}
+                    onChange={(e) => handlePriceChange(e.target.value)}
+                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    {t.totalCostLabel}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    placeholder="250.00"
+                    value={totalCost}
+                    onChange={(e) => handleTotalCostChange(e.target.value)}
+                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-rose-500"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Litros & Odômetro */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    {t.litersLabel}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    placeholder="42.44"
+                    value={liters}
+                    onChange={(e) => handleLitersChange(e.target.value)}
+                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-sky-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    {t.odometerLabel}
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    required
+                    placeholder={t.odometerPlaceholder}
+                    value={odometer}
+                    onChange={(e) => setOdometer(e.target.value)}
+                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-slate-900"
+                  />
+                  {highestOdometer !== null && (
+                    <span className="block text-[10px] text-slate-400 mt-1 truncate">
+                      {t.lastOdometerHint(highestOdometer)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 3: Capacidade do Tanque (Litros) & Data */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1 truncate">
+                    {language === 'pt-BR'
+                      ? 'Capacidade Tanque (L)'
+                      : 'Tank Capacity (L)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="300"
+                    step="1"
+                    required
+                    placeholder="54"
+                    value={tankInput}
+                    onChange={(e) => setTankInput(e.target.value)}
+                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold bg-slate-50 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    {t.dateLabel}
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="h-11 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium bg-slate-50 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Row 4: Posto de Combustível */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                  {t.stationNameLabel}
+                </label>
+                <div className="relative">
+                  <MapPin
+                    size={16}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder={t.stationPlaceholder}
+                    value={stationName}
+                    onChange={(e) => setStationName(e.target.value)}
+                    className="h-11 w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Compact Footer Actions */}
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingId(null);
+                  }}
+                  className="flex-1 h-11 py-2.5 px-3 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors active:scale-95"
+                >
+                  {t.cancelBtn}
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 h-11 py-2.5 px-3 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-xs hover:bg-slate-800 transition-colors active:scale-95"
+                >
+                  {submitting ? t.savingBtn : t.saveRefuelBtn}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,21 +2,21 @@ import { Client } from '@libsql/client/web';
 import { AppState, Category, Transaction, CreditCard, FuelLog, RecurringTemplate } from '../types';
 
 export const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'inc-deposit', name: 'Bank Input / Deposit', type: 'income', color: '#10b981', icon: 'Landmark', isDefault: 1 },
-  { id: 'inc-salary', name: 'Salary / Paycheck', type: 'income', color: '#059669', icon: 'Briefcase', isDefault: 1 },
-  { id: 'inc-freelance', name: 'Extra Income / Bonus', type: 'income', color: '#14b8a6', icon: 'Sparkles', isDefault: 1 },
-  { id: 'inc-refund', name: 'Refund / Cashback', type: 'income', color: '#06b6d4', icon: 'RotateCcw', isDefault: 1 },
-  { id: 'inc-other', name: 'Other Input', type: 'income', color: '#3b82f6', icon: 'PlusCircle', isDefault: 1 },
-  { id: 'exp-groceries', name: 'Groceries & Market', type: 'expense', color: '#f59e0b', icon: 'ShoppingCart', isDefault: 1 },
-  { id: 'exp-housing', name: 'Housing & Rent', type: 'expense', color: '#6366f1', icon: 'Home', isDefault: 1 },
-  { id: 'exp-utilities', name: 'Bills & Utilities', type: 'expense', color: '#0ea5e9', icon: 'Zap', isDefault: 1 },
-  { id: 'exp-dining', name: 'Dining & Food Delivery', type: 'expense', color: '#f97316', icon: 'Utensils', isDefault: 1 },
-  { id: 'exp-transport', name: 'Transport & Fuel', type: 'expense', color: '#8b5cf6', icon: 'Car', isDefault: 1 },
-  { id: 'exp-health', name: 'Health & Pharmacy', type: 'expense', color: '#ef4444', icon: 'HeartPulse', isDefault: 1 },
-  { id: 'exp-education', name: 'Kids & Education', type: 'expense', color: '#ec4899', icon: 'GraduationCap', isDefault: 1 },
-  { id: 'exp-shopping', name: 'Shopping & Home', type: 'expense', color: '#a855f7', icon: 'ShoppingBag', isDefault: 1 },
-  { id: 'exp-leisure', name: 'Leisure & Subscriptions', type: 'expense', color: '#14b8a6', icon: 'Film', isDefault: 1 },
-  { id: 'exp-other', name: 'Other Expenses', type: 'expense', color: '#64748b', icon: 'MoreHorizontal', isDefault: 1 },
+  // Expense Categories (Strict Single-Word Names)
+  { id: 'exp-housing', name: 'Moradia', type: 'expense', color: '#F97316', icon: 'Home', isDefault: 1 },
+  { id: 'exp-groceries', name: 'Mercado', type: 'expense', color: '#10B981', icon: 'ShoppingBag', isDefault: 1 },
+  { id: 'exp-transport', name: 'Transporte', type: 'expense', color: '#06B6D4', icon: 'Car', isDefault: 1 },
+  { id: 'exp-health', name: 'Saúde', type: 'expense', color: '#F43F5E', icon: 'HeartPulse', isDefault: 1 },
+  { id: 'exp-leisure', name: 'Lazer', type: 'expense', color: '#8B5CF6', icon: 'Gamepad2', isDefault: 1 },
+  { id: 'exp-education', name: 'Educação', type: 'expense', color: '#3B82F6', icon: 'GraduationCap', isDefault: 1 },
+  { id: 'exp-subscriptions', name: 'Assinaturas', type: 'expense', color: '#EC4899', icon: 'Tv', isDefault: 1 },
+  { id: 'exp-bills', name: 'Contas', type: 'expense', color: '#EAB308', icon: 'Zap', isDefault: 1 },
+  { id: 'exp-other', name: 'Outros', type: 'expense', color: '#64748B', icon: 'Layers', isDefault: 1 },
+
+  // Income Categories (Strict Single-Word Names)
+  { id: 'inc-salary', name: 'Salário', type: 'income', color: '#22C55E', icon: 'Briefcase', isDefault: 1 },
+  { id: 'inc-extra', name: 'Extra', type: 'income', color: '#14B8A6', icon: 'Sparkles', isDefault: 1 },
+  { id: 'inc-investments', name: 'Investimentos', type: 'income', color: '#38BDF8', icon: 'TrendingUp', isDefault: 1 },
 ];
 
 export const DEFAULT_SETTINGS = {
@@ -159,6 +159,15 @@ export async function directVerifyFamily(client: Client, familyId: string): Prom
   return res.rows.length > 0;
 }
 
+export async function directSeedDefaultCategories(client: Client, familyId: string): Promise<void> {
+  const catBatch = DEFAULT_CATEGORIES.map((c) => ({
+    sql: `INSERT OR IGNORE INTO categories (family_id, id, name, type, color, icon, isDefault)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [familyId, c.id, c.name, c.type, c.color, c.icon, c.isDefault ? 1 : 0],
+  }));
+  await client.batch(catBatch, 'write');
+}
+
 export async function directCreateFamily(
   client: Client,
   requestedId?: string
@@ -167,27 +176,24 @@ export async function directCreateFamily(
   const fid = requestedId || `FP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const now = new Date().toISOString();
 
-  await client.execute({
+  const familyStmt = {
     sql: 'INSERT OR REPLACE INTO families (family_id, created_at) VALUES (?, ?)',
     args: [fid, now],
-  });
+  };
 
-  // Seed default categories
-  for (const c of DEFAULT_CATEGORIES) {
-    await client.execute({
-      sql: `INSERT OR IGNORE INTO categories (family_id, id, name, type, color, icon, isDefault)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      args: [fid, c.id, c.name, c.type, c.color, c.icon, c.isDefault ? 1 : 0],
-    });
-  }
+  const catBatch = DEFAULT_CATEGORIES.map((c) => ({
+    sql: `INSERT OR IGNORE INTO categories (family_id, id, name, type, color, icon, isDefault)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [fid, c.id, c.name, c.type, c.color, c.icon, c.isDefault ? 1 : 0],
+  }));
 
-  // Seed default settings
-  for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
-    await client.execute({
-      sql: 'INSERT OR IGNORE INTO settings (family_id, key, value) VALUES (?, ?, ?)',
-      args: [fid, k, String(v)],
-    });
-  }
+  const settingBatch = Object.entries(DEFAULT_SETTINGS).map(([k, v]) => ({
+    sql: 'INSERT OR IGNORE INTO settings (family_id, key, value) VALUES (?, ?, ?)',
+    args: [fid, k, String(v)],
+  }));
+
+  // Atomic batch execution to guarantee family creation & default category initialization
+  await client.batch([familyStmt, ...catBatch, ...settingBatch], 'write');
 
   return { familyId: fid, createdAt: now };
 }
@@ -222,6 +228,17 @@ export async function directGetFullState(client: Client, familyId: string): Prom
     }),
   ]);
 
+  let catRows = catRes.rows;
+  if (catRows.length === 0) {
+    console.log(`[Turso Direct Safeguard] Family ${familyId} has 0 categories. Seeding defaults...`);
+    await directSeedDefaultCategories(client, familyId);
+    const refreshed = await client.execute({
+      sql: 'SELECT id, name, type, color, icon, isDefault, encrypted_data FROM categories WHERE family_id = ? ORDER BY type ASC, name ASC',
+      args: [familyId],
+    });
+    catRows = refreshed.rows;
+  }
+
   const settings: any = { ...DEFAULT_SETTINGS };
   for (const r of setRes.rows) {
     const k = String(r.key);
@@ -233,7 +250,7 @@ export async function directGetFullState(client: Client, familyId: string): Prom
     }
   }
 
-  const categories: Category[] = catRes.rows.map((c: any) => ({
+  const categories: Category[] = catRows.map((c: any) => ({
     id: String(c.id),
     name: String(c.name || ''),
     type: c.type === 'income' ? 'income' : 'expense',

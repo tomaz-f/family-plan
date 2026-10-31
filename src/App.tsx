@@ -23,6 +23,7 @@ import {
   AppLanguage,
   AppState,
   AppTheme,
+  Category,
   CreditCard,
   FuelType,
   Transaction,
@@ -83,6 +84,24 @@ import {
 const STORAGE_STATE_KEY = 'familyplan_cached_state_v1';
 const STORAGE_PENDING_TX_KEY = 'familyplan_pending_tx_v1';
 
+export const DEFAULT_CORE_CATEGORIES: Category[] = [
+  // Expense Categories (Strict Single-Word Names)
+  { id: 'exp-housing', name: 'Moradia', type: 'expense', color: '#F97316', icon: 'Home', isDefault: 1 },
+  { id: 'exp-groceries', name: 'Mercado', type: 'expense', color: '#10B981', icon: 'ShoppingBag', isDefault: 1 },
+  { id: 'exp-transport', name: 'Transporte', type: 'expense', color: '#06B6D4', icon: 'Car', isDefault: 1 },
+  { id: 'exp-health', name: 'Saúde', type: 'expense', color: '#F43F5E', icon: 'HeartPulse', isDefault: 1 },
+  { id: 'exp-leisure', name: 'Lazer', type: 'expense', color: '#8B5CF6', icon: 'Gamepad2', isDefault: 1 },
+  { id: 'exp-education', name: 'Educação', type: 'expense', color: '#3B82F6', icon: 'GraduationCap', isDefault: 1 },
+  { id: 'exp-subscriptions', name: 'Assinaturas', type: 'expense', color: '#EC4899', icon: 'Tv', isDefault: 1 },
+  { id: 'exp-bills', name: 'Contas', type: 'expense', color: '#EAB308', icon: 'Zap', isDefault: 1 },
+  { id: 'exp-other', name: 'Outros', type: 'expense', color: '#64748B', icon: 'Layers', isDefault: 1 },
+
+  // Income Categories (Strict Single-Word Names)
+  { id: 'inc-salary', name: 'Salário', type: 'income', color: '#22C55E', icon: 'Briefcase', isDefault: 1 },
+  { id: 'inc-extra', name: 'Extra', type: 'income', color: '#14B8A6', icon: 'Sparkles', isDefault: 1 },
+  { id: 'inc-investments', name: 'Investimentos', type: 'income', color: '#38BDF8', icon: 'TrendingUp', isDefault: 1 },
+];
+
 const FALLBACK_STATE: AppState = {
   settings: {
     familyName: 'PRUMO',
@@ -90,19 +109,10 @@ const FALLBACK_STATE: AppState = {
     language: 'pt-BR',
     theme: 'oled',
     initialBalance: 0,
+    tankCapacity: 54,
     updatedAt: new Date().toISOString(),
   },
-  categories: [
-    { id: 'inc-deposit', name: 'Bank Input / Deposit', type: 'income', color: '#10b981', icon: 'Landmark', isDefault: 1 },
-    { id: 'inc-salary', name: 'Salary / Paycheck', type: 'income', color: '#059669', icon: 'Briefcase', isDefault: 1 },
-    { id: 'exp-groceries', name: 'Groceries & Market', type: 'expense', color: '#f59e0b', icon: 'ShoppingCart', isDefault: 1 },
-    { id: 'exp-housing', name: 'Housing & Rent', type: 'expense', color: '#6366f1', icon: 'Home', isDefault: 1 },
-    { id: 'exp-utilities', name: 'Bills & Utilities', type: 'expense', color: '#0ea5e9', icon: 'Zap', isDefault: 1 },
-    { id: 'exp-dining', name: 'Dining & Food Delivery', type: 'expense', color: '#f97316', icon: 'Utensils', isDefault: 1 },
-    { id: 'exp-transport', name: 'Transport & Fuel', type: 'expense', color: '#8b5cf6', icon: 'Car', isDefault: 1 },
-    { id: 'exp-health', name: 'Health & Pharmacy', type: 'expense', color: '#ef4444', icon: 'HeartPulse', isDefault: 1 },
-    { id: 'exp-other', name: 'Other Expenses', type: 'expense', color: '#64748b', icon: 'MoreHorizontal', isDefault: 1 },
-  ],
+  categories: DEFAULT_CORE_CATEGORIES,
   transactions: [],
   recurringTemplates: [],
   creditCards: [],
@@ -175,6 +185,9 @@ export const App: React.FC = () => {
         if (Array.isArray(parsed?.transactions)) {
           parsed.transactions = normalizeLegacyInstallmentTransactions(parsed.transactions).transactions;
         }
+        if (!parsed.categories || !Array.isArray(parsed.categories) || parsed.categories.length === 0) {
+          parsed.categories = DEFAULT_CORE_CATEGORIES;
+        }
         return parsed;
       }
     } catch {
@@ -237,8 +250,13 @@ export const App: React.FC = () => {
       const { transactions: normalizedTransactions } = normalizeLegacyInstallmentTransactions(
         nextState.transactions || []
       );
+      const normalizedCategories =
+        Array.isArray(nextState.categories) && nextState.categories.length > 0
+          ? nextState.categories
+          : DEFAULT_CORE_CATEGORIES;
       const normalizedState: AppState = {
         ...nextState,
+        categories: normalizedCategories,
         transactions: normalizedTransactions,
         settings: {
           ...nextState.settings,

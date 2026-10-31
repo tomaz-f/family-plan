@@ -1,28 +1,54 @@
 import { AppLanguage, Category } from '../types';
 
 const DEFAULT_CATEGORY_TRANSLATIONS: Record<string, { en: string; 'pt-BR': string }> = {
-  'inc-deposit': { en: 'Bank Input / Deposit', 'pt-BR': 'Depósito / Entrada no Banco' },
-  'inc-salary': { en: 'Salary / Paycheck', 'pt-BR': 'Salário / Pagamento' },
-  'inc-freelance': { en: 'Extra Income / Bonus', 'pt-BR': 'Renda Extra / Bônus' },
-  'inc-refund': { en: 'Refund / Cashback', 'pt-BR': 'Reembolso / Estorno' },
-  'inc-other': { en: 'Other Input', 'pt-BR': 'Outras Entradas' },
-  'exp-groceries': { en: 'Groceries & Market', 'pt-BR': 'Supermercado e Feira' },
-  'exp-housing': { en: 'Housing & Rent', 'pt-BR': 'Moradia e Aluguel' },
-  'exp-utilities': { en: 'Bills & Utilities', 'pt-BR': 'Contas (Água, Luz, Internet)' },
-  'exp-dining': { en: 'Dining & Food Delivery', 'pt-BR': 'Restaurantes e Delivery' },
-  'exp-transport': { en: 'Transport & Fuel', 'pt-BR': 'Transporte e Combustível' },
-  'exp-health': { en: 'Health & Pharmacy', 'pt-BR': 'Saúde e Farmácia' },
-  'exp-education': { en: 'Kids & Education', 'pt-BR': 'Filhos e Educação' },
-  'exp-shopping': { en: 'Shopping & Home', 'pt-BR': 'Compras e Casa' },
-  'exp-leisure': { en: 'Leisure & Subscriptions', 'pt-BR': 'Lazer e Assinaturas' },
-  'exp-other': { en: 'Other Expenses', 'pt-BR': 'Outras Despesas' },
+  // Core Categories (Strict Single-Word Names)
+  'exp-housing': { en: 'Housing', 'pt-BR': 'Moradia' },
+  'exp-groceries': { en: 'Groceries', 'pt-BR': 'Mercado' },
+  'exp-transport': { en: 'Transport', 'pt-BR': 'Transporte' },
+  'exp-health': { en: 'Health', 'pt-BR': 'Saúde' },
+  'exp-leisure': { en: 'Leisure', 'pt-BR': 'Lazer' },
+  'exp-education': { en: 'Education', 'pt-BR': 'Educação' },
+  'exp-subscriptions': { en: 'Subscriptions', 'pt-BR': 'Assinaturas' },
+  'exp-bills': { en: 'Bills', 'pt-BR': 'Contas' },
+  'exp-other': { en: 'Other', 'pt-BR': 'Outros' },
+  'inc-salary': { en: 'Salary', 'pt-BR': 'Salário' },
+  'inc-extra': { en: 'Extra', 'pt-BR': 'Extra' },
+  'inc-investments': { en: 'Investments', 'pt-BR': 'Investimentos' },
+
+  // Legacy Category Mappings
+  'inc-deposit': { en: 'Deposit', 'pt-BR': 'Depósito' },
+  'inc-freelance': { en: 'Extra', 'pt-BR': 'Extra' },
+  'inc-refund': { en: 'Refund', 'pt-BR': 'Reembolso' },
+  'inc-other': { en: 'Other', 'pt-BR': 'Outras' },
+  'exp-utilities': { en: 'Bills', 'pt-BR': 'Contas' },
+  'exp-dining': { en: 'Dining', 'pt-BR': 'Restaurante' },
+  'exp-shopping': { en: 'Shopping', 'pt-BR': 'Compras' },
 };
 
 export function getCategoryDisplayName(cat?: Category | null, lang: AppLanguage = 'en'): string {
   if (!cat) return lang === 'pt-BR' ? 'Sem categoria' : 'Uncategorized';
   const entry = DEFAULT_CATEGORY_TRANSLATIONS[cat.id];
-  if (entry && (cat.name === entry.en || cat.name === entry['pt-BR'])) {
-    return entry[lang];
+  if (entry) {
+    if (
+      cat.name === entry.en ||
+      cat.name === entry['pt-BR'] ||
+      cat.name === 'Moradia e Aluguel' ||
+      cat.name === 'Supermercado e Feira' ||
+      cat.name === 'Transporte e Combustível' ||
+      cat.name === 'Saúde e Farmácia' ||
+      cat.name === 'Lazer e Assinaturas' ||
+      cat.name === 'Filhos e Educação' ||
+      cat.name === 'Outras Despesas' ||
+      cat.name === 'Housing & Rent' ||
+      cat.name === 'Groceries & Market' ||
+      cat.name === 'Transport & Fuel' ||
+      cat.name === 'Health & Pharmacy' ||
+      cat.name === 'Leisure & Subscriptions' ||
+      cat.name === 'Kids & Education' ||
+      cat.name === 'Other Expenses'
+    ) {
+      return entry[lang];
+    }
   }
   return cat.name;
 }
