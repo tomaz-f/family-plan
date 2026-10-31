@@ -1,36 +1,19 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   CreditCard as CreditCardIcon,
   Plus,
-  Calendar,
   CheckCircle2,
   Clock,
-  TrendingUp,
   AlertCircle,
   Pencil,
   Trash2,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
   DollarSign,
-  PieChart as PieChartIcon,
-  ArrowUpRight,
-  ExternalLink,
-  Info,
   X,
-  Layers,
-  Sparkles,
+  ShieldCheck,
+  TrendingUp,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-} from 'recharts';
 import {
   AppLanguage,
   AppTheme,
@@ -44,7 +27,6 @@ import {
   computeCardFirstInvoiceMonth,
   formatCurrency,
   formatMonthLabel,
-  formatShortMonthLabel,
   getTodayDateStr,
   shiftMonth,
 } from '../utils/format';
@@ -82,10 +64,22 @@ const PRESET_COLORS = [
   '#dc2626', // Santander red
   '#0284c7', // Sky blue
   '#4f46e5', // Indigo
-  '#0f172a', // Midnight slate
+  '#6E5440', // Prumo iron
   '#d97706', // Amber gold
   '#ec4899', // Pink
 ];
+
+const formatShortNumericDate = (dateStr?: string | null): string => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const day = parts[2].padStart(2, '0');
+    const month = parts[1].padStart(2, '0');
+    const year = parts[0].slice(-2);
+    return `${day}/${month}/${year}`;
+  }
+  return dateStr;
+};
 
 // Visual brand badge component
 export const CardBrandBadge: React.FC<{ brand?: CreditCardBrand; className?: string }> = ({
@@ -95,36 +89,270 @@ export const CardBrandBadge: React.FC<{ brand?: CreditCardBrand; className?: str
   if (brand === 'mastercard') {
     return (
       <div className={`flex items-center -space-x-1.5 ${className}`}>
-        <div className="w-5 h-5 rounded-full bg-red-600/90 shadow-sm" />
-        <div className="w-5 h-5 rounded-full bg-amber-500/90 shadow-sm" />
+        <div className="w-4 h-4 rounded-full bg-red-600/90 shadow-xs" />
+        <div className="w-4 h-4 rounded-full bg-amber-500/90 shadow-xs" />
       </div>
     );
   }
   if (brand === 'visa') {
     return (
-      <span className={`font-black italic tracking-wider text-sm text-blue-200 ${className}`}>
+      <span className={`font-black italic tracking-wider text-xs text-blue-200 ${className}`}>
         VISA
       </span>
     );
   }
   if (brand === 'elo') {
     return (
-      <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/40 text-[10px] font-black tracking-tight ${className}`}>
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block" />
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
+      <div className={`flex items-center gap-0.5 px-1 py-0.5 rounded bg-black/50 text-[9px] font-black tracking-tight ${className}`}>
+        <span className="w-1 h-1 rounded-full bg-red-500 inline-block" />
+        <span className="w-1 h-1 rounded-full bg-yellow-400 inline-block" />
+        <span className="w-1 h-1 rounded-full bg-blue-500 inline-block" />
         <span className="ml-0.5 text-white">elo</span>
       </div>
     );
   }
   if (brand === 'amex') {
     return (
-      <span className={`px-1.5 py-0.5 rounded bg-sky-900 text-sky-200 text-[10px] font-black tracking-widest ${className}`}>
+      <span className={`px-1 py-0.5 rounded bg-sky-900 text-sky-200 text-[9px] font-black tracking-widest ${className}`}>
         AMEX
       </span>
     );
   }
-  return <CreditCardIcon size={20} className={className} />;
+  return <CreditCardIcon size={16} className={className} />;
+};
+
+/* Swipe configuration for invoice statement items */
+const INVOICE_SWIPE_WIDTH = 96;
+const INVOICE_SWIPE_SNAP = 40;
+const INVOICE_SWIPE_MAX = 120;
+
+interface SwipeableInvoiceItemProps {
+  tx: Transaction;
+  cat?: Category;
+  currency: string;
+  language: AppLanguage;
+  isOpen: boolean;
+  anyRowOpen: boolean;
+  onSetOpenRow: (id: string | null) => void;
+  onEditTransaction: (tx: Transaction) => void;
+  onDeleteTransaction: (tx: Transaction) => void;
+}
+
+const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
+  tx,
+  cat,
+  currency,
+  language,
+  isOpen,
+  anyRowOpen,
+  onSetOpenRow,
+  onEditTransaction,
+  onDeleteTransaction,
+}) => {
+  const [dragOffset, setDragOffset] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    initialOffset: number;
+    lock: 'none' | 'horizontal' | 'vertical';
+    currentOffset: number;
+    active: boolean;
+  }>({
+    startX: 0,
+    startY: 0,
+    initialOffset: 0,
+    lock: 'none',
+    currentOffset: 0,
+    active: false,
+  });
+
+  const clampSwipeOffset = (rawOffset: number): number => {
+    if (rawOffset > 0) return 0;
+    if (rawOffset < -INVOICE_SWIPE_WIDTH) {
+      const extra = rawOffset + INVOICE_SWIPE_WIDTH;
+      return Math.max(-INVOICE_SWIPE_MAX, -INVOICE_SWIPE_WIDTH + extra * 0.25);
+    }
+    return rawOffset;
+  };
+
+  const finishSwipeGesture = () => {
+    const g = gestureRef.current;
+    if (!g.active) return;
+    g.active = false;
+
+    if (g.lock === 'horizontal') {
+      const finalOffset = g.currentOffset;
+      if (g.initialOffset === 0) {
+        if (finalOffset <= -INVOICE_SWIPE_SNAP) {
+          onSetOpenRow(tx.id);
+        } else {
+          onSetOpenRow(null);
+        }
+      } else {
+        if (finalOffset > -INVOICE_SWIPE_WIDTH + 25) {
+          onSetOpenRow(null);
+        } else {
+          onSetOpenRow(tx.id);
+        }
+      }
+    }
+
+    g.lock = 'none';
+    setIsDragging(false);
+    setDragOffset(null);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    if (anyRowOpen && !isOpen) {
+      onSetOpenRow(null);
+    }
+    const initial = isOpen ? -INVOICE_SWIPE_WIDTH : 0;
+    gestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      initialOffset: initial,
+      lock: 'none',
+      currentOffset: initial,
+      active: true,
+    };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const g = gestureRef.current;
+    if (!g.active || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - g.startX;
+    const deltaY = touch.clientY - g.startY;
+
+    if (g.lock === 'none') {
+      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        g.lock = 'vertical';
+        g.active = false;
+        return;
+      }
+      g.lock = 'horizontal';
+      setIsDragging(true);
+    }
+
+    if (g.lock === 'horizontal') {
+      if (e.cancelable) e.preventDefault();
+      const clamped = clampSwipeOffset(g.initialOffset + deltaX);
+      g.currentOffset = clamped;
+      setDragOffset(clamped);
+    }
+  };
+
+  const handleTouchEnd = () => finishSwipeGesture();
+
+  const translateX = dragOffset !== null ? dragOffset : isOpen ? -INVOICE_SWIPE_WIDTH : 0;
+  const hasInstallment = tx.installmentTotal && tx.installmentTotal > 1;
+
+  return (
+    <div className="relative overflow-hidden select-none rounded-xl">
+      {/* Background action buttons (Revealed on left swipe) */}
+      <div
+        className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-1.5 pr-2.5 z-0"
+        style={{ width: `${INVOICE_SWIPE_WIDTH}px` }}
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetOpenRow(null);
+            onEditTransaction(tx);
+          }}
+          className="swipe-action-btn w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          title="Editar compra"
+        >
+          <Pencil size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetOpenRow(null);
+            onDeleteTransaction(tx);
+          }}
+          className="swipe-action-btn-danger w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
+          title="Excluir compra"
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+
+      {/* Foreground Swipeable Item */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        onClick={() => {
+          if (isOpen) {
+            onSetOpenRow(null);
+          } else {
+            onEditTransaction(tx);
+          }
+        }}
+        style={{
+          transform: `translate3d(${translateX}px, 0, 0)`,
+          transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          willChange: isDragging || isOpen ? 'transform' : 'auto',
+        }}
+        className="swipe-foreground-layer relative z-10 flex items-center justify-between p-3 transition-colors gap-2.5 cursor-pointer border border-[#21262D] rounded-xl"
+      >
+        {/* Left: Category Icon & Purchase Info */}
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <CategoryIcon
+            icon={cat?.icon || 'Tag'}
+            color={cat?.color || '#94A3B8'}
+            size={16}
+            badgeSize="md"
+          />
+
+          <div className="min-w-0 flex-1">
+            <p className="text-xs sm:text-sm font-semibold text-[#F8FAFC] truncate leading-snug">
+              {tx.description}
+            </p>
+
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-[#94A3B8] mt-0.5 leading-none">
+              <span className="font-medium truncate max-w-[120px]">
+                {getCategoryDisplayName(cat, language)}
+              </span>
+
+              {hasInstallment && (
+                <span className="px-1.5 py-0.5 rounded bg-[#161B22] border border-[#21262D] text-[10px] font-semibold text-[#D0B595]">
+                  {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                </span>
+              )}
+
+              {tx.notes && (
+                <>
+                  <span>•</span>
+                  <span className="italic truncate max-w-[120px]">{tx.notes}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Amount & Short Numeric Date Stack */}
+        <div className="flex flex-col items-end justify-center text-right shrink-0 pl-1">
+          <span className="text-sm font-semibold text-[#EF4444] whitespace-nowrap leading-tight">
+            -{formatCurrency(tx.amount, currency)}
+          </span>
+          <span className="text-xs text-[#94A3B8] mt-0.5 whitespace-nowrap leading-none">
+            {formatShortNumericDate(tx.purchaseDate || tx.date)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
@@ -146,13 +374,14 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const todayStr = getTodayDateStr();
   const currentMonthStr = todayStr.slice(0, 7);
 
-  // Selected card for detail panel (defaults to first card if available)
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(
-    creditCards[0]?.id || null
-  );
+  // Active Carousel Index
+  const [activeIndex, setActiveIndex] = useState<number>(0);
 
-  // Selected month for card statement view
+  // Selected month for card statement view (defaults to current month)
   const [statementMonth, setStatementMonth] = useState<string>(currentMonthStr);
+
+  // Active open swipe row id in invoice statement
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   // Card Add/Edit Modal state
   const [cardModalOpen, setCardModalOpen] = useState<boolean>(false);
@@ -171,10 +400,18 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const [payingInvoiceCycle, setPayingInvoiceCycle] = useState<{ cardId: string; invoiceMonth: string } | null>(null);
   const [payingSubmitting, setPayingSubmitting] = useState<boolean>(false);
 
-  // Keep selectedCardId valid when creditCards change
+  // Keep activeIndex within bounds
+  useEffect(() => {
+    if (creditCards.length === 0) {
+      setActiveIndex(0);
+    } else if (activeIndex >= creditCards.length) {
+      setActiveIndex(creditCards.length - 1);
+    }
+  }, [creditCards.length, activeIndex]);
+
   const activeCard = useMemo(() => {
-    return creditCards.find((c) => c.id === selectedCardId) || creditCards[0] || null;
-  }, [creditCards, selectedCardId]);
+    return creditCards[activeIndex] || creditCards[0] || null;
+  }, [creditCards, activeIndex]);
 
   useEffect(() => {
     onActiveCardChange?.(activeCard?.id || null);
@@ -203,7 +440,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     return creditCards.map((card) => {
       const cardTxs = transactions.filter((tx) => tx.cardId === card.id);
 
-      // Identify billing cycles whose invoice has already been paid/settled
+      // Identify settled billing cycles
       const settledMonths = new Set<string>();
       transactions.forEach((tx) => {
         if (
@@ -216,8 +453,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         }
       });
 
-      // Used limit: true outstanding balance of all active unpaid purchases on the card
-      // (unpaid single-payment purchases + remaining unpaid installments across all active purchases)
+      // Used limit: active unpaid purchases
       const usedLimit = Number(
         cardTxs
           .reduce((sum, tx) => {
@@ -235,7 +471,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       const usedPercentage =
         card.totalLimit > 0 ? Math.min(100, Math.round((usedLimit / card.totalLimit) * 100)) : 0;
 
-      // Current month invoice: sums ONLY purchases/installments falling due in currentMonthStr
+      // Current month invoice total
       const currentInvoiceTotal = Number(
         cardTxs
           .reduce((sum, tx) => {
@@ -248,7 +484,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
           .toFixed(2)
       );
 
-      // Next month invoice: sums ONLY purchases/installments falling due in nextMonthStr
+      // Next month invoice total
       const nextMonthStr = shiftMonth(currentMonthStr, 1);
       const nextInvoiceTotal = Number(
         cardTxs
@@ -262,7 +498,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
           .toFixed(2)
       );
 
-      // Check if current month invoice has a settlement transaction on main bank statement
+      // Check current invoice settlement
       const currentSettledKey = `${card.id}__${currentMonthStr}`;
       const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === currentSettledKey);
       const isCurrentInvoiceSettled = Boolean(settlementTx && settlementTx.status === 'paid');
@@ -282,7 +518,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     });
   }, [creditCards, transactions, currentMonthStr]);
 
-  // Consolidated Multi-Card Totals (Top Section)
+  // Consolidated Global Limits Summary
   const consolidated = useMemo(() => {
     let totalLimit = 0;
     let totalUsed = 0;
@@ -298,52 +534,21 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     const combinedPercentage =
       totalLimit > 0 ? Math.min(100, Math.round((totalUsed / totalLimit) * 100)) : 0;
 
-    // 6-Month Projection Commitment
-    const projectionMonths: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      projectionMonths.push(shiftMonth(currentMonthStr, i));
-    }
-
-    const projectionData = projectionMonths.map((ym) => {
-      const row: Record<string, any> = {
-        monthKey: ym,
-        label: formatShortMonthLabel(ym, language),
-        fullLabel: formatMonthLabel(ym, language),
-        totalCommitment: 0,
-      };
-
-      creditCards.forEach((card) => {
-        const cardTxs = transactions.filter((tx) => tx.cardId === card.id);
-        const cardMonthTotal = Number(
-          cardTxs
-            .reduce((sum, tx) => {
-              const invMonth = getTxInvoiceMonth(tx, card);
-              if (invMonth === ym) {
-                return sum + Number(tx.amount || 0);
-              }
-              return sum;
-            }, 0)
-            .toFixed(2)
-        );
-
-        row[card.id] = cardMonthTotal;
-        row.totalCommitment = Number((row.totalCommitment + cardMonthTotal).toFixed(2));
-      });
-
-      return row;
-    });
-
     return {
       totalLimit,
       totalUsed,
       totalAvailable,
       combinedPercentage,
-      projectionData,
-      projectionMonths,
     };
-  }, [cardsMetrics, creditCards, transactions, currentMonthStr, language]);
+  }, [cardsMetrics]);
 
-  // Statement transactions for the currently active card and selected month
+  // Active Card Metrics
+  const activeMetric = useMemo(() => {
+    if (!activeCard) return null;
+    return cardsMetrics.find((m) => m.card.id === activeCard.id) || null;
+  }, [activeCard, cardsMetrics]);
+
+  // Statement transactions for active card and selected statementMonth
   const statementData = useMemo(() => {
     if (!activeCard) {
       return {
@@ -351,7 +556,6 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         total: 0,
         isSettled: false,
         isPendingPayment: false,
-        settlementTx: null,
       };
     }
 
@@ -371,9 +575,102 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       total,
       isSettled,
       isPendingPayment,
-      settlementTx,
     };
   }, [activeCard, transactions, statementMonth]);
+
+  // Invoice cycle status badge helper
+  const invoiceCycleStatus = useMemo(() => {
+    if (!activeCard) return { label: 'Aberta', color: 'sky' };
+    if (statementData.isSettled) return { label: 'Fatura Paga', color: 'emerald' };
+    if (statementData.isPendingPayment) return { label: 'Pagamento Agendado', color: 'amber' };
+
+    const today = new Date();
+    const todayYm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const todayDay = today.getDate();
+
+    if (statementMonth < todayYm) {
+      return { label: 'Fatura Fechada', color: 'amber' };
+    } else if (statementMonth > todayYm) {
+      return { label: 'Fatura Futura', color: 'sky' };
+    } else {
+      if (todayDay >= activeCard.closingDay) {
+        return { label: 'Fatura Fechada', color: 'amber' };
+      }
+      return { label: 'Fatura Aberta', color: 'sky' };
+    }
+  }, [activeCard, statementData.isSettled, statementData.isPendingPayment, statementMonth]);
+
+  // Carousel Swipe Gesture Handling
+  const [carouselDragOffset, setCarouselDragOffset] = useState<number>(0);
+  const [isCarouselDragging, setIsCarouselDragging] = useState<boolean>(false);
+  const carouselTouchStartRef = useRef<{ x: number; y: number; active: boolean; lock: 'none' | 'h' | 'v' }>({
+    x: 0,
+    y: 0,
+    active: false,
+    lock: 'none',
+  });
+
+  const handleCarouselTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1 || creditCards.length <= 1) return;
+    const touch = e.touches[0];
+    carouselTouchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      active: true,
+      lock: 'none',
+    };
+  };
+
+  const handleCarouselTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const s = carouselTouchStartRef.current;
+    if (!s.active || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - s.x;
+    const deltaY = touch.clientY - s.y;
+
+    if (s.lock === 'none') {
+      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        s.lock = 'v';
+        s.active = false;
+        return;
+      }
+      s.lock = 'h';
+      setIsCarouselDragging(true);
+    }
+
+    if (s.lock === 'h') {
+      if (e.cancelable) e.preventDefault();
+      // Apply rubber-band damping at carousel boundaries
+      let damped = deltaX;
+      if (activeIndex === 0 && deltaX > 0) {
+        damped = deltaX * 0.25;
+      } else if (activeIndex === creditCards.length - 1 && deltaX < 0) {
+        damped = deltaX * 0.25;
+      }
+      setCarouselDragOffset(damped);
+    }
+  };
+
+  const handleCarouselTouchEnd = () => {
+    const s = carouselTouchStartRef.current;
+    if (!s.active) return;
+    s.active = false;
+
+    if (s.lock === 'h') {
+      const threshold = 45;
+      if (carouselDragOffset < -threshold && activeIndex < creditCards.length - 1) {
+        setActiveIndex((prev) => prev + 1);
+      } else if (carouselDragOffset > threshold && activeIndex > 0) {
+        setActiveIndex((prev) => prev - 1);
+      }
+    }
+
+    s.lock = 'none';
+    setIsCarouselDragging(false);
+    setCarouselDragOffset(0);
+  };
 
   // Handlers for Add/Edit Card Modal
   const openAddCardModal = () => {
@@ -440,680 +737,385 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12 animate-fadeIn">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2.5">
-            <CreditCardIcon className="text-indigo-400" size={26} />
-            <span>{t.creditCardsViewTitle}</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            {t.creditCardsViewSubtitle}
-          </p>
+    <div className="space-y-4 pb-12 animate-fadeIn max-w-lg mx-auto w-full">
+      {/* 1. Compact Top Action Bar: Lean Global Limits + Novo Cartão */}
+      <div className="flex items-center justify-between gap-2.5 px-0.5">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar min-w-0">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0D1117] border border-[#21262D] text-xs shrink-0">
+            <span className="text-[#94A3B8] text-[11px] font-medium">Limite:</span>
+            <span className="font-bold text-[#F8FAFC]">
+              {formatCurrency(consolidated.totalLimit, currency)}
+            </span>
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0D1117] border border-[#21262D] text-xs shrink-0">
+            <span className="text-[#94A3B8] text-[11px] font-medium">Disponível:</span>
+            <span className="font-bold text-[#10B981]">
+              {formatCurrency(consolidated.totalAvailable, currency)}
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={openAddCardModal}
+          className="shrink-0 flex items-center gap-1.5 py-2 px-3.5 text-xs rounded-xl font-medium bg-[#6E5440] hover:bg-[#7E624B] text-[#FFFDF5] shadow-xs transition-all active:scale-95"
+        >
+          <Plus size={14} />
+          <span>Adicionar Cartão</span>
+        </button>
+      </div>
+
+      {/* 2. Interactive Single-Card Carousel or Empty State */}
+      {creditCards.length === 0 ? (
+        <div className="p-8 rounded-2xl bg-[#0D1117] border border-dashed border-[#21262D] text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-[#161B22] text-[#D0B595] mx-auto flex items-center justify-center">
+            <CreditCardIcon size={24} />
+          </div>
+          <p className="text-sm font-semibold text-[#F8FAFC]">
+            {t.noCardsRegisteredYet || 'Nenhum cartão cadastrado'}
+          </p>
+          <p className="text-xs text-[#94A3B8] max-w-sm mx-auto">
+            {t.noCardsRegisteredDesc || 'Adicione seus cartões para acompanhar limites, faturas e parcelas.'}
+          </p>
           <button
             type="button"
             onClick={openAddCardModal}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all hover:scale-[1.02]"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#6E5440] hover:bg-[#7E624B] text-white text-xs font-bold transition-colors active:scale-95"
           >
-            <Plus size={16} />
-            <span>{t.addCardBtn}</span>
+            <Plus size={15} />
+            <span>Adicionar Cartão</span>
           </button>
         </div>
-      </div>
-
-      {/* SECTION 1: Consolidated Multi-Card Forecast Summary */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-400">
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-100">
-                {t.consolidatedForecastTitle}
-              </h2>
-              <p className="text-xs text-slate-400">
-                {t.consolidatedForecastSubtitle}
-              </p>
-            </div>
-          </div>
-          <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 w-fit">
-            {creditCards.length} {t.cardsRegisteredCount(creditCards.length)}
-          </span>
-        </div>
-
-        {/* Combined Limit KPI Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Total Combined Limit */}
-          <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block">
-                {t.combinedTotalLimit}
-              </span>
-              <p className="text-xl font-black text-slate-100 mt-1">
-                {formatCurrency(consolidated.totalLimit, currency)}
-              </p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
-              <ShieldCheck size={20} />
-            </div>
-          </div>
-
-          {/* Combined Used Limit */}
-          <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block">
-                {t.combinedUsedLimit}
-              </span>
-              <p className="text-xl font-black text-rose-400 mt-1">
-                {formatCurrency(consolidated.totalUsed, currency)}
-              </p>
-              <span className="text-[10px] text-slate-400 font-medium">
-                {consolidated.combinedPercentage}% {t.limitUtilizedLabel}
-              </span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400">
-              <TrendingUp size={20} />
-            </div>
-          </div>
-
-          {/* Combined Available Limit */}
-          <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-between">
-            <div>
-              <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block">
-                {t.combinedAvailableLimit}
-              </span>
-              <p className="text-xl font-black text-emerald-400 mt-1">
-                {formatCurrency(consolidated.totalAvailable, currency)}
-              </p>
-              <span className="text-[10px] text-emerald-500 font-medium">
-                {100 - consolidated.combinedPercentage}% {t.limitAvailableLabel}
-              </span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <DollarSign size={20} />
-            </div>
-          </div>
-        </div>
-
-        {/* Combined Utilization Progress Bar */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-            <span>{t.globalLimitUsage}</span>
-            <span className={consolidated.combinedPercentage > 85 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
-              {consolidated.combinedPercentage}%
-            </span>
-          </div>
-          <div className="h-2.5 w-full rounded-full bg-slate-800 overflow-hidden p-0.5 border border-slate-700/60">
+      ) : (
+        <div className="space-y-1">
+          {/* Carousel Viewport Container */}
+          <div className="relative w-full max-w-[400px] mx-auto px-3.5 sm:px-4">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                consolidated.combinedPercentage > 85
-                  ? 'bg-rose-500'
-                  : consolidated.combinedPercentage > 65
-                  ? 'bg-amber-500'
-                  : 'bg-indigo-500'
-              }`}
-              style={{ width: `${Math.min(100, consolidated.combinedPercentage)}%` }}
-            />
-          </div>
-        </div>
-
-        {/* 6-Month Stacked Commitment Chart */}
-        <div className="pt-2">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase tracking-wider font-bold text-slate-400 flex items-center gap-1.5">
-              <Layers size={14} className="text-indigo-400" />
-              {t.sixMonthForecastChartTitle}
-            </span>
-            <span className="text-[11px] text-slate-400">
-              {t.nextMonthsForecastWindow}
-            </span>
-          </div>
-
-          <div className="h-[240px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={consolidated.projectionData}
-                margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              className="relative w-full overflow-hidden touch-pan-y rounded-2xl"
+              onTouchStart={handleCarouselTouchStart}
+              onTouchMove={handleCarouselTouchMove}
+              onTouchEnd={handleCarouselTouchEnd}
+              onTouchCancel={handleCarouselTouchEnd}
+            >
+              <div
+                className="flex w-full"
+                style={{
+                  transform: `translate3d(calc(-${activeIndex * 100}% + ${carouselDragOffset}px), 0, 0)`,
+                  transition: isCarouselDragging ? 'none' : 'transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+                  willChange: isCarouselDragging ? 'transform' : 'auto',
+                }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  stroke="#94a3b8"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={{ stroke: '#334155' }}
-                />
-                <YAxis
-                  stroke="#94a3b8"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={{ stroke: '#334155' }}
-                  tickFormatter={(val) =>
-                    val >= 1000 ? `${(val / 1000).toFixed(0)}k` : String(val)
-                  }
-                />
-                <RechartsTooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const dataPoint = payload[0]?.payload;
-                      return (
-                        <div className="rounded-xl bg-slate-900 border border-slate-700 p-3 shadow-xl text-xs space-y-1.5 min-w-[180px]">
-                          <p className="font-bold text-slate-200 border-b border-slate-800 pb-1">
-                            {dataPoint?.fullLabel}
-                          </p>
-                          <p className="text-emerald-400 font-extrabold text-sm">
-                            Total: {formatCurrency(dataPoint?.totalCommitment || 0, currency)}
-                          </p>
-                          <div className="space-y-1 pt-1">
-                            {creditCards.map((card) => {
-                              const amount = dataPoint ? dataPoint[card.id] || 0 : 0;
-                              if (amount <= 0) return null;
-                              return (
-                                <div key={card.id} className="flex items-center justify-between gap-2 text-[11px]">
-                                  <span className="flex items-center gap-1 text-slate-300">
-                                    <span
-                                      className="w-2 h-2 rounded-full inline-block"
-                                      style={{ backgroundColor: card.color || '#6366f1' }}
-                                    />
-                                    {card.name}
-                                  </span>
-                                  <span className="font-semibold text-slate-200">
-                                    {formatCurrency(amount, currency)}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                {creditCards.map((card) => {
+                  const metric = cardsMetrics.find((m) => m.card.id === card.id) || {
+                    usedLimit: 0,
+                    availableLimit: card.totalLimit,
+                    usedPercentage: 0,
+                    currentInvoiceTotal: 0,
+                  };
+
+                  return (
+                    <div key={card.id} className="w-full shrink-0">
+                      <div className="relative rounded-2xl p-5 sm:p-6 min-h-[215px] sm:min-h-[225px] bg-[#0D1117] border border-[#21262D] shadow-xl overflow-hidden flex flex-col justify-between">
+                        {/* Top ambient color edge accent */}
+                        <div
+                          className="absolute top-0 left-0 right-0 h-1.5 opacity-90"
+                          style={{ backgroundColor: card.color || '#6E5440' }}
+                        />
+
+                        {/* Top Row: Nickname/Bank + Chip/Brand + Edit/Delete */}
+                        <div className="flex items-center justify-between gap-3 pt-1">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0"
+                              style={{ backgroundColor: card.color || '#6E5440' }}
+                            >
+                              <CardBrandBadge brand={card.brand} />
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-sm sm:text-base font-bold text-[#F8FAFC] truncate">
+                                {card.name}
+                              </h3>
+                              {card.lastDigits && (
+                                <span className="text-[11px] text-[#94A3B8] font-mono block mt-0.5">
+                                  •••• {card.lastDigits}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => openEditCardModal(card, e)}
+                              className="p-2 rounded-xl text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161B22] border border-transparent hover:border-[#21262D] transition-colors"
+                              title={t.editCardBtn || 'Editar cartão'}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmCardId(card.id);
+                              }}
+                              className="p-2 rounded-xl text-[#94A3B8] hover:text-rose-400 hover:bg-[#161B22] border border-transparent hover:border-[#21262D] transition-colors"
+                              title={t.deleteCardBtn || 'Excluir cartão'}
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                {creditCards.map((card) => (
-                  <Bar
-                    key={card.id}
-                    dataKey={card.id}
-                    name={card.name}
-                    stackId="cards"
-                    fill={card.color || '#6366f1'}
-                    radius={[0, 0, 0, 0]}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
 
-          {/* Quick Monthly Commitment Badges */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-3">
-            {consolidated.projectionData.map((row) => {
-              const isCurrent = row.monthKey === currentMonthStr;
-              return (
-                <button
-                  key={row.monthKey}
-                  type="button"
-                  onClick={() => setStatementMonth(row.monthKey)}
-                  className={`p-2.5 rounded-xl border text-left transition-all ${
-                    statementMonth === row.monthKey
-                      ? 'bg-indigo-950/60 border-indigo-500/80 shadow-md ring-1 ring-indigo-500/40'
-                      : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800/80'
-                  }`}
-                >
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block truncate">
-                    {row.fullLabel} {isCurrent && `(${t.currentBadgeShort})`}
-                  </span>
-                  <p className="text-sm font-black text-slate-100 mt-0.5">
-                    {formatCurrency(row.totalCommitment, currency)}
-                  </p>
-                  <div className="flex items-center gap-1 mt-1 overflow-hidden">
-                    {creditCards.map((c) => {
-                      const cardVal = row[c.id] || 0;
-                      if (cardVal <= 0) return null;
-                      return (
-                        <span
-                          key={c.id}
-                          className="w-2 h-2 rounded-full shrink-0"
-                          title={`${c.name}: ${formatCurrency(cardVal, currency)}`}
-                          style={{ backgroundColor: c.color || '#6366f1' }}
-                        />
-                      );
-                    })}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 2: Registered Credit Cards Grid */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-            <CreditCardIcon size={18} className="text-indigo-400" />
-            <span>{t.registeredCardsSectionTitle}</span>
-          </h2>
-          <span className="text-xs text-slate-400">
-            {t.selectCardStatementHint}
-          </span>
-        </div>
-
-        {creditCards.length === 0 ? (
-          <div className="p-8 rounded-2xl bg-slate-900/60 border border-dashed border-slate-800 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 mx-auto flex items-center justify-center">
-              <CreditCardIcon size={24} />
-            </div>
-            <p className="text-sm font-semibold text-slate-300">
-              {t.noCardsRegisteredYet}
-            </p>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              {t.noCardsRegisteredDesc}
-            </p>
-            <button
-              type="button"
-              onClick={openAddCardModal}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-500 transition-colors"
-            >
-              <Plus size={15} />
-              <span>{t.registerFirstCardBtn}</span>
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {cardsMetrics.map((metric) => {
-              const card = metric.card;
-              const isSelected = activeCard?.id === card.id;
-
-              return (
-                <div
-                  key={card.id}
-                  onClick={() => setSelectedCardId(card.id)}
-                  className={`p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
-                    isSelected
-                      ? 'bg-slate-900/90 border-indigo-500 shadow-xl ring-2 ring-indigo-500/30'
-                      : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 shadow-md'
-                  }`}
-                >
-                  {/* Card Visual Header */}
-                  <div>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0"
-                          style={{ backgroundColor: card.color || '#6366f1' }}
-                        >
-                          <CardBrandBadge brand={card.brand} />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-bold text-slate-100 truncate">
-                            {card.name}
-                          </h3>
-                          {card.lastDigits && (
-                            <span className="text-[11px] text-slate-400 font-mono">
-                              •••• {card.lastDigits}
+                        {/* Middle Row: Fatura Atual + Limit Progress Indicator */}
+                        <div className="my-auto py-3 space-y-2.5">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="text-[11px] uppercase font-bold tracking-wider text-[#94A3B8]">
+                              Fatura Atual
                             </span>
-                          )}
+                            <span className="text-xl sm:text-2xl font-black text-[#F8FAFC] tracking-tight">
+                              {formatCurrency(metric.currentInvoiceTotal, currency)}
+                            </span>
+                          </div>
+
+                          {/* Available limit bar */}
+                          <div className="space-y-1.5">
+                            <div className="h-2.5 w-full rounded-full bg-[#161B22] overflow-hidden p-0.5 border border-[#21262D]">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  metric.usedPercentage > 85
+                                    ? 'bg-[#EF4444]'
+                                    : metric.usedPercentage > 65
+                                    ? 'bg-[#F59E0B]'
+                                    : 'bg-[#10B981]'
+                                }`}
+                                style={{ width: `${Math.min(100, metric.usedPercentage)}%` }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs text-[#94A3B8]">
+                              <span>
+                                Disponível:{' '}
+                                <strong className="text-[#10B981] font-semibold">
+                                  {formatCurrency(metric.availableLimit, currency)}
+                                </strong>
+                              </span>
+                              <span>{metric.usedPercentage}% usado</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom Row: Closing & Due Tags + Total Limit */}
+                        <div className="pt-3 border-t border-[#21262D] flex items-center justify-between text-xs text-[#94A3B8]">
+                          <div className="flex items-center gap-1.5 text-[11px] font-medium">
+                            <span className="px-2.5 py-1 rounded-lg bg-[#161B22] border border-[#21262D] text-[#E2E8F0]">
+                              Fecha dia <strong>{card.closingDay}</strong> • Vence dia <strong>{card.dueDay}</strong>
+                            </span>
+                          </div>
+
+                          <span className="text-xs font-semibold text-[#E2E8F0]">
+                            Limite: {formatCurrency(card.totalLimit, currency)}
+                          </span>
                         </div>
                       </div>
-
-                      {/* Card Edit/Delete actions */}
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={(e) => openEditCardModal(card, e)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-                          title={t.editCardBtn}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirmCardId(card.id);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                          title={t.deleteCardBtn}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
                     </div>
-
-                    {/* Closing & Due Day Badges */}
-                    <div className="flex items-center gap-2 mt-3 text-xs">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium text-[11px]">
-                        {t.closingDayShort}: <strong>{card.closingDay}</strong>
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 font-medium text-[11px]">
-                        {t.dueDayShort}: <strong>{card.dueDay}</strong>
-                      </span>
-                    </div>
-
-                    {/* Current & Next Invoices */}
-                    <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-800/80">
-                      <div className="p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/40">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block truncate">
-                          {t.currentInvoiceTitle}
-                        </span>
-                        <p className="text-base font-black text-rose-400 mt-0.5">
-                          {formatCurrency(metric.currentInvoiceTotal, currency)}
-                        </p>
-                      </div>
-
-                      <div className="p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/40">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block truncate">
-                          {t.nextInvoiceTitle}
-                        </span>
-                        <p className="text-base font-black text-amber-400 mt-0.5">
-                          {formatCurrency(metric.nextInvoiceTotal, currency)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Limit Utilization Bar */}
-                    <div className="space-y-1.5 mt-4">
-                      <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span>
-                          {t.usedLimit}: <strong>{formatCurrency(metric.usedLimit, currency)}</strong>
-                        </span>
-                        <span>
-                          {t.availLimit}: <strong>{formatCurrency(metric.availableLimit, currency)}</strong>
-                        </span>
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-300"
-                          style={{
-                            width: `${metric.usedPercentage}%`,
-                            backgroundColor: card.color || '#6366f1',
-                          }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400">
-                        <span>{t.totalLimit}: {formatCurrency(card.totalLimit, currency)}</span>
-                        <span>{metric.usedPercentage}%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions footer */}
-                  <div className="flex items-center gap-2 mt-5 pt-3 border-t border-slate-800/80">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenAddExpense(card.id);
-                      }}
-                      className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-700 transition-colors"
-                    >
-                      <Plus size={13} />
-                      <span>{t.addCardPurchaseBtn}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={metric.currentInvoiceTotal <= 0 || metric.isCurrentInvoiceSettled}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPayingInvoiceCycle({
-                          cardId: card.id,
-                          invoiceMonth: currentMonthStr,
-                        });
-                      }}
-                      className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                        metric.isCurrentInvoiceSettled
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 cursor-default'
-                          : metric.isCurrentInvoicePending
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                          : metric.currentInvoiceTotal > 0
-                          ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
-                          : 'bg-slate-800/50 text-slate-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {metric.isCurrentInvoiceSettled ? (
-                        <>
-                          <CheckCircle2 size={13} />
-                          <span>{t.invoicePaidBadge}</span>
-                        </>
-                      ) : metric.isCurrentInvoicePending ? (
-                        <>
-                          <Clock size={13} />
-                          <span>{t.invoiceScheduledBadge}</span>
-                        </>
-                      ) : (
-                        <>
-                          <DollarSign size={13} />
-                          <span>{t.payInvoiceBtn}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* SECTION 3: Detailed Monthly Invoice Statement Panel */}
-      {activeCard && (
-        <div className="p-5 sm:p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-5">
-          {/* Statement Header with Month Switcher */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0"
-                style={{ backgroundColor: activeCard.color || '#6366f1' }}
-              >
-                <CardBrandBadge brand={activeCard.brand} />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                  <span>{t.statementForCardTitle(activeCard.name)}</span>
-                  {activeCard.lastDigits && (
-                    <span className="text-xs text-slate-400 font-mono">
-                      (•••• {activeCard.lastDigits})
-                    </span>
-                  )}
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {t.closingDueRuleSummary(activeCard.closingDay, activeCard.dueDay)}
-                </p>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Month Switcher Controls */}
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <div className="flex items-center bg-slate-800/90 rounded-xl border border-slate-700/80 p-0.5">
+            {/* Left/Right Chevron Tap Controls if multiple cards */}
+            {creditCards.length > 1 && (
+              <>
+                {activeIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveIndex((i) => Math.max(0, i - 1))}
+                    className="absolute -left-1 sm:-left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-[#161B22]/90 backdrop-blur-xs text-[#94A3B8] hover:text-[#F8FAFC] flex items-center justify-center border border-[#21262D] shadow-md transition-all active:scale-90 z-20"
+                    aria-label="Cartão anterior"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                )}
+                {activeIndex < creditCards.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveIndex((i) => Math.min(creditCards.length - 1, i + 1))}
+                    className="absolute -right-1 sm:-right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-[#161B22]/90 backdrop-blur-xs text-[#94A3B8] hover:text-[#F8FAFC] flex items-center justify-center border border-[#21262D] shadow-md transition-all active:scale-90 z-20"
+                    aria-label="Próximo cartão"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Centered Pagination Dots */}
+          {creditCards.length > 1 && (
+            <div className="flex justify-center items-center gap-1.5 py-2.5">
+              {creditCards.map((card, idx) => (
                 <button
+                  key={card.id}
                   type="button"
-                  onClick={() => setStatementMonth((m) => shiftMonth(m, -1))}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
-                  title={t.prevMonthBtn}
+                  onClick={() => setActiveIndex(idx)}
+                  aria-label={`Ir para ${card.name}`}
+                  className={`transition-all duration-300 ${
+                    activeIndex === idx
+                      ? 'w-4 h-1.5 rounded-full bg-[#6E5440]'
+                      : 'w-1.5 h-1.5 rounded-full bg-[#21262D] hover:bg-[#475569]'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Synchronized Invoice Statement (Extrato da Fatura) */}
+      {activeCard && (
+        <div className="rounded-2xl p-4 bg-[#0D1117] border border-[#21262D] shadow-xl space-y-3.5">
+          {/* Invoice Header Bar */}
+          <div className="space-y-3 pb-3 border-b border-[#21262D]">
+            <div className="flex items-center justify-between gap-2">
+              {/* Cycle Status Badge + Month Switcher */}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 border ${
+                    invoiceCycleStatus.color === 'emerald'
+                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                      : invoiceCycleStatus.color === 'amber'
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                      : 'bg-sky-500/15 border-sky-500/30 text-sky-400'
+                  }`}
                 >
-                  <ChevronLeft size={16} />
-                </button>
-                <span className="text-xs font-bold text-slate-200 px-3 min-w-[130px] text-center capitalize">
-                  {formatMonthLabel(statementMonth, language)}
+                  {statementData.isSettled ? (
+                    <CheckCircle2 size={13} />
+                  ) : statementData.isPendingPayment ? (
+                    <Clock size={13} />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-current inline-block" />
+                  )}
+                  <span>{invoiceCycleStatus.label}</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setStatementMonth((m) => shiftMonth(m, 1))}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
-                  title={t.nextMonthBtn}
-                >
-                  <ChevronRight size={16} />
-                </button>
+
+                {/* Month Switcher Controls */}
+                <div className="flex items-center bg-[#161B22] rounded-xl border border-[#21262D] p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setStatementMonth((m) => shiftMonth(m, -1))}
+                    className="p-1 rounded-lg text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#21262D] transition-colors"
+                    title={t.prevMonthBtn || 'Mês anterior'}
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="text-xs font-bold text-[#F8FAFC] px-2 min-w-[110px] text-center capitalize">
+                    {formatMonthLabel(statementMonth, language)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setStatementMonth((m) => shiftMonth(m, 1))}
+                    className="p-1 rounded-lg text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#21262D] transition-colors"
+                    title={t.nextMonthBtn || 'Próximo mês'}
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
               </div>
 
+              {/* Invoice Total Sum */}
+              <div className="text-right">
+                <p className="text-base sm:text-lg font-black text-[#F8FAFC]">
+                  {formatCurrency(statementData.total, currency)}
+                </p>
+                <span className="text-[11px] text-[#94A3B8] block">
+                  {statementData.txs.length} {statementData.txs.length === 1 ? 'compra' : 'compras'}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Actions Row */}
+            <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => onOpenAddExpense(activeCard.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-bold border border-slate-700 transition-colors"
+                className="flex-1 py-2 px-3 rounded-xl bg-[#161B22] hover:bg-[#21262D] text-[#F8FAFC] text-xs font-semibold flex items-center justify-center gap-1.5 border border-[#21262D] transition-colors active:scale-95"
               >
                 <Plus size={14} />
-                <span>{t.addPurchaseBtn}</span>
+                <span>Lançar Despesa</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={statementData.total <= 0 || statementData.isSettled}
+                onClick={() =>
+                  setPayingInvoiceCycle({
+                    cardId: activeCard.id,
+                    invoiceMonth: statementMonth,
+                  })
+                }
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  statementData.isSettled
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 cursor-default'
+                    : statementData.isPendingPayment
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                    : statementData.total > 0
+                    ? 'bg-[#10B981] hover:bg-[#059669] text-white shadow-xs active:scale-95'
+                    : 'bg-[#161B22] text-[#94A3B8] opacity-60 border border-[#21262D] cursor-not-allowed'
+                }`}
+              >
+                {statementData.isSettled ? (
+                  <>
+                    <CheckCircle2 size={13} />
+                    <span>Fatura Paga</span>
+                  </>
+                ) : statementData.isPendingPayment ? (
+                  <>
+                    <Clock size={13} />
+                    <span>Agendada</span>
+                  </>
+                ) : (
+                  <>
+                    <DollarSign size={13} />
+                    <span>Pagar Fatura</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
 
-          {/* Statement Invoice Summary Banner */}
-          <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block">
-                {t.totalInvoiceForMonth(formatMonthLabel(statementMonth, language))}
-              </span>
-              <p className="text-2xl font-black text-slate-100 mt-1">
-                {formatCurrency(statementData.total, currency)}
-              </p>
-              <span className="text-xs text-slate-400">
-                {statementData.txs.length} {t.purchasesCountLabel(statementData.txs.length)}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {statementData.isSettled ? (
-                <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5">
-                  <CheckCircle2 size={15} />
-                  <span>{t.invoiceSettledBadge}</span>
-                </span>
-              ) : statementData.isPendingPayment ? (
-                <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold flex items-center gap-1.5">
-                  <Clock size={15} />
-                  <span>{t.invoiceScheduledInBankBadge}</span>
-                </span>
-              ) : statementData.total > 0 ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPayingInvoiceCycle({
-                      cardId: activeCard.id,
-                      invoiceMonth: statementMonth,
-                    })
-                  }
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all hover:scale-[1.02]"
-                >
-                  <DollarSign size={15} />
-                  <span>{t.payThisInvoiceBtn}</span>
-                </button>
-              ) : (
-                <span className="text-xs text-slate-400 font-medium">
-                  {t.noInvoiceAmountToPay}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Statement Purchases List */}
+          {/* Statement Items List with Swipe-to-Reveal */}
           {statementData.txs.length === 0 ? (
-            <div className="p-8 rounded-xl bg-slate-800/20 border border-slate-800 text-center space-y-2">
-              <p className="text-sm font-semibold text-slate-400">
-                {t.noPurchasesInInvoice}
+            <div className="p-7 rounded-xl bg-[#161B22]/50 border border-[#21262D] text-center space-y-2">
+              <p className="text-xs font-semibold text-[#94A3B8]">
+                Nenhuma compra lançada nesta fatura.
               </p>
               <button
                 type="button"
                 onClick={() => onOpenAddExpense(activeCard.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-semibold border border-indigo-500/30 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#6E5440]/20 hover:bg-[#6E5440]/30 text-[#D0B595] text-xs font-semibold border border-[#6E5440]/40 transition-colors"
               >
                 <Plus size={13} />
-                <span>{t.addPurchaseBtn}</span>
+                <span>Lançar Compra</span>
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {statementData.txs.map((tx) => {
                 const cat = categories.find((c) => c.id === tx.categoryId);
-                const hasInstallment =
-                  tx.installmentTotal && tx.installmentTotal > 1;
-
                 return (
-                  <div
+                  <SwipeableInvoiceItem
                     key={tx.id}
-                    className="p-3.5 rounded-xl bg-slate-800/40 hover:bg-slate-800/70 border border-slate-700/40 transition-colors flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <CategoryIcon
-                        icon={cat?.icon}
-                        color={cat?.color || '#94a3b8'}
-                        size={17}
-                        badgeSize="md"
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-bold text-slate-200 truncate">
-                            {tx.description}
-                          </p>
-                          {hasInstallment && (
-                            <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-bold">
-                              {t.installmentTag(
-                                tx.installmentCurrent || 1,
-                                tx.installmentTotal || 1
-                              )}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5 flex-wrap">
-                          <span>{tx.purchaseDate || tx.date}</span>
-                          {cat && (
-                            <>
-                              <span>•</span>
-                              <span>{getCategoryDisplayName(cat, language)}</span>
-                            </>
-                          )}
-                          {hasInstallment && (
-                            <>
-                              <span>•</span>
-                              <span>
-                                Total:{' '}
-                                {formatCurrency(
-                                  tx.totalPurchaseAmount && tx.totalPurchaseAmount > 0
-                                    ? tx.totalPurchaseAmount
-                                    : Number((tx.amount * (tx.installmentTotal || 1)).toFixed(2)),
-                                  currency
-                                )}
-                              </span>
-                            </>
-                          )}
-                          {tx.notes && (
-                            <>
-                              <span>•</span>
-                              <span className="italic truncate max-w-[180px]">{tx.notes}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <p className="text-sm font-extrabold text-rose-400">
-                        -{formatCurrency(tx.amount, currency)}
-                      </p>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => onEditTransaction(tx)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
-                          title={t.editEntryTitle}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteTransaction(tx)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-700 transition-colors"
-                          title={t.deleteEntryTitle}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    tx={tx}
+                    cat={cat}
+                    currency={currency}
+                    language={language}
+                    isOpen={openRowId === tx.id}
+                    anyRowOpen={openRowId !== null}
+                    onSetOpenRow={setOpenRowId}
+                    onEditTransaction={onEditTransaction}
+                    onDeleteTransaction={onDeleteTransaction}
+                  />
                 );
               })}
             </div>
@@ -1123,17 +1125,17 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
       {/* MODAL: Register / Edit Credit Card */}
       {cardModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                <CreditCardIcon size={18} className="text-indigo-400" />
-                <span>{editingCard ? t.editCardModalTitle : t.addCardModalTitle}</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-[#0D1117] border border-[#21262D] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#21262D]">
+              <h3 className="text-base font-bold text-[#F8FAFC] flex items-center gap-2">
+                <CreditCardIcon size={18} className="text-[#D0B595]" />
+                <span>{editingCard ? t.editCardModalTitle || 'Editar Cartão' : t.addCardModalTitle || 'Novo Cartão'}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setCardModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161B22] transition-colors"
               >
                 <X size={18} />
               </button>
@@ -1142,8 +1144,8 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
             <form onSubmit={handleSaveCardSubmit} className="p-5 space-y-4">
               {/* Card Name */}
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  {t.cardNameLabel}
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                  {t.cardNameLabel || 'Nome do Cartão'}
                 </label>
                 <input
                   type="text"
@@ -1151,14 +1153,14 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                   placeholder="Ex: Nubank Felipe, Inter Isabelle"
                   value={cardFormName}
                   onChange={(e) => setCardFormName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#161B22] border border-[#21262D] text-sm text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#6E5440]"
                 />
               </div>
 
               {/* Total Limit */}
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  {t.totalLimitLabel} ({currency})
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                  {t.totalLimitLabel || 'Limite Total'} ({currency})
                 </label>
                 <input
                   type="number"
@@ -1168,15 +1170,15 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                   placeholder="5000.00"
                   value={cardFormLimit}
                   onChange={(e) => setCardFormLimit(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-sm font-bold text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#161B22] border border-[#21262D] text-sm font-bold text-[#F8FAFC] focus:outline-none focus:ring-1 focus:ring-[#6E5440]"
                 />
               </div>
 
               {/* Closing Day & Due Day */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                    {t.closingDayLabel} (1-31)
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                    {t.closingDayLabel || 'Dia Fechamento'} (1-31)
                   </label>
                   <input
                     type="number"
@@ -1185,16 +1187,16 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                     required
                     value={cardFormClosingDay}
                     onChange={(e) => setCardFormClosingDay(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-sm font-bold text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#161B22] border border-[#21262D] text-sm font-bold text-[#F8FAFC] text-center focus:outline-none focus:ring-1 focus:ring-[#6E5440]"
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    {t.closingDayHint}
+                  <span className="text-[10px] text-[#94A3B8] mt-1 block">
+                    {t.closingDayHint || 'Compras a partir deste dia vão para o mês seguinte'}
                   </span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                    {t.dueDayLabel} (1-31)
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                    {t.dueDayLabel || 'Dia Vencimento'} (1-31)
                   </label>
                   <input
                     type="number"
@@ -1203,18 +1205,18 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                     required
                     value={cardFormDueDay}
                     onChange={(e) => setCardFormDueDay(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-sm font-bold text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#161B22] border border-[#21262D] text-sm font-bold text-[#F8FAFC] text-center focus:outline-none focus:ring-1 focus:ring-[#6E5440]"
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    {t.dueDayHint}
+                  <span className="text-[10px] text-[#94A3B8] mt-1 block">
+                    {t.dueDayHint || 'Data limite para pagamento da fatura'}
                   </span>
                 </div>
               </div>
 
               {/* Card Brand */}
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  {t.cardBrandLabel}
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                  {t.cardBrandLabel || 'Bandeira'}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {BRAND_OPTIONS.map((brand) => (
@@ -1224,8 +1226,8 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                       onClick={() => setCardFormBrand(brand.id)}
                       className={`p-2 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                         cardFormBrand === brand.id
-                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
-                          : 'bg-slate-800/60 border-slate-700/80 text-slate-300 hover:bg-slate-800'
+                          ? 'bg-[#6E5440] text-white border-[#8A6F57] shadow-xs'
+                          : 'bg-[#161B22] border-[#21262D] text-[#E2E8F0] hover:bg-[#21262D]'
                       }`}
                     >
                       <CardBrandBadge brand={brand.id} />
@@ -1238,8 +1240,8 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
               {/* Color & Last 4 Digits */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                    {t.cardColorLabel}
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                    {t.cardColorLabel || 'Cor do Cartão'}
                   </label>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {PRESET_COLORS.map((col) => (
@@ -1249,7 +1251,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                         onClick={() => setCardFormColor(col)}
                         className={`w-6 h-6 rounded-full transition-transform ${
                           cardFormColor === col
-                            ? 'ring-2 ring-white scale-110 shadow-sm'
+                            ? 'ring-2 ring-white scale-110 shadow-xs'
                             : 'opacity-70 hover:opacity-100'
                         }`}
                         style={{ backgroundColor: col }}
@@ -1259,8 +1261,8 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                    {t.cardLastDigitsLabel}
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#94A3B8] mb-1.5">
+                    {t.cardLastDigitsLabel || 'Últimos 4 Dígitos'}
                   </label>
                   <input
                     type="text"
@@ -1268,26 +1270,26 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                     placeholder="1234"
                     value={cardFormLastDigits}
                     onChange={(e) => setCardFormLastDigits(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-800/80 border border-slate-700 text-sm font-mono text-slate-100 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#161B22] border border-[#21262D] text-sm font-mono text-[#F8FAFC] text-center focus:outline-none focus:ring-1 focus:ring-[#6E5440]"
                   />
                 </div>
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
+              <div className="flex items-center gap-3 pt-3 border-t border-[#21262D]">
                 <button
                   type="button"
                   onClick={() => setCardModalOpen(false)}
-                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold hover:bg-slate-800 transition-colors"
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-[#21262D] text-[#94A3B8] text-xs font-bold hover:bg-[#161B22] transition-colors"
                 >
-                  {t.cancelBtn}
+                  {t.cancelBtn || 'Cancelar'}
                 </button>
                 <button
                   type="submit"
                   disabled={cardFormSubmitting}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-[#6E5440] hover:bg-[#7E624B] text-white text-xs font-bold shadow-xs transition-all active:scale-95"
                 >
-                  {cardFormSubmitting ? t.savingBtn : t.saveCardBtn}
+                  {cardFormSubmitting ? (t.savingBtn || 'Salvando...') : (t.saveCardBtn || 'Salvar Cartão')}
                 </button>
               </div>
             </form>
@@ -1297,18 +1299,18 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
       {/* MODAL: Delete Card Confirmation */}
       {deleteConfirmCardId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-[#0D1117] border border-[#21262D] w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400">
                 <AlertCircle size={22} />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-100">
-                  {t.deleteCardModalTitle}
+                <h3 className="text-base font-bold text-[#F8FAFC]">
+                  {t.deleteCardModalTitle || 'Excluir Cartão'}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {t.deleteCardModalDesc}
+                <p className="text-xs text-[#94A3B8] mt-0.5">
+                  {t.deleteCardModalDesc || 'Tem certeza de que deseja remover este cartão?'}
                 </p>
               </div>
             </div>
@@ -1317,9 +1319,9 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setDeleteConfirmCardId(null)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold hover:bg-slate-800 transition-colors"
+                className="flex-1 py-2.5 px-4 rounded-xl border border-[#21262D] text-[#94A3B8] text-xs font-bold hover:bg-[#161B22] transition-colors"
               >
-                {t.cancelBtn}
+                {t.cancelBtn || 'Cancelar'}
               </button>
               <button
                 type="button"
@@ -1328,9 +1330,9 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                   setDeleteConfirmCardId(null);
                   await onDeleteCard(id);
                 }}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-600/20 transition-all"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-xs transition-all active:scale-95"
               >
-                {t.confirmDeleteCardBtn}
+                {t.confirmDeleteCardBtn || 'Excluir'}
               </button>
             </div>
           </div>
@@ -1339,29 +1341,30 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
       {/* MODAL: Pay Invoice Confirmation */}
       {payingInvoiceCycle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-[#0D1117] border border-[#21262D] w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-400">
+              <div className="p-2.5 rounded-xl bg-[#6E5440]/20 text-[#D0B595]">
                 <DollarSign size={22} />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-100">
-                  {t.payInvoiceConfirmTitle}
+                <h3 className="text-base font-bold text-[#F8FAFC]">
+                  {t.payInvoiceConfirmTitle || 'Confirmar Pagamento de Fatura'}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {t.payInvoiceConfirmDesc(
+                <p className="text-xs text-[#94A3B8] mt-0.5">
+                  {t.payInvoiceConfirmDesc?.(
                     creditCards.find((c) => c.id === payingInvoiceCycle.cardId)?.name || '',
                     formatMonthLabel(payingInvoiceCycle.invoiceMonth, language)
-                  )}
+                  ) || 'Gerar despesa no extrato bancário para esta fatura?'}
                 </p>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-300 space-y-1">
-              <p className="font-semibold">{t.payInvoiceHowItWorksTitle}</p>
-              <p className="text-[11px] text-indigo-200/80 leading-relaxed">
-                {t.payInvoiceHowItWorksDesc}
+            <div className="p-3.5 rounded-xl bg-[#161B22] border border-[#21262D] text-xs text-[#E2E8F0] space-y-1">
+              <p className="font-semibold text-[#D0B595]">Como funciona:</p>
+              <p className="text-[11px] text-[#94A3B8] leading-relaxed">
+                {t.payInvoiceHowItWorksDesc ||
+                  'Uma despesa consolidada será criada no extrato principal com a data de vencimento da fatura. Ao marcá-la como paga, seu saldo bancário será debitado e o limite do cartão será liberado.'}
               </p>
             </div>
 
@@ -1369,17 +1372,19 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setPayingInvoiceCycle(null)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-700 text-slate-300 text-xs font-bold hover:bg-slate-800 transition-colors"
+                className="flex-1 py-2.5 px-4 rounded-xl border border-[#21262D] text-[#94A3B8] text-xs font-bold hover:bg-[#161B22] transition-colors"
               >
-                {t.cancelBtn}
+                {t.cancelBtn || 'Cancelar'}
               </button>
               <button
                 type="button"
                 disabled={payingSubmitting}
                 onClick={handleConfirmPayInvoice}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold shadow-xs transition-all active:scale-95"
               >
-                {payingSubmitting ? t.generatingInvoicePayment : t.confirmPayInvoiceBtn}
+                {payingSubmitting
+                  ? (t.generatingInvoicePayment || 'Gerando...')
+                  : (t.confirmPayInvoiceBtn || 'Confirmar Pagamento')}
               </button>
             </div>
           </div>
