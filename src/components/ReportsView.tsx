@@ -271,10 +271,10 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
 
   return (
     <section
-      className={`rounded-2xl border p-4 mb-4 transition-colors ${
+      className={`rounded-2xl border p-4 transition-colors ${
         isOled
           ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]'
-          : 'bg-white border-[#E2E8F0] text-[#0F172A] shadow-xs'
+          : 'bg-white border-slate-200 text-slate-900 shadow-xs'
       }`}
     >
       {/* Header */}
@@ -284,12 +284,12 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
             className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
               isOled
                 ? 'bg-[#161B22] border-[#21262D] text-[#D0B595]'
-                : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#6E5440]'
+                : 'bg-slate-100 border-slate-200 text-[#6E5440]'
             }`}
           >
             <CalendarClock size={16} />
           </div>
-          <h2 className="text-sm font-bold truncate">
+          <h2 className={`text-sm font-bold truncate ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
             {language === 'pt-BR' ? 'Parcelamentos em Conta' : 'Account Installments'}
           </h2>
         </div>
@@ -298,7 +298,7 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
           className={`px-2 py-0.5 rounded-full text-xs font-bold border shrink-0 ${
             isOled
               ? 'bg-[#161B22] border-[#21262D] text-[#D0B595]'
-              : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#6E5440]'
+              : 'bg-slate-100 border-slate-200 text-slate-700'
           }`}
         >
           {installmentSummary.activeCount}{' '}
@@ -315,11 +315,13 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
       {/* Top Metric Row (compact 2-column micro-grid) */}
       <div
         className={`grid grid-cols-2 gap-2 p-3 rounded-xl border mb-3.5 ${
-          isOled ? 'bg-[#161B22]/70 border-[#21262D]' : 'bg-[#F8FAFC] border-[#E2E8F0]'
+          isOled ? 'bg-[#161B22]/70 border-[#21262D]' : 'bg-slate-50 border-slate-200'
         }`}
       >
         <div>
-          <span className="text-[10px] uppercase font-bold tracking-wider text-[#94A3B8] block truncate">
+          <span className={`text-[10px] uppercase font-bold tracking-wider block truncate ${
+            isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+          }`}>
             {language === 'pt-BR' ? 'Comprometido no Mês' : 'Committed This Month'}
           </span>
           <p className="text-base sm:text-lg font-black text-[#EF4444] mt-0.5 tracking-tight truncate">
@@ -328,10 +330,14 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
         </div>
 
         <div>
-          <span className="text-[10px] uppercase font-bold tracking-wider text-[#94A3B8] block truncate">
+          <span className={`text-[10px] uppercase font-bold tracking-wider block truncate ${
+            isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+          }`}>
             {language === 'pt-BR' ? 'Total Restante' : 'Total Remaining'}
           </span>
-          <p className="text-base sm:text-lg font-black text-[#F8FAFC] mt-0.5 tracking-tight truncate">
+          <p className={`text-base sm:text-lg font-black mt-0.5 tracking-tight truncate ${
+            isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+          }`}>
             {formatCurrency(installmentSummary.totalRemainingDebt, currency)}
           </p>
         </div>
@@ -341,15 +347,15 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
       {installmentPlans.length === 0 ? (
         <div
           className={`py-6 px-4 rounded-xl border text-center space-y-1 ${
-            isOled ? 'bg-[#161B22]/40 border-[#21262D]' : 'bg-[#F8FAFC] border-[#E2E8F0]'
+            isOled ? 'bg-[#161B22]/40 border-[#21262D]' : 'bg-slate-50 border-slate-200'
           }`}
         >
-          <p className="text-xs font-semibold text-[#F8FAFC]">
+          <p className={`text-xs font-semibold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
             {language === 'pt-BR'
               ? 'Nenhum parcelamento ativo em conta'
               : 'No active bank installment plans'}
           </p>
-          <p className="text-[11px] text-[#94A3B8] max-w-xs mx-auto">
+          <p className={`text-[11px] max-w-xs mx-auto ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
             {language === 'pt-BR'
               ? 'Despesas parceladas no Pix, Boleto ou Conta Corrente aparecerão aqui.'
               : 'Expenses split into installments paid via Bank, Pix or Cash will be tracked here.'}
@@ -358,7 +364,7 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
       ) : (
         <div
           className={`divide-y border-t ${
-            isOled ? 'divide-[#21262D] border-[#21262D]' : 'divide-[#E2E8F0] border-[#E2E8F0]'
+            isOled ? 'divide-[#21262D] border-[#21262D]' : 'divide-slate-200 border-slate-200'
           }`}
         >
           {installmentPlans.map((plan) => (
@@ -374,7 +380,7 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
                       size={14}
                       badgeSize="sm"
                     />
-                    <h3 className="font-medium text-sm text-[#F8FAFC] truncate">
+                    <h3 className={`font-semibold text-sm truncate ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
                       {plan.description}
                     </h3>
                   </div>
@@ -382,10 +388,10 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
                   {/* Subtitle metadata */}
                   <div className="flex items-center gap-1.5 flex-wrap mt-1.5 pl-0.5">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
+                      className={`text-xs px-2 py-0.5 rounded-full font-bold border ${
                         isOled
                           ? 'bg-[#161B22] border-[#21262D] text-[#D0B595]'
-                          : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#6E5440]'
+                          : 'bg-slate-100 border-slate-200 text-slate-700'
                       }`}
                     >
                       {plan.currentInstallmentDisplay}/{plan.totalInstallments}
@@ -395,14 +401,16 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
                       className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
                         isOled
                           ? 'bg-[#161B22] border-[#21262D] text-slate-300'
-                          : 'bg-[#F1F5F9] border-[#E2E8F0] text-slate-600'
+                          : 'bg-slate-100 border-slate-200 text-slate-600'
                       }`}
                     >
                       {plan.paymentMethod}
                     </span>
 
                     {plan.categoryName && (
-                      <span className="text-xs text-[#94A3B8] truncate max-w-[100px]">
+                      <span className={`text-xs truncate max-w-[100px] ${
+                        isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+                      }`}>
                         {plan.categoryName}
                       </span>
                     )}
@@ -414,7 +422,9 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
                   <span className="font-bold text-sm text-[#EF4444] whitespace-nowrap">
                     -{formatCurrency(plan.monthlyAmount, currency)}/mês
                   </span>
-                  <span className="text-xs text-[#94A3B8] mt-0.5 whitespace-nowrap">
+                  <span className={`text-xs mt-0.5 whitespace-nowrap ${
+                    isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+                  }`}>
                     {formatCurrency(plan.remainingDebtAmount, currency)} rest. •{' '}
                     {plan.remainingInstallments}{' '}
                     {language === 'pt-BR'
@@ -430,8 +440,8 @@ export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps>
 
               {/* Slim subtle progress bar */}
               <div
-                className={`h-1 w-full rounded-full overflow-hidden mt-1.5 ${
-                  isOled ? 'bg-[#161B22]' : 'bg-[#E2E8F0]'
+                className={`h-1.5 w-full rounded-full overflow-hidden mt-1.5 ${
+                  isOled ? 'bg-[#161B22]' : 'bg-slate-200'
                 }`}
               >
                 <div
@@ -585,22 +595,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   return (
     <div className="space-y-4 pb-6 animate-fadeIn max-w-lg mx-auto w-full">
-      {/* 1. Installment Expenses Tracker Card (Parcelamentos em Conta) */}
-      <InstallmentExpenseTracker
-        transactions={transactions}
-        categories={categories}
-        currency={currency}
-        language={language}
-        selectedMonth={selectedMonth}
-        theme={theme}
-      />
-
-      {/* 2. SINGLE MINIMALIST CARD: Distribuição por Categoria */}
+      {/* 1. SINGLE MINIMALIST CARD: Distribuição por Categoria */}
       <section
         className={`rounded-2xl border p-5 transition-colors ${
           isOled
             ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]'
-            : 'bg-white border-[#E2E8F0] text-[#0F172A] shadow-xs'
+            : 'bg-white border-slate-200 text-slate-900 shadow-xs'
         }`}
       >
         {/* Card Header */}
@@ -616,10 +616,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               <PieChartIcon size={18} />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base font-extrabold tracking-tight truncate">
+              <h1 className={`text-base font-extrabold tracking-tight truncate ${
+                isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+              }`}>
                 {language === 'pt-BR' ? 'Distribuição por Categoria' : 'Category Breakdown'}
               </h1>
-              <p className="text-xs text-[#94A3B8] capitalize truncate">{monthTitle}</p>
+              <p className={`text-xs capitalize truncate ${
+                isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+              }`}>{monthTitle}</p>
             </div>
           </div>
 
@@ -627,7 +631,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             className={`px-2.5 py-1 rounded-full text-[11px] font-bold border shrink-0 ${
               isOled
                 ? 'bg-[#161B22] border-[#21262D] text-[#94A3B8]'
-                : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#64748B]'
+                : 'bg-slate-100 border-slate-200 text-slate-600'
             }`}
           >
             {totalCount}{' '}
@@ -644,7 +648,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         {/* Type Selector: Segmented Control Toggle ("Despesas" default vs "Entradas") */}
         <div
           className={`grid grid-cols-2 gap-1.5 p-1 rounded-xl border mb-6 ${
-            isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-[#F1F5F9] border-[#E2E8F0]'
+            isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-slate-100 border-slate-200'
           }`}
         >
           <button
@@ -655,7 +659,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 ? 'bg-[#EF4444] text-white shadow-sm'
                 : isOled
                 ? 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                : 'text-[#64748B] hover:text-[#0F172A]'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <ArrowDownRight size={16} strokeWidth={2.5} />
@@ -670,7 +674,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 ? 'bg-[#10B981] text-white shadow-sm'
                 : isOled
                 ? 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                : 'text-[#64748B] hover:text-[#0F172A]'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <ArrowUpRight size={16} strokeWidth={2.5} />
@@ -688,18 +692,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   cy={center}
                   r={radius}
                   fill="none"
-                  stroke={isOled ? '#161B22' : '#F1F5F9'}
+                  stroke={isOled ? '#161B22' : '#E2E8F0'}
                   strokeWidth={strokeWidth}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
                 <PieChartIcon size={24} className="text-[#94A3B8] opacity-50 mb-1" />
-                <span className="text-xs font-bold text-[#94A3B8]">
+                <span className={`text-xs font-bold ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
                   {formatCurrency(0, currency)}
                 </span>
               </div>
             </div>
-            <p className="text-sm font-bold">
+            <p className={`text-sm font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
               {language === 'pt-BR'
                 ? selectedType === 'expense'
                   ? 'Nenhuma despesa neste mês'
@@ -708,7 +712,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 ? 'No expenses in this month'
                 : 'No income in this month'}
             </p>
-            <p className="text-xs text-[#94A3B8] mt-1 max-w-xs">
+            <p className={`text-xs mt-1 max-w-xs ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
               {language === 'pt-BR'
                 ? 'Os lançamentos registrados neste período aparecerão distribuídos por categoria aqui.'
                 : 'Transactions recorded in this period will appear grouped by category here.'}
@@ -732,7 +736,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     cy={center}
                     r={radius}
                     fill="none"
-                    stroke={isOled ? '#161B22' : '#F1F5F9'}
+                    stroke={isOled ? '#161B22' : '#E2E8F0'}
                     strokeWidth={strokeWidth}
                   />
 
@@ -771,7 +775,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   onClick={() => setActiveCategoryId(null)}
                   className="absolute inset-12 rounded-full flex flex-col items-center justify-center text-center px-2 focus:outline-none"
                 >
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8] truncate max-w-[130px]">
+                  <span className={`text-[11px] font-bold uppercase tracking-wider truncate max-w-[130px] ${
+                    isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+                  }`}>
                     {activeSlice
                       ? activeSlice.name
                       : selectedType === 'expense'
@@ -789,7 +795,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   >
                     {formatCurrency(activeSlice ? activeSlice.amount : totalAmount, currency)}
                   </span>
-                  <span className="text-[11px] font-semibold text-[#94A3B8] mt-0.5">
+                  <span className={`text-[11px] font-semibold mt-0.5 ${
+                    isOled ? 'text-[#94A3B8]' : 'text-slate-500'
+                  }`}>
                     {activeSlice
                       ? `${activeSlice.share.toFixed(1)}%`
                       : `100% • ${categorySlices.length} ${
@@ -807,7 +815,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
 
             {/* Category Breakdown Legend Below the Chart */}
-            <div className="mt-5 pt-4 border-t border-[#21262D]/80 space-y-2">
+            <div className={`mt-5 pt-4 border-t space-y-2 ${
+              isOled ? 'border-[#21262D]/80' : 'border-slate-200'
+            }`}>
               {categorySlices.map((item) => {
                 const isSelected = activeCategoryId === item.id;
                 return (
@@ -821,10 +831,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       isSelected
                         ? isOled
                           ? 'bg-[#161B22] border-[#6E5440] ring-1 ring-[#D0B595]/30'
-                          : 'bg-[#F1F5F9] border-[#6E5440]'
+                          : 'bg-slate-100 border-[#6E5440]'
                         : isOled
                         ? 'bg-[#161B22]/60 border-[#21262D] hover:bg-[#161B22]'
-                        : 'bg-[#F8FAFC] border-[#E2E8F0] hover:bg-[#F1F5F9]'
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -832,18 +842,22 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         className="w-3 h-3 rounded-full shrink-0 shadow-xs"
                         style={{ backgroundColor: item.color }}
                       />
-                      <span className="text-xs font-bold truncate">{item.name}</span>
+                      <span className={`text-xs font-bold truncate ${
+                        isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+                      }`}>{item.name}</span>
                     </div>
 
                     <div className="flex items-center gap-2.5 shrink-0">
-                      <span className="text-xs font-extrabold">
+                      <span className={`text-xs font-extrabold ${
+                        isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+                      }`}>
                         {formatCurrency(item.amount, currency)}
                       </span>
                       <span
                         className={`min-w-[48px] text-right px-2 py-0.5 rounded-md text-[11px] font-bold ${
                           isOled
                             ? 'bg-[#0D1117] text-[#94A3B8] border border-[#21262D]'
-                            : 'bg-white text-[#64748B] border border-[#E2E8F0]'
+                            : 'bg-white text-slate-600 border border-slate-200'
                         }`}
                       >
                         {item.share.toFixed(1)}%
@@ -856,6 +870,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </>
         )}
       </section>
+
+      {/* 2. Installment Expenses Tracker Card (Parcelamentos em Conta) */}
+      <InstallmentExpenseTracker
+        transactions={transactions}
+        categories={categories}
+        currency={currency}
+        language={language}
+        selectedMonth={selectedMonth}
+        theme={theme}
+      />
     </div>
   );
 };

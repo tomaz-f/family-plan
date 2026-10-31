@@ -678,7 +678,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 }}
                 className={`text-[28px] min-[375px]:text-3xl min-[410px]:text-[34px] sm:text-4xl font-black tracking-tight leading-none truncate ${
                   onOpenBalanceModal ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
-                } ${effectiveBankBalance < 0 ? 'text-rose-400' : 'text-[#F8FAFC]'}`}
+                } ${effectiveBankBalance < 0 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-900 dark:text-[#F8FAFC]'}`}
                 title={
                   onOpenBalanceModal
                     ? language === 'pt-BR'
@@ -693,7 +693,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               <button
                 type="button"
                 onClick={toggleBalancePrivacy}
-                className="p-1 rounded-lg text-slate-400 hover:text-white active:scale-90 transition-all shrink-0 focus:outline-none flex items-center justify-center"
+                className="p-1 rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white active:scale-90 transition-all shrink-0 focus:outline-none flex items-center justify-center"
                 title={
                   isBalanceHidden
                     ? language === 'pt-BR'
@@ -724,13 +724,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 placeholder={language === 'pt-BR' ? 'Pesquisar lançamentos...' : 'Search transactions...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="whatsapp-search-input w-full h-9 sm:h-9.5 pl-11 pr-10 rounded-full text-xs sm:text-sm text-[#F8FAFC] placeholder:text-slate-400 focus:outline-none transition-all shadow-inner-xs"
+                className="whatsapp-search-input w-full h-9 sm:h-9.5 pl-11 pr-10 rounded-full text-xs sm:text-sm text-slate-900 dark:text-[#F8FAFC] placeholder:text-slate-400 focus:outline-none transition-all shadow-inner-xs"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-white transition-colors z-10"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors z-10"
                   title={language === 'pt-BR' ? 'Limpar busca' : 'Clear search'}
                 >
                   <X size={14} className="w-3.5 h-3.5" />
@@ -764,7 +764,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <div className="flex flex-col items-end text-right">
               <div className="flex items-center gap-1 text-[#10B981] mb-0.5 justify-end">
                 <ArrowUpRight size={14} strokeWidth={2.5} className="shrink-0" />
-                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-300">
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   {language === 'pt-BR' ? 'ENTRADAS' : 'INCOME'}
                 </span>
               </div>
@@ -772,11 +772,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 {isBalanceHidden ? '+R$ ••••••' : `+${formatCurrency(effectiveStats.income, currency)}`}
               </p>
               <p
-                className="text-[11px] sm:text-xs font-medium text-[#94A3B8] mt-0.5 whitespace-nowrap"
+                className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-[#94A3B8] mt-0.5 whitespace-nowrap"
                 title={`${language === 'pt-BR' ? 'A receber:' : 'To receive:'} ${formatCurrency(effectiveStats.pendingIncome, currency)}`}
               >
                 {language === 'pt-BR' ? 'A receber:' : 'To receive:'}{' '}
-                <span className="text-white font-bold ml-0.5">
+                <span className="text-slate-900 dark:text-white font-bold ml-0.5">
                   {isBalanceHidden ? 'R$ ••••' : formatCurrency(effectiveStats.pendingIncome, currency)}
                 </span>
               </p>
@@ -786,7 +786,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <div className="flex flex-col items-end text-right">
               <div className="flex items-center gap-1 text-[#EF4444] mb-0.5 justify-end">
                 <ArrowDownRight size={14} strokeWidth={2.5} className="shrink-0" />
-                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-300">
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                   {language === 'pt-BR' ? 'DESPESAS' : 'EXPENSES'}
                 </span>
               </div>
@@ -794,11 +794,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 {isBalanceHidden ? '-R$ ••••••' : `-${formatCurrency(effectiveStats.expense, currency)}`}
               </p>
               <p
-                className="text-[11px] sm:text-xs font-medium text-[#94A3B8] mt-0.5 whitespace-nowrap"
+                className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-[#94A3B8] mt-0.5 whitespace-nowrap"
                 title={`${language === 'pt-BR' ? 'A pagar:' : 'To pay:'} ${formatCurrency(effectiveStats.pendingExpense, currency)}`}
               >
                 {language === 'pt-BR' ? 'A pagar:' : 'To pay:'}{' '}
-                <span className="text-white font-bold ml-0.5">
+                <span className="text-slate-900 dark:text-white font-bold ml-0.5">
                   {isBalanceHidden ? 'R$ ••••' : formatCurrency(effectiveStats.pendingExpense, currency)}
                 </span>
               </p>

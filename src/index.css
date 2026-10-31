@@ -110,12 +110,15 @@ html[data-theme="light"] .oled-main-card {
   color: #0F172A !important;
 }
 
-html[data-theme="light"] .oled-main-card .text-white {
+html[data-theme="light"] .oled-main-card .text-white,
+html[data-theme="light"] .oled-main-card .text-\[\#F8FAFC\] {
   color: #0F172A !important;
 }
 
 html[data-theme="light"] .oled-main-card .text-zinc-400,
-html[data-theme="light"] .oled-main-card .text-slate-300 {
+html[data-theme="light"] .oled-main-card .text-slate-300,
+html[data-theme="light"] .oled-main-card .text-slate-400,
+html[data-theme="light"] .oled-main-card .text-\[\#94A3B8\] {
   color: #64748B !important;
 }
 
