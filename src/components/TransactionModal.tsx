@@ -13,6 +13,8 @@ import {
   CreditCard as CreditCardIcon,
   Landmark,
   Sparkles,
+  ChevronDown,
+  Trash2,
 } from 'lucide-react';
 import {
   AppLanguage,
@@ -51,6 +53,7 @@ interface TransactionModalProps {
   currency: string;
   language: AppLanguage;
   onClose: () => void;
+  onDelete?: (tx: Transaction) => void;
   onSave: (
     data: {
       id?: string;
@@ -92,6 +95,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   currency,
   language,
   onClose,
+  onDelete,
   onSave,
 }) => {
   const t = TRANSLATIONS[language];
@@ -112,8 +116,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [installmentTotal, setInstallmentTotal] = useState<string>('12');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [showSeriesEditConfirm, setShowSeriesEditConfirm] = useState<boolean>(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState<boolean>(false);
 
   const filteredCategories = categories.filter((c) => c.type === type);
+  const selectedCategory = useMemo(
+    () => categories.find((c) => c.id === categoryId) || filteredCategories[0] || null,
+    [categories, categoryId, filteredCategories]
+  );
   const effectiveCardId = type === 'expense' ? selectedCardId : null;
   const selectedCard = useMemo(
     () => creditCards.find((c) => c.id === effectiveCardId) || null,
@@ -522,37 +531,29 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Compact Category Horizontal Pill Carousel */}
+          {/* Category Picker Trigger (Option B: Compact Button + BottomSheet) */}
           <div>
             <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
               {language === 'pt-BR' ? 'Categoria' : 'Category'}
             </label>
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-0.5 px-0.5">
-              {filteredCategories.map((cat) => {
-                const selected = cat.id === categoryId;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setCategoryId(cat.id)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium whitespace-nowrap shrink-0 transition-all active:scale-95 ${
-                      selected
-                        ? 'filter-chip-active font-semibold shadow-xs'
-                        : 'filter-chip-inactive'
-                    }`}
-                  >
-                    <CategoryIcon
-                      icon={cat.icon}
-                      color={selected ? '#ffffff' : cat.color}
-                      size={13}
-                      badgeSize="sm"
-                      className={selected ? '!bg-white/20 !text-white !w-5 !h-5' : '!w-5 !h-5'}
-                    />
-                    <span>{getCategoryDisplayName(cat, language)}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              type="button"
+              onClick={() => setCategoryPickerOpen(true)}
+              className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between text-slate-900 transition-colors active:scale-[0.99] hover:bg-slate-100"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <CategoryIcon
+                  icon={selectedCategory?.icon || 'Tag'}
+                  color={selectedCategory?.color || '#94A3B8'}
+                  size={18}
+                  badgeSize="sm"
+                />
+                <span className="text-xs font-bold truncate">
+                  {getCategoryDisplayName(selectedCategory, language) || (language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category')}
+                </span>
+              </div>
+              <ChevronDown size={16} className="text-slate-400 shrink-0" />
+            </button>
           </div>
 
           {/* Account / Card Compact Pill Selector (For Expenses) */}
@@ -815,38 +816,111 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </div>
 
           {/* Compact Action Footer */}
-          <div className="flex items-center gap-2.5 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="py-2.5 px-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors"
-            >
-              {t.cancelBtn}
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-white text-xs font-semibold shadow-xs transition-all ${
-                type === 'income'
-                  ? 'bg-[#10B981] hover:bg-emerald-600'
-                  : 'bg-[#EF4444] hover:bg-rose-600'
-              }`}
-            >
-              {submitting
-                ? t.savingBtn
-                : editingTransaction
-                ? t.saveChangesBtn
-                : type === 'income'
-                ? language === 'pt-BR'
-                  ? 'Adicionar Entrada'
-                  : 'Add Income'
-                : language === 'pt-BR'
-                ? 'Adicionar Despesa'
-                : 'Add Expense'}
-            </button>
+          <div className="flex items-center justify-between gap-2.5 pt-1">
+            {editingTransaction && onDelete ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete(editingTransaction);
+                  onClose();
+                }}
+                disabled={submitting}
+                className="py-2.5 px-3 rounded-xl border border-rose-500/40 text-rose-500 hover:bg-rose-50 active:scale-95 flex items-center justify-center gap-1 font-bold text-xs transition-colors shrink-0"
+                title="Excluir lançamento"
+              >
+                <Trash2 size={14} />
+                <span>{language === 'pt-BR' ? 'Excluir' : 'Delete'}</span>
+              </button>
+            ) : null}
+
+            <div className="flex items-center gap-2 flex-1 justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="py-2.5 px-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 text-xs font-semibold transition-colors"
+              >
+                {t.cancelBtn}
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className={`flex-1 max-w-[200px] py-2.5 px-4 rounded-xl text-white text-xs font-semibold shadow-xs transition-all ${
+                  type === 'income'
+                    ? 'bg-[#10B981] hover:bg-emerald-600'
+                    : 'bg-[#EF4444] hover:bg-rose-600'
+                }`}
+              >
+                {submitting
+                  ? t.savingBtn
+                  : editingTransaction
+                  ? t.saveChangesBtn
+                  : type === 'income'
+                  ? language === 'pt-BR'
+                    ? 'Adicionar Entrada'
+                    : 'Add Income'
+                  : language === 'pt-BR'
+                  ? 'Adicionar Despesa'
+                  : 'Add Expense'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
+
+      {/* Category Picker BottomSheet Modal */}
+      {categoryPickerOpen && (
+        <div className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+              <div>
+                <h4 className="text-sm font-bold">
+                  {language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category'}
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  {language === 'pt-BR' ? 'Toque para escolher' : 'Tap to select'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCategoryPickerOpen(false)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+              {filteredCategories.map((cat) => {
+                const selected = cat.id === categoryId;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      setCategoryId(cat.id);
+                      setCategoryPickerOpen(false);
+                    }}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 gap-2 ${
+                      selected
+                        ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <CategoryIcon
+                      icon={cat.icon}
+                      color={selected ? '#ffffff' : cat.color}
+                      size={20}
+                      badgeSize="md"
+                    />
+                    <span className="text-xs font-bold text-center truncate max-w-full">
+                      {getCategoryDisplayName(cat, language)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <SeriesConfirmModal
         isOpen={showSeriesEditConfirm}

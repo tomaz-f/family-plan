@@ -57,6 +57,7 @@ import { CreditCardsView } from './components/CreditCardsView';
 import { FuelView } from './components/FuelView';
 import { ReportsView } from './components/ReportsView';
 import { TransactionModal } from './components/TransactionModal';
+import { CreditCardExpenseModal } from './components/CreditCardExpenseModal';
 import { BalanceModal } from './components/BalanceModal';
 import { MobileSyncModal } from './components/MobileSyncModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -219,6 +220,9 @@ export const App: React.FC = () => {
   const [txModalInitialType, setTxModalInitialType] = useState<TransactionType>('expense');
   const [txModalInitialCardId, setTxModalInitialCardId] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [cardExpenseModalOpen, setCardExpenseModalOpen] = useState<boolean>(false);
+  const [cardExpenseInitialCardId, setCardExpenseInitialCardId] = useState<string | null>(null);
+  const [editingCardTx, setEditingCardTx] = useState<Transaction | null>(null);
   const [deletingSeriesTx, setDeletingSeriesTx] = useState<Transaction | null>(null);
   const [balanceModalOpen, setBalanceModalOpen] = useState<boolean>(false);
   const [syncModalOpen, setSyncModalOpen] = useState<boolean>(false);
@@ -545,10 +549,26 @@ export const App: React.FC = () => {
     setTxModalOpen(true);
   };
 
+  const handleOpenCardExpenseModal = (cardId?: string) => {
+    setEditingCardTx(null);
+    setCardExpenseInitialCardId(cardId || activeCardId || state.creditCards?.[0]?.id || null);
+    setCardExpenseModalOpen(true);
+  };
+
+  const handleOpenEditCardExpenseModal = (tx: Transaction) => {
+    setEditingCardTx(tx);
+    setCardExpenseInitialCardId(tx.cardId || activeCardId || null);
+    setCardExpenseModalOpen(true);
+  };
+
   const handleOpenEditModal = (tx: Transaction) => {
+    if (tx.cardId) {
+      handleOpenEditCardExpenseModal(tx);
+      return;
+    }
     setEditingTx(tx);
     setTxModalInitialType(tx.type);
-    setTxModalInitialCardId(tx.cardId || null);
+    setTxModalInitialCardId(null);
     setTxModalOpen(true);
   };
 
@@ -1856,8 +1876,8 @@ export const App: React.FC = () => {
               onSaveCard={handleSaveCard}
               onDeleteCard={handleDeleteCard}
               onPayInvoice={handlePayCardInvoice}
-              onOpenAddExpense={(cardId) => handleOpenAddModal('expense', cardId)}
-              onEditTransaction={handleOpenEditModal}
+              onOpenAddExpense={handleOpenCardExpenseModal}
+              onEditTransaction={handleOpenEditCardExpenseModal}
               onDeleteTransaction={(tx) => handleDeleteTransaction(tx.id)}
               onActiveCardChange={setActiveCardId}
             />
@@ -2026,7 +2046,7 @@ export const App: React.FC = () => {
                 } else if (activeTab === 'cards') {
                   setFabMenuOpen(false);
                   const targetCardId = activeCardId || state.creditCards?.[0]?.id || undefined;
-                  handleOpenAddModal('expense', targetCardId);
+                  handleOpenCardExpenseModal(targetCardId);
                 } else if (activeTab === 'fuel') {
                   setFabMenuOpen(false);
                   setOpenRefuelTrigger((n) => n + 1);
@@ -2096,7 +2116,29 @@ export const App: React.FC = () => {
         currency={state.settings.currency}
         language={language}
         onClose={() => setTxModalOpen(false)}
+        onDelete={(tx) => handleDeleteTransaction(tx.id)}
         onSave={handleSaveTransaction}
+      />
+
+      <CreditCardExpenseModal
+        isOpen={cardExpenseModalOpen}
+        initialCardId={cardExpenseInitialCardId}
+        editingTransaction={editingCardTx}
+        allTransactions={state.transactions}
+        categories={state.categories}
+        creditCards={state.creditCards || []}
+        currency={state.settings.currency}
+        language={language}
+        theme={theme}
+        onClose={() => setCardExpenseModalOpen(false)}
+        onSave={handleSaveTransaction}
+        onDelete={async (tx, scope) => {
+          if (scope) {
+            await executeDeleteTransaction(tx.id, scope);
+          } else {
+            await handleDeleteTransaction(tx.id);
+          }
+        }}
       />
 
       <SeriesConfirmModal
