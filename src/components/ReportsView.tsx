@@ -4,6 +4,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Layers,
+  CalendarClock,
   CheckCircle2,
   Clock,
 } from 'lucide-react';
@@ -63,197 +64,386 @@ const FALLBACK_SLICE_COLORS = [
   '#6366F1',
 ];
 
+export interface NonCardInstallmentPlan {
+  key: string;
+  description: string;
+  categoryId: string;
+  categoryName: string;
+  categoryColor: string;
+  categoryIcon: string;
+  monthlyAmount: number;
+  totalInstallments: number;
+  paidInstallments: number;
+  remainingInstallments: number;
+  currentInstallmentDisplay: number;
+  totalAmount: number;
+  totalPaidAmount: number;
+  remainingDebtAmount: number;
+  progressPct: number;
+  paymentMethod: string;
+  isDueInSelectedMonth: boolean;
+  selectedMonthAmount: number;
+}
+
 /**
- * Preserved Installment Expense Tracker hook & component for upcoming reuse/repositioning.
+ * Installment Expense Tracker hook strictly filtered for NON-credit-card installments.
+ * Credit card installments are monitored in the dedicated Credit Cards screen.
  */
 export function useInstallmentPlans(
   transactions: Transaction[],
   categories: Category[],
-  language: AppLanguage
+  language: AppLanguage,
+  selectedMonth: string = new Date().toISOString().slice(0, 7)
 ) {
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
   const installmentPlans = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        key: string;
-        description: string;
-        categoryId: string;
-        monthlyAmount: number;
-        totalInstallments: number;
-        paidCount: number;
-        unpaidCount: number;
-        paidAmountSum: number;
-        unpaidAmountSum: number;
-        endMonth: string;
-        dueDay: number | null;
-      }
-    >();
-
-    const instTransactions = transactions.filter(
-      (tx) => tx.type === 'expense' && tx.installmentTotal && tx.installmentTotal > 1
+    // 1. Strict Filter: Non-Credit Card Installments Only
+    // Query/filter transactions where cardId is NULL or empty
+    const nonCardInstTxs = transactions.filter(
+      (tx) =>
+        tx.type === 'expense' &&
+        !tx.cardId &&
+        !tx.settledInvoiceKey &&
+        Boolean(tx.installmentTotal && tx.installmentTotal > 1)
     );
 
-    for (const tx of instTransactions) {
+    const groups = new Map<string, Transaction[]>();
+    for (const tx of nonCardInstTxs) {
       const groupKey =
         tx.recurringId ||
         `${tx.description.trim().toLowerCase()}__${tx.categoryId}__${tx.installmentTotal}`;
-      const existing = groups.get(groupKey);
-      const isPaid = (tx.status ?? 'paid') === 'paid';
-      const curNum = tx.installmentCurrent || 1;
-      const totNum = tx.installmentTotal || 2;
-      const txMonth = (tx.invoiceMonth || tx.date).slice(0, 7);
-      const impliedEndMonth = shiftMonth(txMonth, Math.max(0, totNum - curNum));
-
-      if (!existing) {
-        groups.set(groupKey, {
-          key: groupKey,
-          description: tx.description,
-          categoryId: tx.categoryId,
-          monthlyAmount: tx.amount,
-          totalInstallments: totNum,
-          paidCount: isPaid ? 1 : 0,
-          unpaidCount: isPaid ? 0 : 1,
-          paidAmountSum: isPaid ? tx.amount : 0,
-          unpaidAmountSum: isPaid ? 0 : tx.amount,
-          endMonth: impliedEndMonth,
-          dueDay: tx.dueDay || null,
-        });
-      } else {
-        if (isPaid) {
-          existing.paidCount += 1;
-          existing.paidAmountSum += tx.amount;
-        } else {
-          existing.unpaidCount += 1;
-          existing.unpaidAmountSum += tx.amount;
-        }
-        if (totNum > existing.totalInstallments) {
-          existing.totalInstallments = totNum;
-        }
-        if (txMonth > existing.endMonth) {
-          existing.endMonth = txMonth;
-        }
-      }
+      const list = groups.get(groupKey) || [];
+      list.push(tx);
+      groups.set(groupKey, list);
     }
 
-    return Array.from(groups.values())
-      .map((plan) => {
-        const cat = categoryMap.get(plan.categoryId);
-        const totalInstallments = Math.max(
-          plan.totalInstallments,
-          plan.paidCount + plan.unpaidCount
+    const plans: NonCardInstallmentPlan[] = [];
+
+    for (const [key, txList] of groups.entries()) {
+      // Sort transactions by installment current or date ascending
+      txList.sort((a, b) => (a.installmentCurrent || 1) - (b.installmentCurrent || 1));
+      const repTx = txList[0];
+      const cat = categoryMap.get(repTx.categoryId);
+
+      const totalInstallments = Math.max(
+        ...txList.map((t) => t.installmentTotal || 0),
+        2
+      );
+
+      const monthlyAmount =
+        txList.find((t) => t.amount > 0)?.amount || repTx.amount;
+
+      const paidTxs = txList.filter((t) => (t.status ?? 'paid') === 'paid');
+      const unpaidTxs = txList.filter((t) => t.status === 'unpaid');
+
+      let paidInstallments = 0;
+      let remainingInstallments = 0;
+      let currentInstallmentDisplay = 1;
+      let remainingDebtAmount = 0;
+
+      if (unpaidTxs.length > 0) {
+        remainingInstallments = unpaidTxs.length;
+        remainingDebtAmount = Number(
+          unpaidTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0).toFixed(2)
         );
-        const paidInstallments = plan.paidCount;
-        const remainingInstallments =
-          plan.unpaidCount > 0
-            ? plan.unpaidCount
-            : Math.max(0, totalInstallments - paidInstallments);
+        const highestPaid =
+          paidTxs.length > 0
+            ? Math.max(...paidTxs.map((t) => t.installmentCurrent || 1))
+            : 0;
+        paidInstallments = Math.max(paidTxs.length, totalInstallments - remainingInstallments);
 
-        const totalPaidAmount = Number(plan.paidAmountSum.toFixed(2));
-        const remainingDebtAmount =
-          plan.unpaidCount > 0
-            ? Number(plan.unpaidAmountSum.toFixed(2))
-            : Number((remainingInstallments * plan.monthlyAmount).toFixed(2));
+        // Check for specific entry due in selectedMonth
+        const txInSelectedMonth = unpaidTxs.find((t) => t.date.slice(0, 7) === selectedMonth);
+        if (txInSelectedMonth) {
+          currentInstallmentDisplay = txInSelectedMonth.installmentCurrent || (highestPaid + 1);
+        } else {
+          currentInstallmentDisplay =
+            unpaidTxs[0].installmentCurrent || Math.min(totalInstallments, highestPaid + 1);
+        }
+      } else {
+        const highestCur = Math.max(...txList.map((t) => t.installmentCurrent || 1));
+        if (repTx.status === 'unpaid') {
+          paidInstallments = Math.max(0, highestCur - 1);
+          remainingInstallments = Math.max(0, totalInstallments - paidInstallments);
+          currentInstallmentDisplay = highestCur;
+        } else {
+          paidInstallments = Math.max(paidTxs.length, highestCur);
+          remainingInstallments = Math.max(0, totalInstallments - paidInstallments);
+          currentInstallmentDisplay = Math.min(totalInstallments, paidInstallments);
+        }
+        remainingDebtAmount = Number((remainingInstallments * monthlyAmount).toFixed(2));
+      }
 
-        const totalAmount = Number((totalPaidAmount + remainingDebtAmount).toFixed(2));
-        const progressPct =
-          totalInstallments > 0 ? (paidInstallments / totalInstallments) * 100 : 0;
+      // 2. Strict Filter: Exclude fully completed installments (current >= total when paid, or 0 remaining)
+      if (remainingInstallments <= 0 || paidInstallments >= totalInstallments) {
+        continue;
+      }
 
-        return {
-          ...plan,
-          totalInstallments,
-          categoryName: getCategoryDisplayName(cat, language),
-          categoryColor: cat?.color || '#6366f1',
-          categoryIcon: cat?.icon || 'ShoppingBag',
-          paidInstallments,
-          remainingInstallments,
-          totalAmount,
-          totalPaidAmount,
-          remainingDebtAmount,
-          progressPct,
-          endMonthLabel: formatShortMonthLabel(plan.endMonth, language),
-        };
-      })
-      .sort((a, b) => b.remainingDebtAmount - a.remainingDebtAmount);
-  }, [transactions, categoryMap, language]);
+      // Payment method metadata badge
+      const combined = `${repTx.description} ${repTx.notes || ''}`.toLowerCase();
+      let paymentMethod = language === 'pt-BR' ? 'Pix / Boleto' : 'Bank / Cash';
+      if (combined.includes('boleto')) paymentMethod = 'Boleto';
+      else if (combined.includes('pix')) paymentMethod = 'Pix';
+      else if (combined.includes('debito') || combined.includes('débito')) paymentMethod = 'Débito';
+      else if (combined.includes('dinheiro')) paymentMethod = 'Dinheiro';
+      else if (combined.includes('transferência') || combined.includes('ted')) paymentMethod = 'TED / Pix';
+
+      const totalAmount =
+        repTx.totalPurchaseAmount && repTx.totalPurchaseAmount > 0
+          ? repTx.totalPurchaseAmount
+          : Number((monthlyAmount * totalInstallments).toFixed(2));
+      const totalPaidAmount = Number(Math.max(0, totalAmount - remainingDebtAmount).toFixed(2));
+      const progressPct =
+        totalInstallments > 0 ? (paidInstallments / totalInstallments) * 100 : 0;
+
+      const txThisMonth = txList.find((t) => t.date.slice(0, 7) === selectedMonth);
+      const isDueInSelectedMonth = Boolean(txThisMonth);
+      const selectedMonthAmount = txThisMonth ? txThisMonth.amount : monthlyAmount;
+
+      plans.push({
+        key,
+        description: repTx.description,
+        categoryId: repTx.categoryId,
+        categoryName: cat ? getCategoryDisplayName(cat, language) : '',
+        categoryColor: cat?.color || '#F97316',
+        categoryIcon: cat?.icon || 'Layers',
+        monthlyAmount,
+        totalInstallments,
+        paidInstallments,
+        remainingInstallments,
+        currentInstallmentDisplay,
+        totalAmount,
+        totalPaidAmount,
+        remainingDebtAmount,
+        progressPct,
+        paymentMethod,
+        isDueInSelectedMonth,
+        selectedMonthAmount,
+      });
+    }
+
+    return plans.sort((a, b) => b.remainingDebtAmount - a.remainingDebtAmount);
+  }, [transactions, categoryMap, language, selectedMonth]);
 
   const installmentSummary = useMemo(() => {
-    const activePlans = installmentPlans.filter((p) => p.remainingInstallments > 0);
-    const monthlyCommitment = activePlans.reduce((sum, p) => sum + p.monthlyAmount, 0);
+    const activeCount = installmentPlans.length;
+    // Comprometido no Mês: sum of monthly commitments for active plans
+    const monthlyCommitment = installmentPlans.reduce((sum, p) => sum + p.selectedMonthAmount, 0);
+    const totalRemainingDebt = installmentPlans.reduce((sum, p) => sum + p.remainingDebtAmount, 0);
     const totalPaid = installmentPlans.reduce((sum, p) => sum + p.totalPaidAmount, 0);
-    const totalRemainingDebt = activePlans.reduce((sum, p) => sum + p.remainingDebtAmount, 0);
+
     return {
-      activeCount: activePlans.length,
-      monthlyCommitment,
-      totalPaid,
-      totalRemainingDebt,
+      activeCount,
+      monthlyCommitment: Number(monthlyCommitment.toFixed(2)),
+      totalRemainingDebt: Number(totalRemainingDebt.toFixed(2)),
+      totalPaid: Number(totalPaid.toFixed(2)),
     };
   }, [installmentPlans]);
 
   return { installmentPlans, installmentSummary };
 }
 
-export const InstallmentExpenseTracker: React.FC<{
+export interface InstallmentExpenseTrackerProps {
   transactions: Transaction[];
   categories: Category[];
   currency: string;
   language: AppLanguage;
-}> = ({ transactions, categories, currency, language }) => {
-  const t = TRANSLATIONS[language];
+  selectedMonth?: string;
+  theme?: AppTheme;
+}
+
+export const InstallmentExpenseTracker: React.FC<InstallmentExpenseTrackerProps> = ({
+  transactions,
+  categories,
+  currency,
+  language,
+  selectedMonth = new Date().toISOString().slice(0, 7),
+  theme = 'oled',
+}) => {
+  const isOled = theme === 'oled';
   const { installmentPlans, installmentSummary } = useInstallmentPlans(
     transactions,
     categories,
-    language
+    language,
+    selectedMonth
   );
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Layers size={18} className="text-indigo-500" />
-          <h3 className="text-sm font-bold text-slate-900">{t.installmentTrackerTitle}</h3>
+    <section
+      className={`rounded-2xl border p-4 mb-4 transition-colors ${
+        isOled
+          ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]'
+          : 'bg-white border-[#E2E8F0] text-[#0F172A] shadow-xs'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 mb-3.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+              isOled
+                ? 'bg-[#161B22] border-[#21262D] text-[#D0B595]'
+                : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#6E5440]'
+            }`}
+          >
+            <CalendarClock size={16} />
+          </div>
+          <h2 className="text-sm font-bold truncate">
+            {language === 'pt-BR' ? 'Parcelamentos em Conta' : 'Account Installments'}
+          </h2>
         </div>
-        <span className="px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-bold">
-          {t.activePlansBadge(installmentSummary.activeCount)}
+
+        <span
+          className={`px-2 py-0.5 rounded-full text-xs font-bold border shrink-0 ${
+            isOled
+              ? 'bg-[#161B22] border-[#21262D] text-[#D0B595]'
+              : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#6E5440]'
+          }`}
+        >
+          {installmentSummary.activeCount}{' '}
+          {language === 'pt-BR'
+            ? installmentSummary.activeCount === 1
+              ? 'ativa'
+              : 'ativas'
+            : installmentSummary.activeCount === 1
+            ? 'active'
+            : 'active'}
         </span>
       </div>
+
+      {/* Top Metric Row (compact 2-column micro-grid) */}
+      <div
+        className={`grid grid-cols-2 gap-2 p-3 rounded-xl border mb-3.5 ${
+          isOled ? 'bg-[#161B22]/70 border-[#21262D]' : 'bg-[#F8FAFC] border-[#E2E8F0]'
+        }`}
+      >
+        <div>
+          <span className="text-[10px] uppercase font-bold tracking-wider text-[#94A3B8] block truncate">
+            {language === 'pt-BR' ? 'Comprometido no Mês' : 'Committed This Month'}
+          </span>
+          <p className="text-base sm:text-lg font-black text-[#EF4444] mt-0.5 tracking-tight truncate">
+            -{formatCurrency(installmentSummary.monthlyCommitment, currency)}
+          </p>
+        </div>
+
+        <div>
+          <span className="text-[10px] uppercase font-bold tracking-wider text-[#94A3B8] block truncate">
+            {language === 'pt-BR' ? 'Total Restante' : 'Total Remaining'}
+          </span>
+          <p className="text-base sm:text-lg font-black text-[#F8FAFC] mt-0.5 tracking-tight truncate">
+            {formatCurrency(installmentSummary.totalRemainingDebt, currency)}
+          </p>
+        </div>
+      </div>
+
+      {/* Individual Installment Rows */}
       {installmentPlans.length === 0 ? (
-        <p className="text-xs text-slate-500">{t.noActiveInstallments}</p>
+        <div
+          className={`py-6 px-4 rounded-xl border text-center space-y-1 ${
+            isOled ? 'bg-[#161B22]/40 border-[#21262D]' : 'bg-[#F8FAFC] border-[#E2E8F0]'
+          }`}
+        >
+          <p className="text-xs font-semibold text-[#F8FAFC]">
+            {language === 'pt-BR'
+              ? 'Nenhum parcelamento ativo em conta'
+              : 'No active bank installment plans'}
+          </p>
+          <p className="text-[11px] text-[#94A3B8] max-w-xs mx-auto">
+            {language === 'pt-BR'
+              ? 'Despesas parceladas no Pix, Boleto ou Conta Corrente aparecerão aqui.'
+              : 'Expenses split into installments paid via Bank, Pix or Cash will be tracked here.'}
+          </p>
+        </div>
       ) : (
-        <div className="space-y-2.5">
+        <div
+          className={`divide-y border-t ${
+            isOled ? 'divide-[#21262D] border-[#21262D]' : 'divide-[#E2E8F0] border-[#E2E8F0]'
+          }`}
+        >
           {installmentPlans.map((plan) => (
-            <div
-              key={plan.key}
-              className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <CategoryIcon icon={plan.categoryIcon} color={plan.categoryColor} size={15} badgeSize="sm" />
-                  <span className="text-xs font-bold text-slate-900 truncate">{plan.description}</span>
+            <div key={plan.key} className="py-3 first:pt-3.5 last:pb-1 flex flex-col gap-1.5">
+              {/* Main info row */}
+              <div className="flex items-start justify-between gap-2.5">
+                {/* Left Stack */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <CategoryIcon
+                      icon={plan.categoryIcon}
+                      color={plan.categoryColor}
+                      size={14}
+                      badgeSize="sm"
+                    />
+                    <h3 className="font-medium text-sm text-[#F8FAFC] truncate">
+                      {plan.description}
+                    </h3>
+                  </div>
+
+                  {/* Subtitle metadata */}
+                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5 pl-0.5">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
+                        isOled
+                          ? 'bg-[#161B22] border-[#21262D] text-[#D0B595]'
+                          : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#6E5440]'
+                      }`}
+                    >
+                      {plan.currentInstallmentDisplay}/{plan.totalInstallments}
+                    </span>
+
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                        isOled
+                          ? 'bg-[#161B22] border-[#21262D] text-slate-300'
+                          : 'bg-[#F1F5F9] border-[#E2E8F0] text-slate-600'
+                      }`}
+                    >
+                      {plan.paymentMethod}
+                    </span>
+
+                    {plan.categoryName && (
+                      <span className="text-xs text-[#94A3B8] truncate max-w-[100px]">
+                        {plan.categoryName}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-xs font-extrabold text-rose-500 shrink-0">
-                  {formatCurrency(plan.monthlyAmount, currency)}/mês
-                </span>
+
+                {/* Right Stack (Right-aligned) */}
+                <div className="flex flex-col items-end text-right shrink-0">
+                  <span className="font-bold text-sm text-[#EF4444] whitespace-nowrap">
+                    -{formatCurrency(plan.monthlyAmount, currency)}/mês
+                  </span>
+                  <span className="text-xs text-[#94A3B8] mt-0.5 whitespace-nowrap">
+                    {formatCurrency(plan.remainingDebtAmount, currency)} rest. •{' '}
+                    {plan.remainingInstallments}{' '}
+                    {language === 'pt-BR'
+                      ? plan.remainingInstallments === 1
+                        ? 'mês'
+                        : 'meses'
+                      : plan.remainingInstallments === 1
+                      ? 'mo'
+                      : 'mos'}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span className="inline-flex items-center gap-1">
-                  {plan.remainingInstallments === 0 ? (
-                    <CheckCircle2 size={12} className="text-emerald-500" />
-                  ) : (
-                    <Clock size={12} className="text-amber-500" />
-                  )}
-                  {t.installmentProgressLabel(plan.paidInstallments, plan.totalInstallments)}
-                </span>
-                <span>
-                  {t.remainingDebtLabel}: <strong>{formatCurrency(plan.remainingDebtAmount, currency)}</strong>
-                </span>
+
+              {/* Slim subtle progress bar */}
+              <div
+                className={`h-1 w-full rounded-full overflow-hidden mt-1.5 ${
+                  isOled ? 'bg-[#161B22]' : 'bg-[#E2E8F0]'
+                }`}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-300 bg-[#10B981]"
+                  style={{ width: `${Math.min(100, Math.max(4, plan.progressPct))}%` }}
+                />
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 };
 
@@ -394,8 +584,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const monthTitle = formatMonthLabel(selectedMonth, language);
 
   return (
-    <div className="space-y-4 pb-6 animate-fadeIn">
-      {/* SINGLE MINIMALIST CARD: Distribuição por Categoria */}
+    <div className="space-y-4 pb-6 animate-fadeIn max-w-lg mx-auto w-full">
+      {/* 1. Installment Expenses Tracker Card (Parcelamentos em Conta) */}
+      <InstallmentExpenseTracker
+        transactions={transactions}
+        categories={categories}
+        currency={currency}
+        language={language}
+        selectedMonth={selectedMonth}
+        theme={theme}
+      />
+
+      {/* 2. SINGLE MINIMALIST CARD: Distribuição por Categoria */}
       <section
         className={`rounded-2xl border p-5 transition-colors ${
           isOled
