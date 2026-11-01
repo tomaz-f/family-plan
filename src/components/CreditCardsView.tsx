@@ -23,6 +23,7 @@ import {
   Transaction,
 } from '../types';
 import { CategoryIcon } from './CategoryIcon';
+import { AppIcon, BankIcon, resolveBankInfo } from './icons';
 import {
   computeCardFirstInvoiceMonth,
   formatCurrency,
@@ -83,44 +84,29 @@ const formatShortNumericDate = (dateStr?: string | null): string => {
   return dateStr;
 };
 
-// Visual brand badge component
-export const CardBrandBadge: React.FC<{ brand?: CreditCardBrand; className?: string }> = ({
+// Visual brand and institution badge component powered by @edusites/icons
+export const CardBrandBadge: React.FC<{
+  brand?: CreditCardBrand;
+  card?: CreditCard;
+  className?: string;
+  size?: number;
+  color?: string;
+}> = ({
   brand = 'default',
+  card,
   className = '',
+  size = 22,
+  color,
 }) => {
-  if (brand === 'mastercard') {
-    return (
-      <div className={`flex items-center -space-x-1.5 ${className}`}>
-        <div className="w-4 h-4 rounded-full bg-red-600/90 shadow-xs" />
-        <div className="w-4 h-4 rounded-full bg-amber-500/90 shadow-xs" />
-      </div>
-    );
-  }
-  if (brand === 'visa') {
-    return (
-      <span className={`font-black italic tracking-wider text-xs ${className || 'text-blue-500 dark:text-blue-200'}`}>
-        VISA
-      </span>
-    );
-  }
-  if (brand === 'elo') {
-    return (
-      <div className={`flex items-center gap-0.5 px-1 py-0.5 rounded bg-black/50 text-[9px] font-black tracking-tight ${className}`}>
-        <span className="w-1 h-1 rounded-full bg-red-500 inline-block" />
-        <span className="w-1 h-1 rounded-full bg-yellow-400 inline-block" />
-        <span className="w-1 h-1 rounded-full bg-blue-500 inline-block" />
-        <span className="ml-0.5 text-white">elo</span>
-      </div>
-    );
-  }
-  if (brand === 'amex') {
-    return (
-      <span className={`px-1 py-0.5 rounded bg-sky-900 text-sky-200 text-[9px] font-black tracking-widest ${className}`}>
-        AMEX
-      </span>
-    );
-  }
-  return <CreditCardIcon size={16} className={className} />;
+  const bank = resolveBankInfo(card || brand);
+  return (
+    <AppIcon
+      name={bank.iconName}
+      size={size}
+      color={color || (className.includes('text-white') ? '#FFFFFF' : undefined)}
+      className={className}
+    />
+  );
 };
 
 /* Swipe configuration for invoice statement items */
@@ -843,7 +829,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
           <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${
             isOled ? 'bg-[#161B22] text-[#D0B595]' : 'bg-slate-100 text-[#6E5440]'
           }`}>
-            <CreditCardIcon size={24} />
+            <AppIcon name="cartao" size={24} />
           </div>
           <p className={`text-sm font-semibold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
             {t.noCardsRegisteredYet || 'Nenhum cartão cadastrado'}
@@ -889,6 +875,14 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                     selectedCycleTotal: 0,
                   };
 
+                  const bankInfo = resolveBankInfo(card);
+                  // Apply official brand color (e.g. Nubank purple #820AD1, Bradesco red #CC092F, Shopee orange #EE4D2D)
+                  // or custom color selected by user if modified from the default iron tone
+                  const brandBgColor =
+                    card.color && card.color !== '#6E5440'
+                      ? card.color
+                      : bankInfo.primaryColor || card.color || '#6E5440';
+
                   return (
                     <div key={card.id} className="w-full shrink-0">
                       <div className={`relative rounded-2xl p-5 sm:p-6 min-h-[215px] sm:min-h-[225px] border overflow-hidden flex flex-col justify-between transition-colors ${
@@ -899,17 +893,17 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                         {/* Top ambient color edge accent */}
                         <div
                           className="absolute top-0 left-0 right-0 h-1.5 opacity-90"
-                          style={{ backgroundColor: card.color || '#6E5440' }}
+                          style={{ backgroundColor: brandBgColor }}
                         />
 
                         {/* Top Row: Nickname/Bank + Chip/Brand + Edit/Delete */}
                         <div className="flex items-center justify-between gap-3 pt-1">
                           <div className="flex items-center gap-3 min-w-0">
                             <div
-                              className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0"
-                              style={{ backgroundColor: card.color || '#6E5440' }}
+                              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm text-white"
+                              style={{ backgroundColor: brandBgColor }}
                             >
-                              <CardBrandBadge brand={card.brand} />
+                              <AppIcon name={bankInfo.iconName} size={22} color="#FFFFFF" />
                             </div>
                             <div className="min-w-0">
                               <h3 className={`text-sm sm:text-base font-bold truncate ${

@@ -23,6 +23,7 @@ import {
 } from '../types';
 import { CategoryIcon } from './CategoryIcon';
 import { CardBrandBadge } from './CreditCardsView';
+import { BankIcon, AppIcon } from './icons';
 import {
   computeCardFirstInvoiceMonth,
   formatCurrency,
@@ -378,7 +379,7 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
                     : 'bg-amber-500/10 border-amber-500/20 text-[#6E5440]'
                 }`}
               >
-                <CreditCardIcon size={18} />
+                <BankIcon card={selectedCard} size={18} />
               </div>
               <div>
                 <h3 className="text-base font-bold leading-tight">
@@ -453,7 +454,7 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
                               : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                           }`}
                         >
-                          <CardBrandBadge brand={card.brand} />
+                          <BankIcon card={card} size={15} />
                           <span className="truncate max-w-[120px]">{card.name}</span>
                           {card.lastDigits && (
                             <span

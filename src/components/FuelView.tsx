@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  Fuel,
   Plus,
   Pencil,
   Trash2,
@@ -19,6 +18,7 @@ import {
 } from '../utils/format';
 import { TRANSLATIONS } from '../utils/i18n';
 import { FuelLogModal } from './FuelLogModal';
+import { AppIcon } from './icons';
 
 const SWIPE_REVEAL_WIDTH = 100;
 const SWIPE_SNAP_THRESHOLD = 45;
@@ -336,7 +336,7 @@ const SwipeableFuelRow: React.FC<SwipeableFuelRowProps> = ({
                 : 'bg-amber-500/15 text-amber-500'
             }`}
           >
-            <Fuel size={19} />
+            <AppIcon name="posto-gasolina" size={19} />
           </div>
 
           <div className="min-w-0 flex-1">
@@ -611,7 +611,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
         <div className="flex items-center justify-between pb-0.5">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
-              <Fuel size={17} />
+              <AppIcon name="posto-gasolina" size={17} />
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900 leading-none">
@@ -728,7 +728,7 @@ export const FuelView: React.FC<FuelViewProps> = ({
         {enrichedLogsDesc.length === 0 ? (
           <div className="py-12 px-4 text-center space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center mx-auto">
-              <Fuel size={24} />
+              <AppIcon name="posto-gasolina" size={24} />
             </div>
             <p className="text-sm font-bold text-slate-800">{t.noRefuelingsTitle}</p>
             <p className="text-xs text-slate-400 max-w-md mx-auto">{t.noRefuelingsDesc}</p>

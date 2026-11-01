@@ -55,6 +55,7 @@ import { DashboardView } from './components/DashboardView';
 import { TransactionsView } from './components/TransactionsView';
 import { CreditCardsView } from './components/CreditCardsView';
 import { FuelView } from './components/FuelView';
+import { AppIcon } from './components/icons';
 import { ReportsView } from './components/ReportsView';
 import { TransactionModal } from './components/TransactionModal';
 import { CreditCardExpenseModal } from './components/CreditCardExpenseModal';
@@ -2091,7 +2092,7 @@ export const App: React.FC = () => {
               activeTab === 'cards' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
-            <CreditCardIcon size={20} />
+            <AppIcon name="cartao" size={20} />
             <span className="mt-0.5 truncate">{t.navCardsMobile}</span>
           </button>
 
@@ -2140,7 +2141,7 @@ export const App: React.FC = () => {
               activeTab === 'fuel' ? 'text-slate-900 font-bold' : 'text-slate-400'
             }`}
           >
-            <Fuel size={20} />
+            <AppIcon name="posto-gasolina" size={20} />
             <span className="mt-0.5 truncate">{t.navFuelMobile}</span>
           </button>
 

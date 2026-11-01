@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Fuel, X, CheckCircle2, CircleDashed, MapPin } from 'lucide-react';
+import { X, CheckCircle2, CircleDashed, MapPin } from 'lucide-react';
 import { AppLanguage, AppTheme, FuelLog, FuelType } from '../types';
 import { getTodayDateStr } from '../utils/format';
 import { TRANSLATIONS } from '../utils/i18n';
+import { AppIcon } from './icons';
 
 export interface FuelLogModalProps {
   isOpen: boolean;
@@ -210,7 +211,7 @@ export const FuelLogModal: React.FC<FuelLogModalProps> = ({
           isOled ? 'border-[#21262D]' : 'border-slate-100'
         }`}>
           <div className="flex items-center gap-2">
-            <Fuel size={17} className="text-amber-500 shrink-0" />
+            <AppIcon name="posto-gasolina" size={17} className="text-amber-500 shrink-0" />
             <h2 className={`text-sm sm:text-base font-bold tracking-tight ${
               isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
             }`}>

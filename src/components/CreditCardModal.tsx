@@ -1,20 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CreditCard as CreditCardIcon, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { AppLanguage, AppTheme, CreditCard, CreditCardBrand } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
+import { BankIcon, AppIcon, KNOWN_BANKS } from './icons';
 
 export const BRAND_OPTIONS: { id: CreditCardBrand; name: string }[] = [
-  { id: 'mastercard', name: 'Mastercard' },
-  { id: 'visa', name: 'Visa' },
-  { id: 'elo', name: 'Elo' },
-  { id: 'amex', name: 'Amex' },
-  { id: 'nubank', name: 'Nubank' },
-  { id: 'inter', name: 'Inter' },
-  { id: 'itau', name: 'Itaú' },
-  { id: 'bradesco', name: 'Bradesco' },
-  { id: 'santander', name: 'Santander' },
-  { id: 'c6', name: 'C6 Bank' },
-  { id: 'other', name: 'Outro' },
+  ...KNOWN_BANKS.map((b) => ({ id: b.id as CreditCardBrand, name: b.name })),
+  { id: 'other' as CreditCardBrand, name: 'Outro / Genérico' },
 ];
 
 export const PRESET_COLORS = [
@@ -157,7 +149,7 @@ export const CreditCardModal: React.FC<CreditCardModalProps> = ({
           <h3 className={`text-base font-bold flex items-center gap-2 ${
             isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
           }`}>
-            <CreditCardIcon size={18} className="text-[#D0B595]" />
+            <BankIcon brand={cardFormBrand} size={18} color="#D0B595" />
             <span>{editingCard ? t.editCardModalTitle || 'Editar Cartão' : t.addCardModalTitle || 'Novo Cartão'}</span>
           </h3>
           <button
@@ -271,19 +263,32 @@ export const CreditCardModal: React.FC<CreditCardModalProps> = ({
               }`}>
                 {t.cardBrandLabel || 'Bandeira / Banco'}
               </label>
-              <select
-                value={cardFormBrand}
-                onChange={(e) => setCardFormBrand(e.target.value as CreditCardBrand)}
-                className={`w-full px-3 py-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                  isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                }`}
-              >
-                {BRAND_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                    isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-slate-50 border-slate-200'
+                  }`}
+                  style={{
+                    backgroundColor: `${cardFormColor}18`,
+                    color: cardFormColor,
+                  }}
+                >
+                  <BankIcon brand={cardFormBrand} size={18} color={cardFormColor} />
+                </div>
+                <select
+                  value={cardFormBrand}
+                  onChange={(e) => setCardFormBrand(e.target.value as CreditCardBrand)}
+                  className={`flex-1 px-3 py-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
+                    isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
+                  }`}
+                >
+                  {BRAND_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>

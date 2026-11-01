@@ -25,6 +25,7 @@ import {
   TransactionType,
 } from '../types';
 import { CategoryIcon } from './CategoryIcon';
+import { BankIcon, AppIcon } from './icons';
 import {
   computeCardFirstInvoiceMonth,
   formatCurrency,
@@ -623,7 +624,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{ backgroundColor: card.color || '#6366f1' }}
                       />
-                      <CreditCardIcon size={13} className="shrink-0" />
+                      <BankIcon card={card} size={14} className="shrink-0" />
                       <span>{card.name}</span>
                       {isSelected && <Check size={12} className="shrink-0 ml-0.5" />}
                     </button>

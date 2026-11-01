@@ -32,6 +32,7 @@ import {
 } from '../utils/format';
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
+import { AppIcon } from './icons';
 
 interface ReportsViewProps {
   selectedMonth: string;
@@ -2336,7 +2337,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       : 'bg-slate-100 text-slate-700'
                   } dark:bg-[#161B22] dark:text-slate-300`}
                 >
-                  <CreditCardIcon size={18} />
+                  <AppIcon name="cartao" size={18} />
                 </div>
                 <div className="min-w-0">
                   <h2
@@ -2434,7 +2435,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
-                    <CreditCardIcon size={22} className="text-[#94A3B8] opacity-40 mb-1" />
+                    <AppIcon name="cartao" size={22} className="text-[#94A3B8] opacity-40 mb-1" />
                     <span
                       className={`text-xs font-bold ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}
                     >

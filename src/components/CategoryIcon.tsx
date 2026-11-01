@@ -1,101 +1,46 @@
 import React from 'react';
-import {
-  Landmark,
-  Briefcase,
-  Sparkles,
-  RotateCcw,
-  PlusCircle,
-  ShoppingCart,
-  Home,
-  Zap,
-  Utensils,
-  Car,
-  HeartPulse,
-  GraduationCap,
-  ShoppingBag,
-  Film,
-  MoreHorizontal,
-  Tag,
-  Wallet,
-  CreditCard,
-  Gift,
-  Plane,
-  Wifi,
-  Smartphone,
-  Coffee,
-  Dumbbell,
-  PawPrint,
-  Gamepad2,
-  Tv,
-  Layers,
-  TrendingUp,
-} from 'lucide-react';
+import { AppIcon, resolveIconName } from './icons/AppIcon';
+import { EdusitesIconName } from './icons/edusitesSvgs';
 
-export const AVAILABLE_ICONS = [
-  'Home',
-  'ShoppingBag',
-  'Car',
-  'HeartPulse',
-  'Gamepad2',
-  'GraduationCap',
-  'Tv',
-  'Zap',
-  'Layers',
-  'Briefcase',
-  'Sparkles',
-  'TrendingUp',
-  'Landmark',
-  'RotateCcw',
-  'PlusCircle',
-  'ShoppingCart',
-  'Utensils',
-  'Film',
-  'Wallet',
-  'CreditCard',
-  'Gift',
-  'Plane',
-  'Wifi',
-  'Smartphone',
-  'Coffee',
-  'Dumbbell',
-  'PawPrint',
-  'Tag',
-  'MoreHorizontal',
+export const PRIMARY_CATEGORY_ICONS = [
+  'casa',
+  'carrinho-compras',
+  'sacola',
+  'carro',
+  'posto-gasolina',
+  'coracao',
+  'controle-game',
+  'formatura',
+  'tv-tela',
+  'raio',
+  'ef-camadas',
+  'carteira',
+  'dinheiro',
+  'ia-brilho',
+  'investimento',
+  'banco',
+  'repetir',
+  'mais-circulo',
+  'talheres',
+  'refeicao',
+  'filme',
+  'cartao',
+  'presente',
+  'aviao',
+  'wifi',
+  'celular',
+  'cafe',
+  'halteres',
+  'pata',
+  'livro',
+  'etiqueta-preco',
 ] as const;
 
-const ICON_MAP: Record<string, React.ComponentType<any>> = {
-  Home,
-  ShoppingBag,
-  Car,
-  HeartPulse,
-  Gamepad2,
-  GraduationCap,
-  Tv,
-  Zap,
-  Layers,
-  Briefcase,
-  Sparkles,
-  TrendingUp,
-  Landmark,
-  RotateCcw,
-  PlusCircle,
-  ShoppingCart,
-  Utensils,
-  Film,
-  MoreHorizontal,
-  Tag,
-  Wallet,
-  CreditCard,
-  Gift,
-  Plane,
-  Wifi,
-  Smartphone,
-  Coffee,
-  Dumbbell,
-  PawPrint,
-};
+export const AVAILABLE_ICONS = PRIMARY_CATEGORY_ICONS;
 
-interface CategoryIconProps {
+export type AvailableIconKey = (typeof AVAILABLE_ICONS)[number];
+
+export interface CategoryIconProps {
   icon?: string;
   color?: string;
   size?: number;
@@ -105,15 +50,22 @@ interface CategoryIconProps {
 
 export const CategoryIcon: React.FC<CategoryIconProps> = ({
   icon,
-  color = '#6366f1',
+  color = '#6E5440',
   size = 18,
   className = '',
   badgeSize,
 }) => {
-  const IconComp = (icon && ICON_MAP[icon]) || Tag;
+  const iconName: EdusitesIconName = resolveIconName(icon);
 
   if (!badgeSize) {
-    return <IconComp size={size} className={className} />;
+    return (
+      <AppIcon
+        name={iconName}
+        size={size}
+        color={color}
+        className={className}
+      />
+    );
   }
 
   const sizeClasses =
@@ -131,7 +83,9 @@ export const CategoryIcon: React.FC<CategoryIconProps> = ({
         color: color,
       }}
     >
-      <IconComp size={size} />
+      <AppIcon name={iconName} size={size} color={color} />
     </div>
   );
 };
+
+export default CategoryIcon;

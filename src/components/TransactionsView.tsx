@@ -24,6 +24,7 @@ import {
 } from '../utils/format';
 import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
+import { BankIcon, AppIcon } from './icons';
 
 export type FilterChipId = 'all' | 'pending-expense' | 'pending-income' | 'paid-expense' | 'paid-income';
 
@@ -74,6 +75,7 @@ const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
 }) => {
   const t = TRANSLATIONS[language];
   const isUnpaid = tx.status === 'unpaid';
+  const isInvoice = Boolean(tx.settledInvoiceKey || (tx.description && /^fatura\b/i.test(tx.description)));
 
   const [dragOffset, setDragOffset] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -334,14 +336,23 @@ const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
         }}
         className="swipe-foreground-layer relative z-10 flex items-center justify-between p-3 sm:p-3.5 transition-colors gap-2 sm:gap-3 select-none cursor-pointer"
       >
-        {/* Left: Category Icon + Transaction Details */}
+        {/* Left: Category Icon or Bank Icon for Invoices + Transaction Details */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-          <CategoryIcon
-            icon={cat?.icon || 'Tag'}
-            color={cat?.color || '#64748b'}
-            size={16}
-            badgeSize="md"
-          />
+          {isInvoice ? (
+            <BankIcon
+              card={cardObj}
+              name={tx.description}
+              size={16}
+              badgeSize="md"
+            />
+          ) : (
+            <CategoryIcon
+              icon={cat?.icon || 'Tag'}
+              color={cat?.color || '#64748b'}
+              size={16}
+              badgeSize="md"
+            />
+          )}
 
           <div className="min-w-0 flex-1">
             <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
@@ -355,14 +366,14 @@ const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
 
               {cardObj && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                  <CreditCardIcon size={9} />
+                  <BankIcon card={cardObj} size={9} />
                   <span className="truncate max-w-[75px] sm:max-w-none">{cardObj.name}</span>
                 </span>
               )}
 
               {tx.settledInvoiceKey && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[10px] font-semibold">
-                  <CreditCardIcon size={9} />
+                  <BankIcon card={cardObj} name={tx.description} size={9} />
                   <span>{language === 'pt-BR' ? 'Fatura Cartão' : 'Card Invoice'}</span>
                 </span>
               )}
@@ -846,7 +857,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <div className="divide-y divide-slate-100">
               {visibleTransactions.map((tx) => {
                 const cat = categoryMap.get(tx.categoryId);
-                const cardObj = tx.cardId ? creditCards.find((c) => c.id === tx.cardId) : null;
+                const cardObj = tx.cardId
+                  ? creditCards.find((c) => c.id === tx.cardId)
+                  : tx.settledInvoiceKey
+                  ? creditCards.find((c) => tx.settledInvoiceKey?.startsWith(c.id))
+                  : creditCards.find((c) => tx.description.toLowerCase().includes(c.name.toLowerCase())) || null;
 
                 return (
                   <SwipeableTransactionRow
