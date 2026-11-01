@@ -432,7 +432,7 @@ export const TRANSLATIONS = {
     exportDownloadCsvBtn: 'Export CSV (.csv)',
     exportDownloadPdfBtn: 'Download PDF Report + Charts (.pdf)',
     exportPdfIncludesNote:
-      'PDF includes: Executive KPI cards, Category Donut Chart, Cash Flow Bar Chart, Category Breakdown Tables, Monthly Summary, and Complete Ledger.',
+      'PDF includes: Executive KPI Cards (2x3), Native Vector SVG Charts (Category Donut, Daily Cash Flow, Commitments & Payment Channels), Breakdown Tables, and Complete Ledger.',
     exportFullBackupTitle: 'Export Full Backup (JSON)',
     exportFullBackupDesc:
       'Download a complete copy of all your family data: bank transactions, credit cards & limits, fuel logs, categories, and recurring templates.',
@@ -997,7 +997,7 @@ export const TRANSLATIONS = {
     exportDownloadCsvBtn: 'Exportar CSV (.csv)',
     exportDownloadPdfBtn: 'Baixar Relatório PDF com Gráficos (.pdf)',
     exportPdfIncludesNote:
-      'O PDF inclui: Indicadores Executivos, Gráfico de Rosca por Categoria, Gráfico de Fluxo de Caixa, Tabelas Detalhadas por Categoria, Evolução Mensal e Extrato Completo.',
+      'O PDF inclui: Indicadores Executivos (2x3), Gráficos Vetoriais SVG (Rosca de Categorias, Fluxo Diário, Compromissos e Canais de Pagamento), Tabelas Detalhadas e Extrato Completo.',
     exportFullBackupTitle: 'Exportar Backup Completo (JSON)',
     exportFullBackupDesc:
       'Baixe uma cópia completa de todos os dados da família: extrato bancário, cartões de crédito e limites, abastecimentos, categorias e despesas fixas.',

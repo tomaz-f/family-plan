@@ -1231,7 +1231,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   exportTransactionsToCSV(
                     filteredTransactions,
                     categories,
-                    `familyplan-${scope === 'month' ? selectedMonth : 'all-time'}.csv`,
+                    `prumo-${scope === 'month' ? selectedMonth : 'all-time'}.csv`,
                     language
                   )
                 }

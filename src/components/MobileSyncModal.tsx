@@ -2007,7 +2007,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                 <button
                   type="button"
                   onClick={() => exportFilteredHistoryToPDF(exportFilterOptions)}
-                  className="min-h-[46px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all"
+                  className="min-h-[46px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#6E5440] hover:bg-[#7E624B] text-white text-xs font-bold shadow-xs transition-all"
                 >
                   <FileText size={16} className="shrink-0" />
                   {t.exportDownloadPdfBtn}
