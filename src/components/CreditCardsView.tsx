@@ -437,8 +437,14 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   // Active Carousel Index
   const [activeIndex, setActiveIndex] = useState<number>(0);
 
-  // Selected month for card statement view (defaults to current month)
-  const [statementMonth, setStatementMonth] = useState<string>(currentMonthStr);
+  // Selected month for card statement view (defaults to active card's open invoice cycle or current month)
+  const defaultOpenMonth = useMemo(() => {
+    const card = creditCards[0];
+    if (!card) return currentMonthStr;
+    return computeCardFirstInvoiceMonth(todayStr, card.closingDay).invoiceMonth;
+  }, [creditCards, todayStr, currentMonthStr]);
+
+  const [statementMonth, setStatementMonth] = useState<string>(defaultOpenMonth);
 
   // Active open swipe row id in invoice statement
   const [openRowId, setOpenRowId] = useState<string | null>(null);
@@ -472,6 +478,15 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   useEffect(() => {
     onActiveCardChange?.(activeCard?.id || null);
   }, [activeCard?.id, onActiveCardChange]);
+
+  const prevActiveCardIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeCard && activeCard.id !== prevActiveCardIdRef.current) {
+      prevActiveCardIdRef.current = activeCard.id;
+      const cardOpenMonth = computeCardFirstInvoiceMonth(todayStr, activeCard.closingDay).invoiceMonth;
+      setStatementMonth(cardOpenMonth);
+    }
+  }, [activeCard?.id, activeCard?.closingDay, todayStr]);
 
   // Helper to determine the invoiceMonth of any card transaction
   const getTxInvoiceMonth = (tx: Transaction, card: CreditCard): string => {
@@ -552,6 +567,38 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         )
       );
 
+      // Selected/Active billing cycle invoice total (reflects statementMonth)
+      const cycleSettledKey = `${card.id}__${statementMonth}`;
+      const cycleSettlementTx = transactions.find((tx) => tx.settledInvoiceKey === cycleSettledKey);
+      const isCycleSettled = Boolean(cycleSettlementTx && cycleSettlementTx.status === 'paid');
+
+      // If the cycle has been paid, open balance resets to 0 (or any new unpaid charges added after payment)
+      const selectedCycleTotal = isCycleSettled
+        ? Math.max(
+            0,
+            Number(
+              cardTxs
+                .filter((tx) => getTxInvoiceMonth(tx, card) === statementMonth && tx.status !== 'paid')
+                .reduce((sum, tx) => {
+                  const amt = Number(tx.amount || 0);
+                  return sum + (tx.type === 'income' ? -amt : amt);
+                }, 0)
+                .toFixed(2)
+            )
+          )
+        : Math.max(
+            0,
+            Number(
+              cardTxs
+                .filter((tx) => getTxInvoiceMonth(tx, card) === statementMonth)
+                .reduce((sum, tx) => {
+                  const amt = Number(tx.amount || 0);
+                  return sum + (tx.type === 'income' ? -amt : amt);
+                }, 0)
+                .toFixed(2)
+            )
+          );
+
       // Check current invoice settlement
       const currentSettledKey = `${card.id}__${currentMonthStr}`;
       const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === currentSettledKey);
@@ -565,13 +612,15 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         usedPercentage,
         usedPercentFloat,
         currentInvoiceTotal,
+        selectedCycleTotal,
         nextInvoiceTotal,
         settlementTx,
         isCurrentInvoiceSettled,
         isCurrentInvoicePending,
+        isCycleSettled,
       };
     });
-  }, [creditCards, transactions, currentMonthStr]);
+  }, [creditCards, transactions, currentMonthStr, statementMonth]);
 
   // Consolidated Global Limits Summary
   const consolidated = useMemo(() => {
@@ -639,7 +688,6 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const invoiceCycleStatus = useMemo(() => {
     if (!activeCard) return { label: 'Aberta', color: 'sky' };
     if (statementData.isSettled) return { label: 'Fatura Paga', color: 'emerald' };
-    if (statementData.isPendingPayment) return { label: 'Pagamento Agendado', color: 'amber' };
 
     const today = new Date();
     const todayYm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -655,7 +703,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
       }
       return { label: 'Fatura Aberta', color: 'sky' };
     }
-  }, [activeCard, statementData.isSettled, statementData.isPendingPayment, statementMonth]);
+  }, [activeCard, statementData.isSettled, statementMonth]);
 
   // Carousel Swipe Gesture Handling
   const [carouselDragOffset, setCarouselDragOffset] = useState<number>(0);
@@ -838,6 +886,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                     usedPercentage: 0,
                     usedPercentFloat: 0,
                     currentInvoiceTotal: 0,
+                    selectedCycleTotal: 0,
                   };
 
                   return (
@@ -920,7 +969,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                             <span className={`text-xl sm:text-2xl font-black tracking-tight ${
                               isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
                             }`}>
-                              {formatCurrency(metric.currentInvoiceTotal, currency)}
+                              {formatCurrency(metric.selectedCycleTotal, currency)}
                             </span>
                           </div>
 
@@ -1160,10 +1209,6 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                     ? isOled
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 cursor-default'
                       : 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
-                    : statementData.isPendingPayment
-                    ? isOled
-                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                      : 'bg-amber-50 text-amber-700 border border-amber-200'
                     : statementData.total > 0
                     ? 'bg-[#10B981] hover:bg-[#059669] text-white shadow-xs active:scale-95'
                     : isOled
@@ -1175,11 +1220,6 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                   <>
                     <CheckCircle2 size={13} />
                     <span>Fatura Paga</span>
-                  </>
-                ) : statementData.isPendingPayment ? (
-                  <>
-                    <Clock size={13} />
-                    <span>Agendada</span>
                   </>
                 ) : (
                   <>

@@ -447,46 +447,56 @@ export const App: React.FC = () => {
         invoiceMonths.add(getTxInvoiceMonth(tx, card));
       }
 
+      // Also gather any invoiceMonths from existing settlement transactions for this card
+      // to ensure cleanup if all purchases in a cycle were deleted or edited
+      const cardSettlementTxs = nextTxs.filter(
+        (tx) => tx.settledInvoiceKey && tx.settledInvoiceKey.startsWith(`${card.id}__`)
+      );
+      for (const sTx of cardSettlementTxs) {
+        const invMonth = sTx.settledInvoiceKey!.split('__')[1];
+        if (invMonth) invoiceMonths.add(invMonth);
+      }
+
       for (const invMonth of invoiceMonths) {
         const isClosed =
           invMonth < todayYm || (invMonth === todayYm && todayDay >= card.closingDay);
 
-        if (!isClosed) continue;
-
         const cycleTxs = cardTxs.filter((tx) => getTxInvoiceMonth(tx, card) === invMonth);
-        const cycleTotal = Number(
-          cycleTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0).toFixed(2)
+        const unpaidCycleTxs = cycleTxs.filter((tx) => (tx.status || 'paid') === 'unpaid');
+        const unpaidCycleTotal = Number(
+          unpaidCycleTxs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0).toFixed(2)
         );
         const settlementKey = `${card.id}__${invMonth}`;
         const existingTx = nextTxs.find((tx) => tx.settledInvoiceKey === settlementKey);
+        const dueDate = computeInvoiceDueDate(invMonth, card.closingDay, card.dueDay);
 
         if (existingTx) {
           // Keep unpaid invoice aligned with cycle purchases
           if (existingTx.status === 'unpaid') {
-            if (cycleTotal <= 0) {
+            if (unpaidCycleTotal <= 0) {
               nextTxs = nextTxs.filter((tx) => tx.id !== existingTx.id);
               idsToDeleteOnServer.push(existingTx.id);
               hasChanges = true;
             } else if (
-              Math.abs(existingTx.amount - cycleTotal) > 0.001 ||
-              existingTx.description !== `Fatura ${card.name}`
+              Math.abs(existingTx.amount - unpaidCycleTotal) > 0.001 ||
+              existingTx.description !== `Fatura ${card.name}` ||
+              existingTx.date !== dueDate
             ) {
               const updated: Transaction = {
                 ...existingTx,
-                amount: cycleTotal,
+                amount: unpaidCycleTotal,
                 description: `Fatura ${card.name}`,
-                notes: `Fatura fechada (${cycleTxs.length} compras)`,
+                date: dueDate,
+                notes: isClosed
+                  ? `Fatura fechada (${cycleTxs.length} compras)`
+                  : `Fatura em aberto (${cycleTxs.length} compras)`,
               };
               nextTxs = nextTxs.map((tx) => (tx.id === existingTx.id ? updated : tx));
               txsToUpdateOnServer.push(updated);
               hasChanges = true;
             }
           }
-        } else if (cycleTotal > 0) {
-          // If all card purchases in this cycle are already paid, do not recreate an unpaid invoice
-          const hasUnpaidPurchases = cycleTxs.some((tx) => (tx.status || 'paid') === 'unpaid');
-          if (!hasUnpaidPurchases) continue;
-
+        } else if (unpaidCycleTotal > 0) {
           const invoiceCategory =
             state.categories.find(
               (c) =>
@@ -500,17 +510,17 @@ export const App: React.FC = () => {
             state.categories.find((c) => c.id === 'exp-other') ||
             state.categories[0];
 
-          const dueDate = computeInvoiceDueDate(invMonth, card.closingDay, card.dueDay);
-
           const newPendingTx: Transaction = {
             id: `tx-fatura-${card.id}-${invMonth}`,
             type: 'expense',
             status: 'unpaid',
-            amount: cycleTotal,
+            amount: unpaidCycleTotal,
             description: `Fatura ${card.name}`,
             categoryId: invoiceCategory?.id || 'exp-bills',
             date: dueDate,
-            notes: `Fatura fechada (${cycleTxs.length} compras)`,
+            notes: isClosed
+              ? `Fatura fechada (${cycleTxs.length} compras)`
+              : `Fatura em aberto (${cycleTxs.length} compras)`,
             dueDay: card.dueDay,
             cardId: null,
             settledInvoiceKey: settlementKey,
@@ -915,7 +925,18 @@ export const App: React.FC = () => {
 
   const handleToggleTransactionStatus = async (tx: Transaction) => {
     const nextStatus: TransactionStatus = tx.status === 'unpaid' ? 'paid' : 'unpaid';
-    const updatedTx: Transaction = { ...tx, status: nextStatus };
+    const updatedTx: Transaction = {
+      ...tx,
+      status: nextStatus,
+      ...(tx.settledInvoiceKey && nextStatus === 'paid'
+        ? {
+            date: getTodayDateStr(),
+            description: tx.description.startsWith('Pagamento de Fatura')
+              ? tx.description
+              : tx.description.replace(/^Fatura\s+/, 'Pagamento de Fatura - '),
+          }
+        : {}),
+    };
 
     let nextTransactions = state.transactions.map((item) => (item.id === tx.id ? updatedTx : item));
     const cycleTxsToSync: Transaction[] = [];
