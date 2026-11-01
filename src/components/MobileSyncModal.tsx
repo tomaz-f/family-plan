@@ -78,7 +78,8 @@ interface MobileSyncModalProps {
     type: TransactionType;
     color: string;
     icon: string;
-  }) => Promise<void>;
+  }) => Promise<Category | void>;
+  onCategoryCreated?: (cat: Category) => void;
   onUpdateCategory: (
     id: string,
     cat: { name: string; type: TransactionType; color: string; icon: string }
@@ -144,6 +145,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   onClose,
   onUpdateSettings,
   onAddCategory,
+  onCategoryCreated,
   onUpdateCategory,
   onDeleteCategory,
   onImportBackup,
@@ -473,13 +475,16 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
       });
       handleCancelEditCategory();
     } else {
-      await onAddCategory({
+      const created = await onAddCategory({
         name: catName.trim(),
         type: catType,
         color: catColor,
         icon: catIcon,
       });
       setCatName('');
+      if (onCategoryCreated && created) {
+        onCategoryCreated(created);
+      }
     }
   };
 
@@ -560,7 +565,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
       : 'PRUMO';
 
   return (
-    <div className="settings-screen-shell fixed inset-0 z-50 overflow-y-auto">
+    <div className="settings-screen-shell fixed inset-0 z-[100] overflow-y-auto">
       <div className="max-w-lg w-full mx-auto min-h-[100dvh] flex flex-col pb-16">
         {/* Sticky Top Navigation Bar (Telegram / iOS Style) */}
         <div className="settings-header-bar sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-3 border-b backdrop-blur-md">

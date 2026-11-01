@@ -5,6 +5,7 @@ import {
   Calendar,
   ChevronDown,
   Layers,
+  Tag,
   Trash2,
   Plus,
   Minus,
@@ -50,6 +51,8 @@ interface CreditCardExpenseModalProps {
   language: AppLanguage;
   theme: AppTheme;
   onClose: () => void;
+  onManageCategories?: () => void;
+  newlyCreatedCategoryId?: string | null;
   onSave: (
     data: {
       id?: string;
@@ -96,6 +99,8 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  onManageCategories,
+  newlyCreatedCategoryId,
 }) => {
   const t = TRANSLATIONS[language];
   const isOled = theme === 'oled';
@@ -104,6 +109,18 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
+  const prevNewCatIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (newlyCreatedCategoryId && newlyCreatedCategoryId !== prevNewCatIdRef.current) {
+      prevNewCatIdRef.current = newlyCreatedCategoryId;
+      const cat = categories.find((c) => c.id === newlyCreatedCategoryId);
+      if (cat) {
+        setCategoryId(cat.id);
+        setCategoryPickerOpen(false);
+      }
+    }
+  }, [newlyCreatedCategoryId, categories]);
   const [date, setDate] = useState<string>(getTodayDateStr());
   const [notes, setNotes] = useState<string>('');
   const [selectedCardId, setSelectedCardId] = useState<string>('');
@@ -540,13 +557,26 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
 
             {/* 3. Category Picker (BottomSheet / Compact Popover Picker) */}
             <div>
-              <label
-                className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                  isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-                }`}
-              >
-                Categoria
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  className={`block text-xs font-semibold uppercase tracking-wider ${
+                    isOled ? 'text-[#94A3B8]' : 'text-slate-600'
+                  }`}
+                >
+                  {language === 'pt-BR' ? 'Categoria' : 'Category'}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryPickerOpen(false);
+                    onManageCategories?.();
+                  }}
+                  className="text-xs font-semibold text-[#6E5440] hover:text-[#7E624B] active:scale-95 transition-colors py-1 px-1.5 min-h-[36px] flex items-center gap-1"
+                >
+                  <Tag size={13} />
+                  <span>{language === 'pt-BR' ? 'Gerenciar' : 'Manage'}</span>
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -870,27 +900,48 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
           >
             {/* Sheet Header */}
             <div
-              className={`flex items-center justify-between px-5 py-4 border-b shrink-0 ${
-                isOled ? 'border-[#21262D]' : 'border-slate-100'
+              className={`sticky top-0 z-10 flex items-center justify-between px-5 py-3.5 border-b shrink-0 ${
+                isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-100'
               }`}
             >
               <div>
-                <h4 className="text-sm font-bold">Selecionar Categoria</h4>
+                <h4 className="text-sm font-bold">
+                  {language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category'}
+                </h4>
                 <p className={`text-[11px] ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                  Toque para escolher a categoria da compra
+                  {language === 'pt-BR'
+                    ? 'Toque para escolher a categoria'
+                    : 'Tap to choose category'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setCategoryPickerOpen(false)}
-                className={`p-1.5 rounded-full transition-colors ${
-                  isOled
-                    ? 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161B22]'
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryPickerOpen(false);
+                    onManageCategories?.();
+                  }}
+                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 min-h-[36px] active:scale-95 ${
+                    isOled
+                      ? 'bg-[#161B22] border border-[#21262D] text-slate-300 hover:bg-[#21262D] hover:text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Tag size={14} className="text-[#6E5440]" />
+                  <span>{language === 'pt-BR' ? 'Gerenciar' : 'Manage'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryPickerOpen(false)}
+                  className={`p-1.5 rounded-full transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center ${
+                    isOled
+                      ? 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161B22]'
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Dense Category Grid (No horizontal scroll!) */}

@@ -14,6 +14,7 @@ import {
   Landmark,
   Sparkles,
   ChevronDown,
+  Tag,
   Trash2,
 } from 'lucide-react';
 import {
@@ -55,6 +56,8 @@ interface TransactionModalProps {
   language: AppLanguage;
   onClose: () => void;
   onDelete?: (tx: Transaction) => void;
+  onManageCategories?: () => void;
+  newlyCreatedCategoryId?: string | null;
   onSave: (
     data: {
       id?: string;
@@ -98,6 +101,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onClose,
   onDelete,
   onSave,
+  onManageCategories,
+  newlyCreatedCategoryId,
 }) => {
   const t = TRANSLATIONS[language];
   const [type, setType] = useState<TransactionType>(initialType);
@@ -105,6 +110,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
+  const prevNewCatIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (newlyCreatedCategoryId && newlyCreatedCategoryId !== prevNewCatIdRef.current) {
+      prevNewCatIdRef.current = newlyCreatedCategoryId;
+      const cat = categories.find((c) => c.id === newlyCreatedCategoryId);
+      if (cat) {
+        if (cat.type !== type && !editingTransaction) {
+          setType(cat.type);
+        }
+        setCategoryId(cat.id);
+        setCategoryPickerOpen(false);
+      }
+    }
+  }, [newlyCreatedCategoryId, categories, type, editingTransaction]);
   const [date, setDate] = useState<string>(getTodayDateStr());
   const [notes, setNotes] = useState<string>('');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -563,9 +583,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
           {/* Category Picker Trigger (Option B: Compact Button + BottomSheet) */}
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-              {language === 'pt-BR' ? 'Categoria' : 'Category'}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {language === 'pt-BR' ? 'Categoria' : 'Category'}
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryPickerOpen(false);
+                  onManageCategories?.();
+                }}
+                className="text-xs font-semibold text-[#6E5440] hover:text-[#7E624B] active:scale-95 transition-colors py-1 px-1.5 min-h-[36px] flex items-center gap-1"
+              >
+                <Tag size={13} />
+                <span>{language === 'pt-BR' ? 'Gerenciar' : 'Manage'}</span>
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setCategoryPickerOpen(true)}
@@ -917,7 +950,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-100 shrink-0 flex items-center justify-between px-5 py-3.5">
             <div>
               <h4 className="text-sm font-bold">
                 {language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category'}
@@ -926,13 +959,26 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 {language === 'pt-BR' ? 'Toque para escolher' : 'Tap to select'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setCategoryPickerOpen(false)}
-              className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryPickerOpen(false);
+                  onManageCategories?.();
+                }}
+                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 min-h-[36px] bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-95"
+              >
+                <Tag size={14} className="text-[#6E5440]" />
+                <span>{language === 'pt-BR' ? 'Gerenciar' : 'Manage'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryPickerOpen(false)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
           <div className="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2.5">
             {filteredCategories.map((cat) => {

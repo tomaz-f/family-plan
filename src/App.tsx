@@ -234,6 +234,8 @@ export const App: React.FC = () => {
   const [openRefuelTrigger, setOpenRefuelTrigger] = useState<number>(0);
   const [cardModalOpen, setCardModalOpen] = useState<boolean>(false);
   const [fuelModalOpen, setFuelModalOpen] = useState<boolean>(false);
+  const [categoryManagerContext, setCategoryManagerContext] = useState<'standalone' | 'transaction' | 'cardExpense'>('standalone');
+  const [newlyCreatedCategoryId, setNewlyCreatedCategoryId] = useState<string | null>(null);
 
   // Global indicator for any open modal dialog (used to pause background sync and avoid overwriting user keystrokes)
   const isAnyModalOpen =
@@ -1127,10 +1129,19 @@ export const App: React.FC = () => {
     type: TransactionType;
     color: string;
     icon: string;
-  }) => {
+  }): Promise<Category> => {
+    const generatedId = `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newCat: Category = {
+      id: generatedId,
+      name: cat.name.trim(),
+      type: cat.type,
+      color: cat.color,
+      icon: cat.icon,
+      isDefault: 0,
+    };
     try {
       const catPayload =
-        masterKey && familyId ? await encryptCategory(cat as any, masterKey, familyId) : cat;
+        masterKey && familyId ? await encryptCategory(newCat as any, masterKey, familyId) : newCat;
       const res = await apiFetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1141,18 +1152,25 @@ export const App: React.FC = () => {
         const data =
           masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
         saveStateToCache(data);
+      } else {
+        saveStateToCache({
+          ...state,
+          categories: [...state.categories, newCat],
+        });
       }
     } catch {
-      const newCat = {
-        id: `cat-${Date.now()}`,
-        ...cat,
-        isDefault: 0,
-      };
       saveStateToCache({
         ...state,
         categories: [...state.categories, newCat],
       });
     }
+
+    setNewlyCreatedCategoryId(generatedId);
+    if (categoryManagerContext !== 'standalone') {
+      setSyncModalOpen(false);
+      setCategoryManagerContext('standalone');
+    }
+    return newCat;
   };
 
   const handleUpdateCategory = async (
@@ -2178,6 +2196,12 @@ export const App: React.FC = () => {
         onClose={() => setTxModalOpen(false)}
         onDelete={(tx) => handleDeleteTransaction(tx.id)}
         onSave={handleSaveTransaction}
+        onManageCategories={() => {
+          setCategoryManagerContext('transaction');
+          setSyncModalTab('categories');
+          setSyncModalOpen(true);
+        }}
+        newlyCreatedCategoryId={newlyCreatedCategoryId}
       />
 
       <CreditCardExpenseModal
@@ -2199,6 +2223,12 @@ export const App: React.FC = () => {
             await handleDeleteTransaction(tx.id);
           }
         }}
+        onManageCategories={() => {
+          setCategoryManagerContext('cardExpense');
+          setSyncModalTab('categories');
+          setSyncModalOpen(true);
+        }}
+        newlyCreatedCategoryId={newlyCreatedCategoryId}
       />
 
       <SeriesConfirmModal
@@ -2248,9 +2278,19 @@ export const App: React.FC = () => {
           setSyncModalOpen(false);
           setBalanceModalOpen(true);
         }}
-        onClose={() => setSyncModalOpen(false)}
+        onClose={() => {
+          setSyncModalOpen(false);
+          setCategoryManagerContext('standalone');
+        }}
         onUpdateSettings={handleUpdateSettings}
         onAddCategory={handleAddCategory}
+        onCategoryCreated={(newCat) => {
+          setNewlyCreatedCategoryId(newCat.id);
+          if (categoryManagerContext !== 'standalone') {
+            setSyncModalOpen(false);
+            setCategoryManagerContext('standalone');
+          }
+        }}
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}
         onImportBackup={handleImportBackup}
