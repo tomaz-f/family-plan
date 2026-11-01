@@ -3,37 +3,86 @@ import { AppIcon, resolveIconName } from './icons/AppIcon';
 import { EdusitesIconName } from './icons/edusitesSvgs';
 
 export const PRIMARY_CATEGORY_ICONS = [
+  // 1. Housing & Living (10)
   'casa',
-  'carrinho-compras',
-  'sacola',
-  'carro',
-  'posto-gasolina',
-  'coracao',
-  'controle-game',
-  'formatura',
-  'tv-tela',
+  'predio',
+  'sofa',
+  'chave',
   'raio',
-  'ef-camadas',
-  'carteira',
-  'dinheiro',
-  'ia-brilho',
-  'investimento',
-  'banco',
-  'repetir',
-  'mais-circulo',
-  'talheres',
-  'refeicao',
-  'filme',
-  'cartao',
-  'presente',
-  'aviao',
+  'agua',
+  'fogo',
   'wifi',
   'celular',
+  'tv-tela',
+
+  // 2. Groceries & Dining (8)
+  'carrinho-compras',
+  'cesta',
+  'talheres',
   'cafe',
+  'hamburguer',
+  'pizza',
+  'bebida',
+  'maca',
+
+  // 3. Transportation (9)
+  'carro',
+  'posto-gasolina',
+  'onibus',
+  'bicicleta',
+  'moto',
+  'aviao',
+  'trem',
+  'ferramentas',
+  'estacionamento',
+
+  // 4. Health & Fitness (6)
+  'coracao',
+  'hospital',
+  'remedio',
   'halteres',
-  'pata',
+  'dente',
+  'oculos',
+
+  // 5. Education & Career (6)
+  'formatura',
   'livro',
+  'computador',
+  'maleta',
+  'cracha',
+  'certificado',
+
+  // 6. Leisure & Fun (6)
+  'controle-game',
+  'filme',
+  'fone',
+  'pata',
+  'praia',
+  'esporte',
+
+  // 7. Personal & Shopping (7)
+  'sacola',
+  'presente',
   'etiqueta-preco',
+  'tesoura',
+  'roupa',
+  'relogio',
+  'diamante',
+
+  // 8. Financial (13)
+  'dinheiro',
+  'carteira',
+  'cofrinho',
+  'grafico',
+  'cartao',
+  'recibo',
+  'cofre',
+  'banco',
+  'investimento',
+  'repetir',
+  'ia-brilho',
+  'estrela',
+  'ef-camadas',
 ] as const;
 
 export const AVAILABLE_ICONS = PRIMARY_CATEGORY_ICONS;
@@ -50,12 +99,13 @@ export interface CategoryIconProps {
 
 export const CategoryIcon: React.FC<CategoryIconProps> = ({
   icon,
-  color = '#6E5440',
+  color,
   size = 18,
   className = '',
   badgeSize,
 }) => {
   const iconName: EdusitesIconName = resolveIconName(icon);
+  const activeColor = color ?? '#6E5440';
 
   if (!badgeSize) {
     return (
@@ -79,11 +129,11 @@ export const CategoryIcon: React.FC<CategoryIconProps> = ({
     <div
       className={`inline-flex items-center justify-center shrink-0 ${sizeClasses} ${className}`}
       style={{
-        backgroundColor: `${color}18`,
-        color: color,
+        backgroundColor: `${activeColor}18`,
+        color: activeColor,
       }}
     >
-      <AppIcon name={iconName} size={size} color={color} />
+      <AppIcon name={iconName} size={size} color={activeColor} />
     </div>
   );
 };

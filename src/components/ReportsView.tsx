@@ -1464,7 +1464,7 @@ export const FutureCommitmentsForecast: React.FC<FutureCommitmentsForecastProps>
 const VIRTUAL_SLIDE_MAP = [3, 0, 1, 2, 3, 0] as const;
 
 const REPORT_SLIDES = [
-  { index: 0, labelPt: 'Fluxo Geral', labelEn: 'Cash Flow' },
+  { index: 0, labelPt: 'Geral', labelEn: 'General' },
   { index: 1, labelPt: 'Cartões', labelEn: 'Cards' },
   { index: 2, labelPt: 'Futuro', labelEn: 'Future' },
   { index: 3, labelPt: 'Parcelas', labelEn: 'Installments' },
@@ -1726,6 +1726,44 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setActiveCardCategoryId(null);
   }, [selectedMonth, selectedCardFilter]);
 
+  // Sequential Clockwise Assembly Animation States
+  const [donutAnimPhase1, setDonutAnimPhase1] = useState<'init' | 'drawing' | 'done'>('done');
+  const [donutAnimPhase2, setDonutAnimPhase2] = useState<'init' | 'drawing' | 'done'>('done');
+
+  // Trigger Slide 1 donut assembly animation when slide 0 becomes active or type/month changes
+  useEffect(() => {
+    if (activeSlideIndex !== 0) return;
+    setDonutAnimPhase1('init');
+    const raf = requestAnimationFrame(() => {
+      setDonutAnimPhase1('drawing');
+    });
+    const timer = setTimeout(() => {
+      setDonutAnimPhase1('done');
+    }, 780);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [activeSlideIndex, selectedType, selectedMonth]);
+
+  // Trigger Slide 2 donut assembly animation when slide 1 becomes active or filter/month changes
+  useEffect(() => {
+    if (activeSlideIndex !== 1) return;
+    setDonutAnimPhase2('init');
+    const raf = requestAnimationFrame(() => {
+      setDonutAnimPhase2('drawing');
+    });
+    const timer = setTimeout(() => {
+      setDonutAnimPhase2('done');
+    }, 780);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [activeSlideIndex, selectedCardFilter, selectedMonth]);
+
   const INVOICE_SLICE_ID = 'credit-card-invoices';
 
   // 1. PRIMARY CHART: Consolidated Cash Outflow Distribution
@@ -1964,6 +2002,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const strokeWidth = 28;
   const circumference = 2 * Math.PI * radius;
 
+  const T_TOTAL = 650;
+
   const computedArcs = useMemo(() => {
     if (categorySlices.length === 0 || totalAmount <= 0) return [];
     const gapPx = categorySlices.length > 1 ? 3.5 : 0;
@@ -1974,12 +2014,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       const rawLength = fraction * circumference;
       const visibleLength = Math.max(2, rawLength - gapPx);
       const dashOffset = circumference * (1 - accumulatedFraction);
+      const startOffset = dashOffset + visibleLength;
+      const animDelay = Math.round(accumulatedFraction * T_TOTAL);
+      const animDuration = Math.max(120, Math.round(fraction * T_TOTAL));
       accumulatedFraction += fraction;
 
       return {
         ...slice,
         strokeDasharray: `${visibleLength} ${Math.max(0, circumference - visibleLength)}`,
         strokeDashoffset: dashOffset,
+        dashOffset,
+        startOffset,
+        animDelay,
+        animDuration,
       };
     });
   }, [categorySlices, totalAmount, circumference]);
@@ -1994,12 +2041,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       const rawLength = fraction * circumference;
       const visibleLength = Math.max(2, rawLength - gapPx);
       const dashOffset = circumference * (1 - accumulatedFraction);
+      const startOffset = dashOffset + visibleLength;
+      const animDelay = Math.round(accumulatedFraction * T_TOTAL);
+      const animDuration = Math.max(120, Math.round(fraction * T_TOTAL));
       accumulatedFraction += fraction;
 
       return {
         ...slice,
         strokeDasharray: `${visibleLength} ${Math.max(0, circumference - visibleLength)}`,
         strokeDashoffset: dashOffset,
+        dashOffset,
+        startOffset,
+        animDelay,
+        animDuration,
       };
     });
   }, [cardCategorySlices, cardTotalAmount, circumference]);
@@ -2010,7 +2064,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     switch (logicalIdx) {
       case 0:
         return (
-          /* 1. PRIMARY CARD: Distribuição por Categoria - Fluxo de Caixa */
+          /* 1. PRIMARY CARD: Categorias Gerais */
           <section
             className={`rounded-2xl border p-5 transition-colors ${
               isOled
@@ -2037,8 +2091,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     } dark:text-white`}
                   >
                     {language === 'pt-BR'
-                      ? 'Distribuição por Categoria - Fluxo de Caixa'
-                      : 'Category Breakdown - Cash Flow'}
+                      ? 'Categorias Gerais'
+                      : 'General Categories'}
                   </h1>
                   <p
                     className={`text-xs mt-0.5 capitalize truncate ${
@@ -2068,39 +2122,35 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </span>
             </div>
 
-            {/* Type Selector: Segmented Control Toggle ("Despesas" default vs "Entradas") */}
-            <div
-              className={`grid grid-cols-2 gap-1.5 p-1 rounded-xl border mb-6 ${
-                isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-slate-100 border-slate-200/80'
-              } dark:bg-[#161B22] dark:border-[#21262D]`}
-            >
+            {/* Type Selector: Centered & Separated Toggle Button Pills */}
+            <div className="flex items-center justify-center gap-3 mb-5 w-full">
               <button
                 type="button"
                 onClick={() => setSelectedType('expense')}
-                className={`min-h-[44px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                className={`h-8 px-4 min-w-[124px] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all select-none border ${
                   selectedType === 'expense'
-                    ? 'bg-[#6E5440] text-white shadow-sm'
+                    ? 'bg-[#EF4444] border-[#EF4444] text-white shadow-xs shadow-red-500/25 active:scale-95'
                     : isOled
-                    ? 'text-slate-400 hover:text-white'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#161B22] text-slate-400 border-[#21262D] hover:text-white active:scale-95'
+                    : 'bg-slate-100 text-slate-600 border-slate-200/60 hover:text-slate-900 active:scale-95'
                 }`}
               >
-                <ArrowDownRight size={16} strokeWidth={2.5} />
+                <ArrowDownRight size={14} strokeWidth={2.5} />
                 <span>{language === 'pt-BR' ? 'Despesas' : 'Expenses'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSelectedType('income')}
-                className={`min-h-[44px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                className={`h-8 px-4 min-w-[124px] rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all select-none border ${
                   selectedType === 'income'
-                    ? 'bg-[#6E5440] text-white shadow-sm'
+                    ? 'bg-[#10B981] border-[#10B981] text-white shadow-xs shadow-emerald-500/25 active:scale-95'
                     : isOled
-                    ? 'text-slate-400 hover:text-white'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#161B22] text-slate-400 border-[#21262D] hover:text-white active:scale-95'
+                    : 'bg-slate-100 text-slate-600 border-slate-200/60 hover:text-slate-900 active:scale-95'
                 }`}
               >
-                <ArrowUpRight size={16} strokeWidth={2.5} />
+                <ArrowUpRight size={14} strokeWidth={2.5} />
                 <span>{language === 'pt-BR' ? 'Entradas' : 'Income'}</span>
               </button>
             </div>
@@ -2176,6 +2226,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         const isSelected = activeCategoryId === arc.id;
                         const isDimmed = activeCategoryId !== null && !isSelected;
 
+                        const currentOffset =
+                          donutAnimPhase1 === 'init' ? arc.startOffset : arc.dashOffset;
+
+                        const transitionStyle =
+                          donutAnimPhase1 === 'drawing'
+                            ? `stroke-dashoffset ${arc.animDuration}ms cubic-bezier(0.16, 1, 0.3, 1) ${arc.animDelay}ms, stroke-width 240ms ease-out, opacity 240ms ease-out`
+                            : 'stroke-width 240ms ease-out, opacity 240ms ease-out';
+
                         return (
                           <circle
                             key={arc.id}
@@ -2186,14 +2244,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                             stroke={arc.color}
                             strokeWidth={isSelected ? strokeWidth + 6 : strokeWidth}
                             strokeDasharray={arc.strokeDasharray}
-                            strokeDashoffset={arc.strokeDashoffset}
+                            strokeDashoffset={currentOffset}
                             strokeLinecap="butt"
-                            onClick={() =>
-                              setActiveCategoryId((prev) => (prev === arc.id ? null : arc.id))
-                            }
-                            className="cursor-pointer transition-all duration-300 ease-out"
+                            onClick={() => {
+                              setDonutAnimPhase1('done');
+                              setActiveCategoryId((prev) => (prev === arc.id ? null : arc.id));
+                            }}
+                            className="cursor-pointer"
                             style={{
                               opacity: isDimmed ? 0.3 : 1,
+                              transition: transitionStyle,
                             }}
                           />
                         );
@@ -2203,8 +2263,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     {/* Center Donut Readout */}
                     <button
                       type="button"
-                      onClick={() => setActiveCategoryId(null)}
-                      className="absolute inset-12 rounded-full flex flex-col items-center justify-center text-center px-2 focus:outline-none"
+                      onClick={() => {
+                        setDonutAnimPhase1('done');
+                        setActiveCategoryId(null);
+                      }}
+                      className={`absolute inset-12 rounded-full flex flex-col items-center justify-center text-center px-2 focus:outline-none transition-all duration-500 ease-out ${
+                        donutAnimPhase1 === 'init'
+                          ? 'opacity-0 scale-95'
+                          : 'opacity-100 scale-100'
+                      }`}
                     >
                       <span
                         className={`text-[11px] font-bold uppercase tracking-wider truncate max-w-[130px] ${
@@ -2261,9 +2328,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() =>
-                          setActiveCategoryId((prev) => (prev === item.id ? null : item.id))
-                        }
+                        onClick={() => {
+                          setDonutAnimPhase1('done');
+                          setActiveCategoryId((prev) => (prev === item.id ? null : item.id));
+                        }}
                         className={`w-full min-h-[48px] rounded-xl p-3 mb-2 last:mb-0 flex items-center justify-between gap-3 border text-left transition-all ${
                           isSelected
                             ? isOled
@@ -2319,7 +2387,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
       case 1:
         return (
-          /* 2. DEDICATED CREDIT CARD BREAKDOWN CARD: Categorias no Cartão */
+          /* 2. DEDICATED CREDIT CARD BREAKDOWN CARD: Gastos no Cartão */
           <section
             className={`rounded-2xl border p-5 transition-colors ${
               isOled
@@ -2345,7 +2413,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       isOled ? 'text-white' : 'text-slate-900'
                     } dark:text-white`}
                   >
-                    {language === 'pt-BR' ? 'Categorias no Cartão' : 'Credit Card Breakdown'}
+                    {language === 'pt-BR' ? 'Gastos no Cartão' : 'Card Spending'}
                   </h2>
                   <p
                     className={`text-xs mt-0.5 truncate ${
@@ -2487,6 +2555,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         const isSelected = activeCardCategoryId === arc.id;
                         const isDimmed = activeCardCategoryId !== null && !isSelected;
 
+                        const currentOffset =
+                          donutAnimPhase2 === 'init' ? arc.startOffset : arc.dashOffset;
+
+                        const transitionStyle =
+                          donutAnimPhase2 === 'drawing'
+                            ? `stroke-dashoffset ${arc.animDuration}ms cubic-bezier(0.16, 1, 0.3, 1) ${arc.animDelay}ms, stroke-width 240ms ease-out, opacity 240ms ease-out`
+                            : 'stroke-width 240ms ease-out, opacity 240ms ease-out';
+
                         return (
                           <circle
                             key={arc.id}
@@ -2497,14 +2573,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                             stroke={arc.color}
                             strokeWidth={isSelected ? strokeWidth + 6 : strokeWidth}
                             strokeDasharray={arc.strokeDasharray}
-                            strokeDashoffset={arc.strokeDashoffset}
+                            strokeDashoffset={currentOffset}
                             strokeLinecap="butt"
-                            onClick={() =>
-                              setActiveCardCategoryId((prev) => (prev === arc.id ? null : arc.id))
-                            }
-                            className="cursor-pointer transition-all duration-300 ease-out"
+                            onClick={() => {
+                              setDonutAnimPhase2('done');
+                              setActiveCardCategoryId((prev) => (prev === arc.id ? null : arc.id));
+                            }}
+                            className="cursor-pointer"
                             style={{
                               opacity: isDimmed ? 0.3 : 1,
+                              transition: transitionStyle,
                             }}
                           />
                         );
@@ -2514,8 +2592,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     {/* Center Donut Readout */}
                     <button
                       type="button"
-                      onClick={() => setActiveCardCategoryId(null)}
-                      className="absolute inset-12 rounded-full flex flex-col items-center justify-center text-center px-2 focus:outline-none"
+                      onClick={() => {
+                        setDonutAnimPhase2('done');
+                        setActiveCardCategoryId(null);
+                      }}
+                      className={`absolute inset-12 rounded-full flex flex-col items-center justify-center text-center px-2 focus:outline-none transition-all duration-500 ease-out ${
+                        donutAnimPhase2 === 'init'
+                          ? 'opacity-0 scale-95'
+                          : 'opacity-100 scale-100'
+                      }`}
                     >
                       <span
                         className={`text-[11px] font-bold uppercase tracking-wider truncate max-w-[130px] ${
@@ -2567,9 +2652,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() =>
-                          setActiveCardCategoryId((prev) => (prev === item.id ? null : item.id))
-                        }
+                        onClick={() => {
+                          setDonutAnimPhase2('done');
+                          setActiveCardCategoryId((prev) => (prev === item.id ? null : item.id));
+                        }}
                         className={`w-full min-h-[48px] rounded-xl p-3 mb-2 last:mb-0 flex items-center justify-between gap-3 border text-left transition-all ${
                           isSelected
                             ? isOled

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   ChevronRight,
   Copy,
   Database,
@@ -92,16 +93,30 @@ interface MobileSyncModalProps {
 }
 
 const PRESET_COLORS = [
-  '#10b981',
-  '#0ea5e9',
-  '#6366f1',
-  '#8b5cf6',
-  '#ec4899',
-  '#f43f5e',
-  '#f97316',
-  '#f59e0b',
-  '#14b8a6',
-  '#64748b',
+  '#10B981', // Emerald
+  '#2DD4BF', // Mint
+  '#059669', // Forest
+  '#14B8A6', // Teal
+  '#0EA5E9', // Sky
+  '#06B6D4', // Cyan
+  '#2563EB', // Royal Blue
+  '#4F46E5', // Indigo
+  '#8B5CF6', // Purple
+  '#7C3AED', // Violet
+  '#D946EF', // Fuchsia
+  '#F43F5E', // Rose
+  '#E11D48', // Crimson
+  '#EF4444', // Red
+  '#F97316', // Coral
+  '#F59E0B', // Amber
+  '#EAB308', // Gold
+  '#84CC16', // Lime
+  '#9A6B48', // Bronze
+  '#6E5440', // Iron
+  '#475569', // Slate Blue
+  '#334155', // Charcoal
+  '#64748B', // Neutral Gray
+  '#1E293B', // Navy
 ];
 
 function mapInitialTabToSubScreen(
@@ -136,6 +151,7 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   onResetAccount,
 }) => {
   const t = TRANSLATIONS[language];
+  const isOled = theme === 'oled';
 
   const [subScreen, setSubScreen] = useState<SettingsSubScreen>(() =>
     mapInitialTabToSubScreen(activeTabInitial)
@@ -176,8 +192,32 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [catName, setCatName] = useState('');
   const [catType, setCatType] = useState<TransactionType>('expense');
-  const [catColor, setCatColor] = useState('#6366f1');
-  const [catIcon, setCatIcon] = useState<string>('Tag');
+  const [catColor, setCatColor] = useState(PRESET_COLORS[0]);
+  const [catIcon, setCatIcon] = useState<string>('etiqueta-preco');
+  const [expenseSectionOpen, setExpenseSectionOpen] = useState(true);
+  const [incomeSectionOpen, setIncomeSectionOpen] = useState(true);
+
+  const expenseCategories = useMemo(() => {
+    return state.categories
+      .filter((cat: Category) => cat.type === 'expense')
+      .slice()
+      .sort((a: Category, b: Category) => {
+        const nameA = getCategoryDisplayName(a, language) || a.name;
+        const nameB = getCategoryDisplayName(b, language) || b.name;
+        return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+      });
+  }, [state.categories, language]);
+
+  const incomeCategories = useMemo(() => {
+    return state.categories
+      .filter((cat: Category) => cat.type === 'income')
+      .slice()
+      .sort((a: Category, b: Category) => {
+        const nameA = getCategoryDisplayName(a, language) || a.name;
+        const nameB = getCategoryDisplayName(b, language) || b.name;
+        return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+      });
+  }, [state.categories, language]);
 
   // Backup import status
   const [importStatus, setImportStatus] = useState<string>('');
@@ -417,8 +457,8 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
     setEditingCategoryId(null);
     setCatName('');
     setCatType('expense');
-    setCatColor('#6366f1');
-    setCatIcon('Tag');
+    setCatColor(PRESET_COLORS[0]);
+    setCatIcon('etiqueta-preco');
   };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
@@ -1048,20 +1088,23 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                 <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   {t.chooseColorLabel}
                 </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  {PRESET_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setCatColor(c)}
-                      className={`w-7 h-7 rounded-full transition-transform ${
-                        catColor === c
-                          ? 'scale-110 ring-2 ring-offset-2 ring-slate-900'
-                          : 'opacity-85 hover:opacity-100'
-                      }`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                <div className="flex flex-wrap justify-center items-center gap-2.5 p-2.5 max-h-32 overflow-y-auto">
+                  {PRESET_COLORS.map((c) => {
+                    const isSelected = catColor.toLowerCase() === c.toLowerCase();
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setCatColor(c)}
+                        className={`w-6 h-6 rounded-full flex-shrink-0 transition-all ${
+                          isSelected
+                            ? 'scale-110 ring-2 ring-offset-2 ring-slate-900 dark:ring-white ring-offset-white dark:ring-offset-[#0D1117]'
+                            : 'opacity-85 hover:opacity-100 hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1070,7 +1113,13 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                 <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   {t.chooseIconLabel}
                 </span>
-                <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5 p-2 rounded-xl bg-slate-50 border border-slate-200 max-h-36 overflow-y-auto">
+                <div
+                  className={`grid grid-cols-6 sm:grid-cols-8 gap-2.5 max-h-52 overflow-y-auto scroll-smooth p-3 rounded-xl border transition-colors scrollbar-thin ${
+                    isOled
+                      ? 'bg-[#161B22] border-[#21262D] text-slate-300 scrollbar-thumb-slate-700'
+                      : 'bg-slate-50 border-slate-200/80 text-slate-700 scrollbar-thumb-slate-300'
+                  }`}
+                >
                   {AVAILABLE_ICONS.map((ic) => {
                     const isSelected = catIcon === ic;
                     return (
@@ -1079,92 +1128,220 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
                         type="button"
                         onClick={() => setCatIcon(ic)}
                         title={ic}
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                           isSelected
-                            ? 'ring-2 ring-slate-900 shadow-sm scale-105'
-                            : 'hover:bg-slate-100 text-slate-600'
+                            ? 'border shadow-sm scale-105'
+                            : isOled
+                            ? 'text-slate-400 hover:bg-[#21262D]'
+                            : 'text-slate-600 hover:bg-slate-200/70 transition-colors'
                         }`}
                         style={
                           isSelected
-                            ? { backgroundColor: `${catColor}22`, color: catColor }
+                            ? {
+                                backgroundColor: isOled ? `${catColor}33` : `${catColor}26`,
+                                borderColor: isOled ? `${catColor}99` : `${catColor}66`,
+                                color: catColor,
+                              }
                             : undefined
                         }
                       >
-                        <CategoryIcon icon={ic} size={17} />
+                        <CategoryIcon icon={ic} size={20} color={isSelected ? catColor : 'currentColor'} />
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-1 w-full">
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800"
+                  disabled={!catName.trim()}
+                  className={`w-full py-3 px-4 rounded-xl text-sm font-semibold shadow-sm transition-colors flex items-center justify-center ${
+                    !catName.trim()
+                      ? 'opacity-50 cursor-not-allowed bg-slate-300 dark:bg-slate-700 text-slate-500'
+                      : 'bg-[#10B981] hover:bg-[#059669] text-white active:scale-[0.99]'
+                  }`}
                 >
-                  {editingCategoryId ? <Check size={14} /> : <Plus size={14} />}
-                  {editingCategoryId ? t.updateCategoryBtn : t.addCategoryBtn}
+                  {editingCategoryId
+                    ? language === 'pt-BR'
+                      ? 'Salvar Categoria'
+                      : 'Save Category'
+                    : language === 'pt-BR'
+                    ? 'Adicionar Categoria'
+                    : 'Add Category'}
                 </button>
                 {editingCategoryId && (
                   <button
                     type="button"
                     onClick={handleCancelEditCategory}
-                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-100"
+                    className="w-full sm:w-auto py-3 px-4 rounded-xl border border-slate-200 dark:border-[#21262D] text-slate-600 dark:text-slate-300 text-sm font-semibold hover:bg-slate-100 dark:hover:bg-[#161B22] transition-colors"
                   >
-                    {t.cancelEditBtn}
+                    {language === 'pt-BR' ? 'Cancelar' : 'Cancel'}
                   </button>
                 )}
               </div>
             </form>
 
-            {/* Category List */}
-            <div className="space-y-2">
-              <h3 className="px-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                {language === 'pt-BR' ? 'Categorias Cadastradas' : 'Registered Categories'} (
-                {state.categories.length})
-              </h3>
-              <div className="settings-group-card bg-white border border-slate-200 rounded-2xl divide-y divide-slate-200 overflow-hidden">
-                {state.categories.map((cat: Category) => {
-                  const isBeingEdited = editingCategoryId === cat.id;
-                  return (
-                    <div
-                      key={cat.id}
-                      className={`flex items-center justify-between p-3.5 transition-colors ${
-                        isBeingEdited ? 'bg-indigo-500/10' : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <CategoryIcon icon={cat.icon} color={cat.color} size={16} badgeSize="sm" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-slate-900 truncate">
-                            {getCategoryDisplayName(cat, language)}
-                          </p>
-                          <p className="text-[11px] text-slate-400">
-                            {cat.type === 'income' ? t.incomeTypeLabel : t.expenseTypeLabel}
-                          </p>
-                        </div>
+            {/* Category List with Collapsible Accordion Sections */}
+            <div className="space-y-4">
+              {/* 1. Categorias de Despesa */}
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setExpenseSectionOpen((prev) => !prev)}
+                  className="w-full py-2 flex items-center justify-between cursor-pointer select-none text-left focus:outline-none"
+                >
+                  <div className="flex items-center">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {language === 'pt-BR' ? 'Categorias de Despesa' : 'Expense Categories'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-[#21262D] ml-2">
+                      {expenseCategories.length}
+                    </span>
+                  </div>
+                  <ChevronDown
+                    size={16}
+                    className={`text-slate-400 transition-transform duration-200 ${
+                      expenseSectionOpen ? 'rotate-180' : 'rotate-0'
+                    }`}
+                  />
+                </button>
+
+                {expenseSectionOpen && (
+                  <div className="settings-group-card bg-white border border-slate-200 rounded-2xl divide-y divide-slate-200 overflow-hidden">
+                    {expenseCategories.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-400 italic">
+                        {language === 'pt-BR'
+                          ? 'Nenhuma categoria de despesa cadastrada'
+                          : 'No expense categories registered'}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleStartEditCategory(cat)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-slate-100 transition-colors"
-                          title={t.editCategoryTooltip}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteCategory(cat.id)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-                          title={t.deleteCategoryTooltip}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                    ) : (
+                      expenseCategories.map((cat: Category) => {
+                        const isBeingEdited = editingCategoryId === cat.id;
+                        return (
+                          <div
+                            key={cat.id}
+                            className={`flex items-center justify-between p-3.5 transition-colors ${
+                              isBeingEdited
+                                ? 'bg-indigo-500/10'
+                                : 'hover:bg-slate-50 dark:hover:bg-[#161B22]/50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <CategoryIcon icon={cat.icon} color={cat.color} size={16} badgeSize="sm" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                  {getCategoryDisplayName(cat, language)}
+                                </p>
+                                <p className="text-[11px] text-slate-400">
+                                  {t.expenseTypeLabel}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditCategory(cat)}
+                                className="p-2 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-[#161B22] transition-colors"
+                                title={t.editCategoryTooltip}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteCategory(cat.id)}
+                                className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                                title={t.deleteCategoryTooltip}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Categorias de Entrada */}
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIncomeSectionOpen((prev) => !prev)}
+                  className="w-full py-2 flex items-center justify-between cursor-pointer select-none text-left focus:outline-none"
+                >
+                  <div className="flex items-center">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {language === 'pt-BR' ? 'Categorias de Entrada' : 'Income Categories'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-[#21262D] ml-2">
+                      {incomeCategories.length}
+                    </span>
+                  </div>
+                  <ChevronDown
+                    size={16}
+                    className={`text-slate-400 transition-transform duration-200 ${
+                      incomeSectionOpen ? 'rotate-180' : 'rotate-0'
+                    }`}
+                  />
+                </button>
+
+                {incomeSectionOpen && (
+                  <div className="settings-group-card bg-white border border-slate-200 rounded-2xl divide-y divide-slate-200 overflow-hidden">
+                    {incomeCategories.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-400 italic">
+                        {language === 'pt-BR'
+                          ? 'Nenhuma categoria de entrada cadastrada'
+                          : 'No income categories registered'}
                       </div>
-                    </div>
-                  );
-                })}
+                    ) : (
+                      incomeCategories.map((cat: Category) => {
+                        const isBeingEdited = editingCategoryId === cat.id;
+                        return (
+                          <div
+                            key={cat.id}
+                            className={`flex items-center justify-between p-3.5 transition-colors ${
+                              isBeingEdited
+                                ? 'bg-indigo-500/10'
+                                : 'hover:bg-slate-50 dark:hover:bg-[#161B22]/50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <CategoryIcon icon={cat.icon} color={cat.color} size={16} badgeSize="sm" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                  {getCategoryDisplayName(cat, language)}
+                                </p>
+                                <p className="text-[11px] text-slate-400">
+                                  {t.incomeTypeLabel}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditCategory(cat)}
+                                className="p-2 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-[#161B22] transition-colors"
+                                title={t.editCategoryTooltip}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteCategory(cat.id)}
+                                className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                                title={t.deleteCategoryTooltip}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
