@@ -114,6 +114,32 @@ export function computeInvoiceDueDate(
   return formatMonthDay(targetMonth, dueDay);
 }
 
+/**
+ * Calculates installment sequence number for targetMonth relative to startMonth (1-indexed).
+ */
+export function getInstallmentNumberForMonth(
+  startMonth?: string | null,
+  targetMonth?: string
+): number | null {
+  if (!startMonth || !targetMonth) return null;
+  const [sy, sm] = startMonth.split('-').map(Number);
+  const [ty, tm] = targetMonth.split('-').map(Number);
+  if (!sy || !sm || !ty || !tm) return null;
+  return (ty - sy) * 12 + (tm - sm) + 1;
+}
+
+/**
+ * Formats a number into a short compact string (e.g., 2.8k, 450, 0).
+ */
+export function formatCompactNumber(val: number): string {
+  if (val <= 0) return '0';
+  if (val >= 1000) {
+    const k = val / 1000;
+    return k >= 10 ? `${Math.round(k)}k` : `${k.toFixed(1).replace('.0', '')}k`;
+  }
+  return Math.round(val).toString();
+}
+
 export function exportTransactionsToCSV(
   transactions: Transaction[],
   categories: Category[],
