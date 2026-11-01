@@ -15,6 +15,8 @@ import {
   ArrowDownRight,
   Eye,
   EyeOff,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { AppLanguage, Category, CreditCard, Transaction, TransactionType } from '../types';
 import {
@@ -26,7 +28,14 @@ import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CategoryIcon } from './CategoryIcon';
 import { BankIcon, AppIcon } from './icons';
 
-export type FilterChipId = 'all' | 'pending-expense' | 'pending-income' | 'paid-expense' | 'paid-income';
+export type FilterChipId =
+  | 'all'
+  | 'pending-expense'
+  | 'pending-income'
+  | 'paid-expense'
+  | 'paid-income'
+  | 'fixed'
+  | 'installment';
 
 const PAGE_SIZE = 30;
 const SWIPE_REVEAL_WIDTH = 140;
@@ -342,65 +351,62 @@ const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
             <BankIcon
               card={cardObj}
               name={tx.description}
-              size={16}
-              badgeSize="md"
+              size={20}
+              badgeSize="lg"
             />
           ) : (
             <CategoryIcon
               icon={cat?.icon || 'Tag'}
               color={cat?.color || '#64748b'}
-              size={16}
-              badgeSize="md"
+              size={20}
+              badgeSize="lg"
             />
           )}
 
           <div className="min-w-0 flex-1">
-            <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate leading-snug">
-              {tx.description}
-            </p>
-
-            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 mt-1 leading-none">
-              <span className="text-slate-500 font-medium truncate max-w-[120px] sm:max-w-none">
+            {/* Line 1: Description & Category with Bullet Separator */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                {tx.description}
+              </span>
+              <span className="text-slate-400 dark:text-slate-600 text-xs shrink-0 select-none">•</span>
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate shrink-0 max-w-[40%] sm:max-w-none">
                 {getCategoryDisplayName(cat, language)}
               </span>
+            </div>
 
-              {cardObj && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                  <BankIcon card={cardObj} size={9} />
-                  <span className="truncate max-w-[75px] sm:max-w-none">{cardObj.name}</span>
-                </span>
-              )}
-
-              {tx.settledInvoiceKey && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[10px] font-semibold">
-                  <BankIcon card={cardObj} name={tx.description} size={9} />
+            {/* Line 2: Flags & Badges Only */}
+            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+              {isInvoice ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[11px] font-medium">
                   <span>{language === 'pt-BR' ? 'Fatura Cartão' : 'Card Invoice'}</span>
                 </span>
-              )}
-
-              {tx.installmentTotal && tx.installmentTotal > 1 && (
-                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">
-                  {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                </span>
-              )}
-
-              {isUnpaid && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-semibold">
-                  <Clock size={9} />
-                  <span>{t.pendingBadge}</span>
-                </span>
-              )}
-
-              {tx.recurringId && !tx.installmentTotal && (
-                <span className="inline-flex items-center text-slate-400">
-                  <Repeat size={10} />
-                </span>
-              )}
-
-              {tx.notes && (
+              ) : (
                 <>
-                  <span>•</span>
-                  <span className="italic truncate max-w-[100px] sm:max-w-[180px]">{tx.notes}</span>
+                  {tx.installmentTotal && tx.installmentTotal > 1 && (
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-300 dark:border dark:border-[#21262D] text-[11px] font-medium">
+                      {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                    </span>
+                  )}
+
+                  {isUnpaid ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-medium">
+                      <Clock size={11} className="shrink-0" />
+                      <span>{t.pendingBadge}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-medium">
+                      <Check size={11} className="shrink-0" />
+                      <span>{tx.type === 'income' ? (language === 'pt-BR' ? 'Recebido' : 'Received') : (t.paidBadge || 'Pago')}</span>
+                    </span>
+                  )}
+
+                  {tx.recurringId && !tx.installmentTotal && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-500 dark:text-slate-400 dark:border dark:border-[#21262D] text-[11px] font-medium">
+                      <Repeat size={11} className="shrink-0" />
+                      <span>{language === 'pt-BR' ? 'Fixa' : 'Fixed'}</span>
+                    </span>
+                  )}
                 </>
               )}
             </div>
@@ -410,14 +416,14 @@ const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
         {/* Right: Formatted Transaction Amount & Numeric Date Stack */}
         <div className="flex flex-col items-end justify-center text-right shrink-0 pl-2">
           <span
-            className={`text-sm sm:text-base font-semibold whitespace-nowrap leading-tight ${
+            className={`text-sm sm:text-base font-bold whitespace-nowrap leading-tight ${
               tx.type === 'income' ? 'text-[#10B981]' : 'text-[#EF4444]'
             }`}
           >
             {tx.type === 'income' ? '+' : '-'}
             {formatCurrency(tx.amount, currency)}
           </span>
-          <span className="text-xs text-slate-400 mt-0.5 whitespace-nowrap leading-none">
+          <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mt-0.5 whitespace-nowrap leading-none text-right">
             {formatNumericDate(tx.date)}
           </span>
         </div>
@@ -476,16 +482,92 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [openSwipeRowId, setOpenSwipeRowId] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const filterChips: { id: FilterChipId; label: string }[] = useMemo(
+  const primaryFilterChips: { id: FilterChipId; label: string }[] = useMemo(
     () => [
       { id: 'all', label: language === 'pt-BR' ? 'Todos' : 'All' },
-      { id: 'pending-expense', label: language === 'pt-BR' ? 'Despesas pendentes' : 'Pending expenses' },
-      { id: 'pending-income', label: language === 'pt-BR' ? 'Entradas pendentes' : 'Pending income' },
-      { id: 'paid-expense', label: language === 'pt-BR' ? 'Despesas pagas' : 'Paid expenses' },
-      { id: 'paid-income', label: language === 'pt-BR' ? 'Entradas pagas' : 'Paid income' },
+      { id: 'pending-expense', label: language === 'pt-BR' ? 'Despesas a pagar' : 'Pending expenses' },
     ],
     [language]
   );
+
+  const dropdownFilters: { id: FilterChipId; label: string }[] = useMemo(
+    () => [
+      { id: 'pending-income', label: language === 'pt-BR' ? 'Entradas a pagar' : 'Pending income' },
+      { id: 'paid-expense', label: language === 'pt-BR' ? 'Pagas / Concluídas' : 'Paid / Completed' },
+      { id: 'paid-income', label: language === 'pt-BR' ? 'Recebidas' : 'Received' },
+      { id: 'fixed', label: language === 'pt-BR' ? 'Fixas' : 'Fixed / Recurring' },
+      { id: 'installment', label: language === 'pt-BR' ? 'Parceladas' : 'Installments' },
+    ],
+    [language]
+  );
+
+  const isDropdownFilterActive = useMemo(
+    () => dropdownFilters.some((f) => f.id === activeFilterChip),
+    [dropdownFilters, activeFilterChip]
+  );
+
+  const activeDropdownFilter = useMemo(
+    () => dropdownFilters.find((f) => f.id === activeFilterChip),
+    [dropdownFilters, activeFilterChip]
+  );
+
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
+  const dropdownBtnRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const toggleDropdown = () => {
+    if (!isDropdownOpen && dropdownBtnRef.current) {
+      const rect = dropdownBtnRef.current.getBoundingClientRect();
+      const isRightAligned = rect.right > window.innerWidth - 200;
+      setDropdownPos({
+        top: rect.bottom + 6,
+        left: isRightAligned ? undefined : Math.max(12, rect.left),
+        right: isRightAligned ? Math.max(12, window.innerWidth - rect.right) : undefined,
+      });
+      setIsDropdownOpen(true);
+    } else {
+      setIsDropdownOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        dropdownMenuRef.current &&
+        !dropdownMenuRef.current.contains(target) &&
+        dropdownBtnRef.current &&
+        !dropdownBtnRef.current.contains(target)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    const handleScroll = () => {
+      setIsDropdownOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [isDropdownOpen]);
 
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
@@ -493,6 +575,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
     setOpenSwipeRowId(null);
+    setIsDropdownOpen(false);
   }, [selectedMonth, scope, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy]);
 
   // Close open swipe row when tapping outside of it
@@ -526,6 +609,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   const handleResetFilters = () => {
     setActiveFilterChip('all');
+    setIsDropdownOpen(false);
     setScope('month');
     setTypeFilter('all');
     setStatusFilter('all');
@@ -547,6 +631,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         if (activeFilterChip === 'pending-income' && !(tx.type === 'income' && isUnpaid)) return false;
         if (activeFilterChip === 'paid-expense' && !(tx.type === 'expense' && !isUnpaid)) return false;
         if (activeFilterChip === 'paid-income' && !(tx.type === 'income' && !isUnpaid)) return false;
+        if (activeFilterChip === 'fixed' && !(tx.recurringId || tx.isRecurring)) return false;
+        if (activeFilterChip === 'installment' && !(tx.installmentTotal && tx.installmentTotal > 1)) return false;
 
         if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
         const txStatus = tx.status === 'unpaid' ? 'unpaid' : 'paid';
@@ -763,16 +849,19 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               )}
             </div>
 
-            {/* Row 3: Horizontal Scrollable Filter Chips Carousel */}
+            {/* Row 3: Horizontal Primary Filter Chips & Compact Overflow Menu (WhatsApp Desktop Style) */}
             <div className="w-full flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5 -my-0.5 min-w-0">
-              {filterChips.map((chip) => {
+              {primaryFilterChips.map((chip) => {
                 const isSelected = activeFilterChip === chip.id;
                 return (
                   <button
                     key={chip.id}
                     type="button"
-                    onClick={() => setActiveFilterChip(chip.id)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap border shrink-0 transition-all active:scale-95 select-none ${
+                    onClick={() => {
+                      setActiveFilterChip(chip.id);
+                      setIsDropdownOpen(false);
+                    }}
+                    className={`h-8 rounded-full px-3 text-xs font-medium whitespace-nowrap border shrink-0 transition-all active:scale-95 select-none flex items-center justify-center ${
                       isSelected ? 'filter-chip-active font-semibold shadow-xs' : 'filter-chip-inactive'
                     }`}
                   >
@@ -780,6 +869,72 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   </button>
                 );
               })}
+
+              {/* WhatsApp Desktop Style Down-Arrow Overflow Button */}
+              <button
+                ref={dropdownBtnRef}
+                type="button"
+                onClick={toggleDropdown}
+                aria-expanded={isDropdownOpen}
+                aria-haspopup="true"
+                title={
+                  isDropdownFilterActive
+                    ? activeDropdownFilter?.label
+                    : language === 'pt-BR'
+                    ? 'Mais filtros'
+                    : 'More filters'
+                }
+                className={`h-8 rounded-full px-2.5 text-xs font-medium whitespace-nowrap border shrink-0 flex-shrink-0 transition-all active:scale-95 select-none flex items-center justify-center gap-1.5 ${
+                  isDropdownFilterActive
+                    ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/60 font-semibold shadow-xs'
+                    : 'bg-slate-100 text-slate-600 border-slate-200/80 hover:bg-slate-200 dark:bg-[#161B22] dark:text-slate-300 dark:border-[#21262D] dark:hover:bg-[#21262D]'
+                }`}
+              >
+                {isDropdownFilterActive && (
+                  <span className="w-2 h-2 rounded-full bg-[#10B981] shadow-xs shrink-0" />
+                )}
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : 'rotate-0'}`}
+                />
+              </button>
+
+              {/* Popover / Dropdown Menu for Excess Filters */}
+              {isDropdownOpen && (
+                <div
+                  ref={dropdownMenuRef}
+                  style={{
+                    position: 'fixed',
+                    top: dropdownPos.top,
+                    left: dropdownPos.left,
+                    right: dropdownPos.right,
+                    zIndex: 50,
+                  }}
+                  className="min-w-[180px] p-1.5 rounded-xl shadow-xl flex flex-col gap-1 bg-white border border-slate-200 text-slate-700 shadow-slate-200/50 dark:bg-[#161B22] dark:border-[#21262D] dark:text-slate-200 dark:shadow-black/60 animate-fadeIn"
+                >
+                  {dropdownFilters.map((filter) => {
+                    const isSelected = activeFilterChip === filter.id;
+                    return (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveFilterChip(filter.id);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors flex items-center justify-between text-left ${
+                          isSelected
+                            ? 'bg-emerald-500/10 text-[#10B981] font-semibold dark:bg-emerald-500/15'
+                            : 'hover:bg-slate-100 dark:hover:bg-[#21262D]'
+                        }`}
+                      >
+                        <span>{filter.label}</span>
+                        {isSelected && <Check size={14} className="text-[#10B981] shrink-0 ml-2" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
