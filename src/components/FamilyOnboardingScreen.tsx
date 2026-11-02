@@ -18,13 +18,20 @@ import {
 interface FamilyOnboardingScreenProps {
   onJoined: (familyId: string, masterKey: string) => void;
   initialError?: string | null;
+  initialFamilyId?: string | null;
 }
 
 const SUBTITLE_TEXT = 'Gestão financeira familiar com foco em simplicidade e privacidade absoluta';
 
-export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ onJoined, initialError }) => {
-  const [mode, setMode] = useState<'initial' | 'join' | 'created'>(() => (initialError ? 'join' : 'initial'));
-  const [inputCode, setInputCode] = useState(() => (initialError ? getStoredFamilyId() || '' : ''));
+export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({
+  onJoined,
+  initialError,
+  initialFamilyId,
+}) => {
+  const [mode, setMode] = useState<'initial' | 'join' | 'created'>(() =>
+    initialError || initialFamilyId ? 'join' : 'initial'
+  );
+  const [inputCode, setInputCode] = useState(() => initialFamilyId || (initialError ? getStoredFamilyId() || '' : ''));
   const [inputKey, setInputKey] = useState('');
   const [createdCode, setCreatedCode] = useState('');
   const [createdKey, setCreatedKey] = useState('');
@@ -32,6 +39,19 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
   const [errorMessage, setErrorMessage] = useState<string | null>(initialError || null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+
+  useEffect(() => {
+    if (initialFamilyId) {
+      setInputCode(initialFamilyId);
+      setMode('join');
+    }
+  }, [initialFamilyId]);
+
+  useEffect(() => {
+    if (initialError) {
+      setErrorMessage(initialError);
+    }
+  }, [initialError]);
 
   // Two-way continuous looping typewriter effect for subtitle
   const [displayedSubtitle, setDisplayedSubtitle] = useState('');

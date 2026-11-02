@@ -21,21 +21,21 @@ const steps = [
   },
   {
     name: "TypeScript Compiler Check",
-    command: isWin ? "npx.cmd" : "npx",
-    args: ["tsc", "--noEmit"],
-    shell: isWin,
+    command: isWin ? "cmd.exe" : "npx",
+    args: isWin ? ["/d", "/s", "/c", "npx", "tsc", "--noEmit"] : ["tsc", "--noEmit"],
+    shell: false,
   },
   {
     name: "ESLint Static Analysis",
-    command: isWin ? "npx.cmd" : "npx",
-    args: ["eslint", "."],
-    shell: isWin,
+    command: isWin ? "cmd.exe" : "npx",
+    args: isWin ? ["/d", "/s", "/c", "npx", "eslint", "."] : ["eslint", "."],
+    shell: false,
   },
   {
     name: "Vite Production Build",
-    command: isWin ? "npx.cmd" : "npx",
-    args: ["vite", "build"],
-    shell: isWin,
+    command: isWin ? "cmd.exe" : "npx",
+    args: isWin ? ["/d", "/s", "/c", "npx", "vite", "build"] : ["vite", "build"],
+    shell: false,
   },
 ];
 

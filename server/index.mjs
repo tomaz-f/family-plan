@@ -144,14 +144,11 @@ function sendServerError(res, err) {
 
 // --- 6. Family code resolver ---
 function isLoopbackRequest(req) {
-  const ip = req.ip || req.socket?.remoteAddress || '';
-  const host = parseHostname(req.headers.host);
+  const ip = req.socket?.remoteAddress || req.ip || '';
   return (
     ip === '127.0.0.1' ||
     ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    host === 'localhost' ||
-    host === '127.0.0.1'
+    ip === '::ffff:127.0.0.1'
   );
 }
 
@@ -162,16 +159,6 @@ async function resolveFamilyId(req) {
   if (fid && (await db.verifyFamily(fid))) {
     return fid;
   }
-  // Allow local desktop loopback to auto-resolve or auto-seed the primary family
-  if (isLoopbackRequest(req)) {
-    const fallback = await db.turso.execute('SELECT family_id FROM families ORDER BY created_at ASC LIMIT 1');
-    if (fallback.rows.length > 0) {
-      return fallback.rows[0].family_id;
-    }
-    const initial = await db.createFamily();
-    return initial.familyId;
-  }
-  // Over LAN / Network, an explicit verified family code is strictly required
   return null;
 }
 

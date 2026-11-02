@@ -320,10 +320,10 @@ export async function decryptTransaction(
         : raw.totalPurchaseAmount
         ? Number(raw.totalPurchaseAmount)
         : null,
-      cardId: sensitive.cardId || raw.cardId || null,
-      invoiceMonth: sensitive.invoiceMonth || raw.invoiceMonth || null,
-      purchaseDate: sensitive.purchaseDate || raw.purchaseDate || null,
-      settledInvoiceKey: sensitive.settledInvoiceKey || raw.settledInvoiceKey || null,
+      cardId: raw.cardId !== undefined ? (raw.cardId || null) : (sensitive.cardId || null),
+      invoiceMonth: raw.invoiceMonth !== undefined ? (raw.invoiceMonth || null) : (sensitive.invoiceMonth || null),
+      purchaseDate: raw.purchaseDate !== undefined ? (raw.purchaseDate || null) : (sensitive.purchaseDate || null),
+      settledInvoiceKey: raw.settledInvoiceKey !== undefined ? (raw.settledInvoiceKey || null) : (sensitive.settledInvoiceKey || null),
     };
   } catch (err) {
     console.error(`[Crypto] Failed to decrypt transaction ${raw.id}:`, err);
@@ -695,18 +695,31 @@ export async function decryptFullState(
   masterKey: string,
   familyId: string
 ): Promise<AppState> {
-  // 1. Gather sample ciphertexts to verify master key validity upfront
+  // 1. Gather verified sample ciphertexts to test master key validity upfront
   const encryptedSamples: string[] = [];
+
+  const isValidEncryptedString = (val: any): boolean => {
+    if (typeof val !== 'string' || !val.startsWith('v1:')) return false;
+    const parts = val.split(':');
+    return parts.length === 3 && parts[1].length > 0 && parts[2].length > 0;
+  };
+
+  const addCandidate = (val: any) => {
+    if (isValidEncryptedString(val) && !encryptedSamples.includes(val)) {
+      encryptedSamples.push(val);
+    }
+  };
+
   if (rawState?.settings?.key_check) {
-    encryptedSamples.push(String(rawState.settings.key_check));
+    addCandidate(rawState.settings.key_check);
   }
   if (rawState?.settings?.encrypted_settings) {
-    encryptedSamples.push(String(rawState.settings.encrypted_settings));
+    addCandidate(rawState.settings.encrypted_settings);
   }
   for (const t of rawState?.transactions || []) {
     const enc = t.encrypted_data || (t.iv && t.payload ? `v1:${t.iv}:${t.payload}` : null);
     if (enc) {
-      encryptedSamples.push(String(enc));
+      addCandidate(enc);
       if (encryptedSamples.length >= 3) break;
     }
   }
@@ -714,7 +727,7 @@ export async function decryptFullState(
     for (const c of rawState?.categories || []) {
       const enc = c.encrypted_data || (c.iv && c.payload ? `v1:${c.iv}:${c.payload}` : null);
       if (enc) {
-        encryptedSamples.push(String(enc));
+        addCandidate(enc);
         if (encryptedSamples.length >= 3) break;
       }
     }
@@ -723,7 +736,7 @@ export async function decryptFullState(
     for (const card of rawState?.creditCards || []) {
       const enc = card.encrypted_data || (card.iv && card.payload ? `v1:${card.iv}:${card.payload}` : null);
       if (enc) {
-        encryptedSamples.push(String(enc));
+        addCandidate(enc);
         if (encryptedSamples.length >= 3) break;
       }
     }
@@ -732,7 +745,7 @@ export async function decryptFullState(
     for (const f of rawState?.fuelLogs || []) {
       const enc = f.encrypted_data || (f.iv && f.payload ? `v1:${f.iv}:${f.payload}` : null);
       if (enc) {
-        encryptedSamples.push(String(enc));
+        addCandidate(enc);
         if (encryptedSamples.length >= 3) break;
       }
     }
@@ -741,7 +754,7 @@ export async function decryptFullState(
     for (const r of rawState?.recurringTemplates || []) {
       const enc = r.encrypted_data || (r.iv && r.payload ? `v1:${r.iv}:${r.payload}` : null);
       if (enc) {
-        encryptedSamples.push(String(enc));
+        addCandidate(enc);
         if (encryptedSamples.length >= 3) break;
       }
     }

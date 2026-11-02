@@ -287,7 +287,9 @@ export async function directGetFullState(client: Client, familyId: string): Prom
   for (const r of setRes.rows) {
     const k = String(r.key);
     const v = String(r.value);
-    if (k === 'initialBalance' || k === 'tankCapacity') {
+    if (k === 'key_check' || k === 'encrypted_settings') {
+      settings[k] = r.encrypted_data ? String(r.encrypted_data) : v;
+    } else if (k === 'initialBalance' || k === 'tankCapacity') {
       settings[k] = Number(v) || 0;
     } else {
       settings[k] = v;
@@ -410,7 +412,7 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
   const cleanPayload = txData.payload || (txData.encrypted_data && txData.encrypted_data.startsWith('v1:') ? txData.encrypted_data.split(':')[2] : (txData.encrypted_data || null));
   const cleanEncrypted = txData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
 
-  await client.execute({
+  const mainStmt = {
     sql: `INSERT OR REPLACE INTO transactions
      (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -437,7 +439,9 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
       cleanEncrypted,
       cleanPayload,
     ],
-  });
+  };
+
+  const batchStatements: any[] = [mainStmt];
 
   if (Array.isArray(txData.futureEntries)) {
     for (const f of txData.futureEntries) {
@@ -447,7 +451,7 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
       const fPayload = f.payload || (f.encrypted_data && f.encrypted_data.startsWith('v1:') ? f.encrypted_data.split(':')[2] : (f.encrypted_data || null));
       const fEncData = f.encrypted_data || (fIv && fPayload ? `v1:${fIv}:${fPayload}` : fPayload);
 
-      await client.execute({
+      batchStatements.push({
         sql: `INSERT OR REPLACE INTO transactions
          (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -478,18 +482,21 @@ export async function directSaveTransaction(client: Client, familyId: string, tx
     }
   }
 
+  await client.batch(batchStatements, 'write');
+
   return directGetFullState(client, familyId);
 }
 
 export async function directUpdateTransaction(client: Client, familyId: string, id: string, txData: any): Promise<AppState> {
   await ensureClientSchema(client);
-  const updateSingleRow = async (rowId: string, rowData: any) => {
+
+  const buildUpdateStmt = (rowId: string, rowData: any) => {
     const isEncrypted = Boolean(rowData.encrypted_data || rowData.payload);
     if (isEncrypted) {
       const cleanIv = rowData.iv || (rowData.encrypted_data && rowData.encrypted_data.startsWith('v1:') ? rowData.encrypted_data.split(':')[1] : null);
       const cleanPayload = rowData.payload || (rowData.encrypted_data && rowData.encrypted_data.startsWith('v1:') ? rowData.encrypted_data.split(':')[2] : (rowData.encrypted_data || null));
       const cleanEncrypted = rowData.encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
-      await client.execute({
+      return {
         sql: `UPDATE transactions
          SET type = ?, status = ?, date = ?, amount = NULL, description = NULL, categoryId = NULL, notes = NULL,
              recurringId = ?, dueDay = ?, installmentCurrent = ?, installmentTotal = ?, cardId = ?, invoiceMonth = ?, purchaseDate = ?, settledInvoiceKey = ?,
@@ -513,9 +520,9 @@ export async function directUpdateTransaction(client: Client, familyId: string, 
           familyId,
           rowId,
         ],
-      });
+      };
     } else {
-      await client.execute({
+      return {
         sql: `UPDATE transactions
          SET type = ?, status = ?, amount = ?, description = ?, categoryId = ?, date = ?, notes = ?,
              recurringId = ?, dueDay = ?, installmentCurrent = ?, installmentTotal = ?, cardId = ?, invoiceMonth = ?, purchaseDate = ?, settledInvoiceKey = ?
@@ -539,19 +546,21 @@ export async function directUpdateTransaction(client: Client, familyId: string, 
           familyId,
           rowId,
         ],
-      });
+      };
     }
   };
 
-  await updateSingleRow(id, txData);
+  const batchStatements: any[] = [buildUpdateStmt(id, txData)];
 
   if (Array.isArray(txData.updatedSeriesEntries)) {
     for (const sEntry of txData.updatedSeriesEntries) {
       if (sEntry && sEntry.id) {
-        await updateSingleRow(sEntry.id, sEntry);
+        batchStatements.push(buildUpdateStmt(sEntry.id, sEntry));
       }
     }
   }
+
+  await client.batch(batchStatements, 'write');
 
   return directGetFullState(client, familyId);
 }
@@ -568,12 +577,14 @@ export async function directUpdateTransactionStatus(client: Client, familyId: st
 export async function directDeleteTransaction(client: Client, familyId: string, id: string, deleteIds?: string[]): Promise<AppState> {
   await ensureClientSchema(client);
   const ids = Array.isArray(deleteIds) && deleteIds.length > 0 ? deleteIds : [id];
-  for (const targetId of ids) {
-    if (!targetId) continue;
-    await client.execute({
+  const deleteBatch = ids
+    .filter(Boolean)
+    .map((targetId) => ({
       sql: 'DELETE FROM transactions WHERE family_id = ? AND id = ?',
       args: [familyId, targetId],
-    });
+    }));
+  if (deleteBatch.length > 0) {
+    await client.batch(deleteBatch, 'write');
   }
   return directGetFullState(client, familyId);
 }
@@ -676,14 +687,19 @@ export async function directSaveCard(client: Client, familyId: string, cardData:
 
 export async function directDeleteCard(client: Client, familyId: string, id: string): Promise<AppState> {
   await ensureClientSchema(client);
-  await client.execute({
-    sql: 'DELETE FROM credit_cards WHERE family_id = ? AND id = ?',
-    args: [familyId, id],
-  });
-  await client.execute({
-    sql: 'DELETE FROM transactions WHERE family_id = ? AND cardId = ?',
-    args: [familyId, id],
-  });
+  await client.batch(
+    [
+      {
+        sql: 'UPDATE transactions SET cardId = NULL WHERE family_id = ? AND cardId = ?',
+        args: [familyId, id],
+      },
+      {
+        sql: 'DELETE FROM credit_cards WHERE family_id = ? AND id = ?',
+        args: [familyId, id],
+      },
+    ],
+    'write'
+  );
   return directGetFullState(client, familyId);
 }
 

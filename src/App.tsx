@@ -170,6 +170,7 @@ export const App: React.FC = () => {
   const [familyId, setFamilyId] = useState<string | null>(() => getStoredFamilyId());
   const [masterKey, setMasterKey] = useState<string | null>(() => getStoredMasterKey());
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
+  const [authFamilyId, setAuthFamilyId] = useState<string | null>(null);
 
   const [state, setState] = useState<AppState>(() => {
     try {
@@ -347,6 +348,8 @@ export const App: React.FC = () => {
     setPendingOfflineTx([]);
     setFamilyId(null);
     setMasterKey(null);
+    setAuthFamilyId(null);
+    setAuthErrorMessage(null);
     setState(FALLBACK_STATE);
   }, []);
 
@@ -355,6 +358,7 @@ export const App: React.FC = () => {
       if (err instanceof InvalidMasterKeyError || err?.name === 'InvalidMasterKeyError') {
         console.error('[E2EE] Invalid Master Key detected. Resetting invalid credentials.');
         const fid = getStoredFamilyId() || familyId;
+        setAuthFamilyId(fid || null);
         clearStoredMasterKey();
         clearStoredFamilyId();
         if (fid) {
@@ -1799,8 +1803,10 @@ export const App: React.FC = () => {
           setFamilyId(newId);
           setMasterKey(newKey);
           setAuthErrorMessage(null);
+          setAuthFamilyId(null);
         }}
         initialError={authErrorMessage}
+        initialFamilyId={authFamilyId}
       />
     );
   }

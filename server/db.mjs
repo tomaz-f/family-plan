@@ -420,9 +420,11 @@ export async function getSettingsObject(familyId) {
   });
   const map = { ...DEFAULT_SETTINGS };
   let encrypted_settings = null;
+  let key_check = null;
   for (const r of res.rows) {
     map[r.key] = r.value;
-    if (r.encrypted_data) encrypted_settings = r.encrypted_data;
+    if (r.key === 'encrypted_settings' && r.encrypted_data) encrypted_settings = r.encrypted_data;
+    if (r.key === 'key_check' && r.encrypted_data) key_check = r.encrypted_data;
   }
   return {
     familyName: map.familyName || 'FAMILY PLAN',
@@ -433,6 +435,7 @@ export async function getSettingsObject(familyId) {
     tankCapacity: Number(map.tankCapacity || 50),
     updatedAt: map.updatedAt || new Date().toISOString(),
     encrypted_settings,
+    key_check,
   };
 }
 
