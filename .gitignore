@@ -3,33 +3,33 @@ node_modules/
 .pnp
 .pnp.js
 
-# Production build
+# Production build outputs & caches
 dist/
 build/
+.cache/
+.temp/
+tmp/
 
-# Local databases, backups & SQLite WAL files
+# Local databases, backups, SQLite WAL & logs
 *.db
 *.db-wal
 *.db-shm
 *.sqlite
 *.sqlite3
 data/
-
-# Environment variables & local secrets
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-*.log
 
-# Personal files & statements
+# Environment variables & local secrets
+.env
+.env.*
+!.env.example
+
+# Local exports, backups, and user generated files
 *.pdf
+*.csv
 familyplan-backup-*.json
 
 # Operating System & IDE files
@@ -37,3 +37,39 @@ familyplan-backup-*.json
 Thumbs.db
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Agent scratch, tool caches & ignore files
+.graphifyignore
+.gemini/
+.system_generated/
+scratch/
+
+# Local launcher & startup scripts
+Start-FamilyPlan.bat
+start_silent.vbs
+
+# Loose assets
+prumo.jpg
+
+# PWA static manifest files (dynamically compiled by vite-plugin-pwa)
+public/manifest.json
+public/manifest.webmanifest
+
+# Documentation & Markdown files (Strict: Only root README.md is tracked)
+*.md
+**/*.md
+!README.md
+docs/
+AGENTS.md
+GEMINI.md
+
+# One-off maintenance scripts
+scripts/inspect-turso.mjs
+scripts/migrate-backup-to-turso.mjs
+scripts/reset-turso-production.mjs
+scripts/wipe-db.ts

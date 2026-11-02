@@ -208,12 +208,16 @@ app.use('/api', async (req, res, next) => {
   if (req.path.startsWith('/families/')) {
     return next();
   }
-  const familyId = await resolveFamilyId(req);
-  if (!familyId) {
-    return res.status(401).json({ error: 'Acesso negado: código de pareamento familiar ausente ou inválido.' });
+  try {
+    const familyId = await resolveFamilyId(req);
+    if (!familyId) {
+      return res.status(401).json({ error: 'Acesso negado: código de pareamento familiar ausente ou inválido.' });
+    }
+    req.familyId = familyId;
+    next();
+  } catch (err) {
+    sendServerError(res, err);
   }
-  req.familyId = familyId;
-  next();
 });
 
 // GET full application state for family
