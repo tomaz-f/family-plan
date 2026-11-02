@@ -10,26 +10,32 @@
 
 import { spawnSync } from "node:child_process";
 
+const isWin = process.platform === "win32";
+
 const steps = [
   {
     name: "Quality Rules Self-Check",
     command: process.execPath,
     args: ["scripts/verify-rules.mjs"],
+    shell: false,
   },
   {
     name: "TypeScript Compiler Check",
-    command: process.platform === "win32" ? "npx.cmd" : "npx",
+    command: isWin ? "npx.cmd" : "npx",
     args: ["tsc", "--noEmit"],
+    shell: isWin,
   },
   {
     name: "ESLint Static Analysis",
-    command: process.platform === "win32" ? "npx.cmd" : "npx",
+    command: isWin ? "npx.cmd" : "npx",
     args: ["eslint", "."],
+    shell: isWin,
   },
   {
     name: "Vite Production Build",
-    command: process.platform === "win32" ? "npx.cmd" : "npx",
+    command: isWin ? "npx.cmd" : "npx",
     args: ["vite", "build"],
+    shell: isWin,
   },
 ];
 
@@ -39,6 +45,7 @@ for (const step of steps) {
   process.stdout.write(`⏳ [${step.name}] running... `);
   const result = spawnSync(step.command, step.args, {
     stdio: "inherit",
+    shell: step.shell,
   });
 
   if (result.status !== 0) {

@@ -12,24 +12,11 @@ export default defineConfig(({ mode }) => {
     process.env.TURSO_DB_URL ||
     process.env.turso_db_url ||
     '';
-  const tursoToken =
-    env.VITE_TURSO_TOKEN ||
-    env.TURSO_TOKEN ||
-    env.turso_token ||
-    process.env.VITE_TURSO_TOKEN ||
-    process.env.TURSO_TOKEN ||
-    process.env.turso_token ||
-    '';
 
   return {
     base: '/family-plan/',
     define: {
       'import.meta.env.VITE_TURSO_DB_URL': JSON.stringify(tursoUrl),
-      'import.meta.env.VITE_TURSO_TOKEN': JSON.stringify(tursoToken),
-      'process.env.TURSO_DB_URL': JSON.stringify(tursoUrl),
-      'process.env.TURSO_TOKEN': JSON.stringify(tursoToken),
-      'process.env.turso_db_url': JSON.stringify(tursoUrl),
-      'process.env.turso_token': JSON.stringify(tursoToken),
     },
     plugins: [
       react(),

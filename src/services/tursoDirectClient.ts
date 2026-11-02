@@ -156,7 +156,51 @@ export async function directVerifyFamily(client: Client, familyId: string): Prom
     sql: 'SELECT family_id FROM families WHERE family_id = ?',
     args: [familyId],
   });
-  return res.rows.length > 0;
+  if (res.rows.length > 0) return true;
+
+  for (const table of ['transactions', 'settings', 'categories']) {
+    try {
+      const fallback = await client.execute({
+        sql: `SELECT 1 FROM ${table} WHERE family_id = ? LIMIT 1`,
+        args: [familyId],
+      });
+      if (fallback.rows.length > 0) {
+        await client.execute({
+          sql: 'INSERT OR IGNORE INTO families (family_id, created_at) VALUES (?, ?)',
+          args: [familyId, new Date().toISOString()],
+        });
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
+export async function directGetSampleEncrypted(client: Client, familyId: string): Promise<string | null> {
+  await ensureClientSchema(client);
+  try {
+    const resKeyCheck = await client.execute({
+      sql: "SELECT encrypted_data FROM settings WHERE family_id = ? AND key = 'key_check' AND encrypted_data IS NOT NULL LIMIT 1",
+      args: [familyId],
+    });
+    if (resKeyCheck.rows.length > 0 && resKeyCheck.rows[0].encrypted_data) {
+      return String(resKeyCheck.rows[0].encrypted_data);
+    }
+  } catch {}
+
+  const tables = ['settings', 'transactions', 'categories', 'credit_cards', 'fuel_logs', 'recurring_templates'];
+  for (const table of tables) {
+    try {
+      const res = await client.execute({
+        sql: `SELECT encrypted_data FROM ${table} WHERE family_id = ? AND encrypted_data IS NOT NULL LIMIT 1`,
+        args: [familyId],
+      });
+      if (res.rows.length > 0 && res.rows[0].encrypted_data) {
+        return String(res.rows[0].encrypted_data);
+      }
+    } catch {}
+  }
+  return null;
 }
 
 export async function directSeedDefaultCategories(client: Client, familyId: string): Promise<void> {
@@ -538,6 +582,24 @@ export async function directUpdateSettings(client: Client, familyId: string, pay
   await ensureClientSchema(client);
   for (const [k, v] of Object.entries(payload)) {
     if (v === undefined) continue;
+    if (k === 'keyCheck' || k === 'key_check') {
+      if (typeof v === 'string' && v.startsWith('v1:')) {
+        await client.execute({
+          sql: `INSERT INTO settings (family_id, key, value, encrypted_data) VALUES (?, 'key_check', '1', ?)
+                ON CONFLICT(family_id, key) DO UPDATE SET value = '1', encrypted_data = excluded.encrypted_data`,
+          args: [familyId, v],
+        });
+      }
+      continue;
+    }
+    if (k === 'encrypted_data') {
+      await client.execute({
+        sql: `INSERT INTO settings (family_id, key, value, encrypted_data) VALUES (?, 'encrypted_settings', '1', ?)
+              ON CONFLICT(family_id, key) DO UPDATE SET value = '1', encrypted_data = excluded.encrypted_data`,
+        args: [familyId, String(v)],
+      });
+      continue;
+    }
     await client.execute({
       sql: 'INSERT OR REPLACE INTO settings (family_id, key, value) VALUES (?, ?, ?)',
       args: [familyId, k, String(v)],

@@ -12,6 +12,12 @@ export function getStoredMasterKey(): string | null {
         const sanitized = sanitizeMasterKey(queryKey);
         if (sanitized) {
           localStorage.setItem(STORAGE_MASTER_KEY, sanitized);
+          // Scrub sensitive master key from browser address bar & history
+          params.delete('key');
+          params.delete('masterKey');
+          const remainingQuery = params.toString() ? `?${params.toString()}` : '';
+          const cleanUrl = `${window.location.pathname}${remainingQuery}${window.location.hash}`;
+          window.history.replaceState({}, document.title, cleanUrl);
           return sanitized;
         }
       }
@@ -83,11 +89,17 @@ function bytesToBase64(bytes: Uint8Array): string {
   for (let i = 0; i < len; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
-  return window.btoa(binary);
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+    return window.btoa(binary);
+  }
+  return Buffer.from(binary, 'binary').toString('base64');
 }
 
 function base64ToBytes(base64: string): Uint8Array {
-  const binary = window.atob(base64);
+  const binary =
+    typeof window !== 'undefined' && typeof window.atob === 'function'
+      ? window.atob(base64)
+      : Buffer.from(base64, 'base64').toString('binary');
   const len = binary.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) {
@@ -102,8 +114,9 @@ export async function deriveAesKey(masterKey: string, familyId: string): Promise
     return cachedCryptoKey.key;
   }
 
+  const subtle = typeof window !== 'undefined' && window.crypto ? window.crypto.subtle : globalThis.crypto.subtle;
   const enc = new TextEncoder();
-  const keyMaterial = await window.crypto.subtle.importKey(
+  const keyMaterial = await subtle.importKey(
     'raw',
     enc.encode(cleanKey),
     { name: 'PBKDF2' },
@@ -113,7 +126,7 @@ export async function deriveAesKey(masterKey: string, familyId: string): Promise
 
   const salt = enc.encode(`FP-SALT:${familyId.toUpperCase()}`);
 
-  const aesKey = await window.crypto.subtle.deriveKey(
+  const aesKey = await subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt,
@@ -133,11 +146,16 @@ export async function deriveAesKey(masterKey: string, familyId: string): Promise
 export async function encryptPayload(payload: any, masterKey: string, familyId: string): Promise<string> {
   const aesKey = await deriveAesKey(masterKey, familyId);
   const iv = new Uint8Array(12);
-  window.crypto.getRandomValues(iv);
+  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+    window.crypto.getRandomValues(iv);
+  } else {
+    globalThis.crypto.getRandomValues(iv);
+  }
 
   const jsonStr = JSON.stringify(payload);
   const enc = new TextEncoder();
-  const cipherBuffer = await window.crypto.subtle.encrypt(
+  const subtle = typeof window !== 'undefined' && window.crypto ? window.crypto.subtle : globalThis.crypto.subtle;
+  const cipherBuffer = await subtle.encrypt(
     { name: 'AES-GCM', iv: iv as any },
     aesKey,
     enc.encode(jsonStr)
@@ -162,7 +180,8 @@ export async function decryptPayload<T>(serialized: string, masterKey: string, f
   const iv = base64ToBytes(parts[1]);
   const cipherBytes = base64ToBytes(parts[2]);
 
-  const decryptedBuffer = await window.crypto.subtle.decrypt(
+  const subtle = typeof window !== 'undefined' && window.crypto ? window.crypto.subtle : globalThis.crypto.subtle;
+  const decryptedBuffer = await subtle.decrypt(
     { name: 'AES-GCM', iv: iv as any },
     aesKey,
     cipherBytes as any
@@ -664,11 +683,88 @@ export async function decryptRecurringTemplate(
   }
 }
 
+export class InvalidMasterKeyError extends Error {
+  constructor(message = 'Chave Mestre de Segurança inválida para este espaço familiar. Verifique os 12 dígitos digitados.') {
+    super(message);
+    this.name = 'InvalidMasterKeyError';
+  }
+}
+
 export async function decryptFullState(
   rawState: any,
   masterKey: string,
   familyId: string
 ): Promise<AppState> {
+  // 1. Gather sample ciphertexts to verify master key validity upfront
+  const encryptedSamples: string[] = [];
+  if (rawState?.settings?.key_check) {
+    encryptedSamples.push(String(rawState.settings.key_check));
+  }
+  if (rawState?.settings?.encrypted_settings) {
+    encryptedSamples.push(String(rawState.settings.encrypted_settings));
+  }
+  for (const t of rawState?.transactions || []) {
+    const enc = t.encrypted_data || (t.iv && t.payload ? `v1:${t.iv}:${t.payload}` : null);
+    if (enc) {
+      encryptedSamples.push(String(enc));
+      if (encryptedSamples.length >= 3) break;
+    }
+  }
+  if (encryptedSamples.length < 3) {
+    for (const c of rawState?.categories || []) {
+      const enc = c.encrypted_data || (c.iv && c.payload ? `v1:${c.iv}:${c.payload}` : null);
+      if (enc) {
+        encryptedSamples.push(String(enc));
+        if (encryptedSamples.length >= 3) break;
+      }
+    }
+  }
+  if (encryptedSamples.length < 3) {
+    for (const card of rawState?.creditCards || []) {
+      const enc = card.encrypted_data || (card.iv && card.payload ? `v1:${card.iv}:${card.payload}` : null);
+      if (enc) {
+        encryptedSamples.push(String(enc));
+        if (encryptedSamples.length >= 3) break;
+      }
+    }
+  }
+  if (encryptedSamples.length < 3) {
+    for (const f of rawState?.fuelLogs || []) {
+      const enc = f.encrypted_data || (f.iv && f.payload ? `v1:${f.iv}:${f.payload}` : null);
+      if (enc) {
+        encryptedSamples.push(String(enc));
+        if (encryptedSamples.length >= 3) break;
+      }
+    }
+  }
+  if (encryptedSamples.length < 3) {
+    for (const r of rawState?.recurringTemplates || []) {
+      const enc = r.encrypted_data || (r.iv && r.payload ? `v1:${r.iv}:${r.payload}` : null);
+      if (enc) {
+        encryptedSamples.push(String(enc));
+        if (encryptedSamples.length >= 3) break;
+      }
+    }
+  }
+
+  // If there are encrypted payloads, at least one sample MUST decrypt successfully
+  if (encryptedSamples.length > 0) {
+    let anySucceeded = false;
+    for (const sample of encryptedSamples) {
+      try {
+        await decryptPayload(sample, masterKey, familyId);
+        anySucceeded = true;
+        break;
+      } catch {
+        // try next sample
+      }
+    }
+    if (!anySucceeded) {
+      console.error('[Crypto] Master key failed to decrypt sample ciphertexts. Master key is invalid.');
+      throw new InvalidMasterKeyError();
+    }
+  }
+
   const [transactions, categories, creditCards, recurringTemplates, fuelLogs] = await Promise.all([
     Promise.all((rawState.transactions || []).map((t: any) => decryptTransaction(t, masterKey, familyId))),
     Promise.all((rawState.categories || []).map((c: any) => decryptCategory(c, masterKey, familyId))),

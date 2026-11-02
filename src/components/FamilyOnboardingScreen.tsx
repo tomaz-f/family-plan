@@ -8,22 +8,28 @@ import {
   sanitizeMasterKey,
   setStoredMasterKey,
   setStoredFamilyId,
+  getStoredFamilyId,
+  decryptPayload,
+  encryptPayload,
+  decryptFullState,
+  apiFetch,
 } from '../services/tursoService';
 
 interface FamilyOnboardingScreenProps {
   onJoined: (familyId: string, masterKey: string) => void;
+  initialError?: string | null;
 }
 
 const SUBTITLE_TEXT = 'Gestão financeira familiar com foco em simplicidade e privacidade absoluta';
 
-export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ onJoined }) => {
-  const [mode, setMode] = useState<'initial' | 'join' | 'created'>('initial');
-  const [inputCode, setInputCode] = useState('');
+export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ onJoined, initialError }) => {
+  const [mode, setMode] = useState<'initial' | 'join' | 'created'>(() => (initialError ? 'join' : 'initial'));
+  const [inputCode, setInputCode] = useState(() => (initialError ? getStoredFamilyId() || '' : ''));
   const [inputKey, setInputKey] = useState('');
   const [createdCode, setCreatedCode] = useState('');
   const [createdKey, setCreatedKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(initialError || null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
 
@@ -73,6 +79,22 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
       setStoredMasterKey(generatedMasterKey);
       setStoredFamilyId(result.familyId);
 
+      // Initialize key_check canary on server for Zero-Knowledge validation
+      try {
+        const canaryEncrypted = await encryptPayload(
+          { canary: 'PRUMO_E2EE_VERIFIED', createdAt: new Date().toISOString() },
+          generatedMasterKey,
+          result.familyId
+        );
+        await apiFetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Family-Id': result.familyId },
+          body: JSON.stringify({ keyCheck: canaryEncrypted }),
+        });
+      } catch {
+        // non-blocking
+      }
+
       setCreatedCode(result.familyId);
       setCreatedKey(generatedMasterKey);
       setMode('created');
@@ -103,13 +125,56 @@ export const FamilyOnboardingScreen: React.FC<FamilyOnboardingScreenProps> = ({ 
     setErrorMessage(null);
     try {
       const result = await joinFamily(cleanCode);
-      if (result.valid && result.familyId) {
-        setStoredMasterKey(cleanKey);
-        setStoredFamilyId(result.familyId);
-        onJoined(result.familyId, cleanKey);
-      } else {
+      if (!result.valid || !result.familyId) {
         setErrorMessage(result.error || 'Código de pareamento não encontrado. Verifique os dados digitados.');
+        return;
       }
+
+      // 1. Immediate canary verification
+      if (result.sampleEncrypted) {
+        try {
+          await decryptPayload(result.sampleEncrypted, cleanKey, result.familyId);
+        } catch {
+          setErrorMessage('Chave Mestre de Segurança inválida para este espaço familiar. Verifique os 12 dígitos digitados.');
+          return;
+        }
+      }
+
+      // 2. Comprehensive state verification: verify against full state
+      try {
+        const stateRes = await apiFetch('/api/state', {
+          headers: { 'X-Family-Id': result.familyId },
+        });
+        if (stateRes.ok) {
+          const rawState = await stateRes.json();
+          await decryptFullState(rawState, cleanKey, result.familyId);
+        }
+      } catch {
+        setErrorMessage('Chave Mestre de Segurança inválida para este espaço familiar. Verifique os 12 dígitos digitados.');
+        return;
+      }
+
+      // Master Key is cryptographically verified! Save credentials to device storage
+      setStoredMasterKey(cleanKey);
+      setStoredFamilyId(result.familyId);
+
+      // Save a key_check canary on server if not present yet
+      try {
+        const canaryEncrypted = await encryptPayload(
+          { canary: 'PRUMO_E2EE_VERIFIED', verifiedAt: new Date().toISOString() },
+          cleanKey,
+          result.familyId
+        );
+        await apiFetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Family-Id': result.familyId },
+          body: JSON.stringify({ keyCheck: canaryEncrypted }),
+        });
+      } catch {
+        // non-blocking
+      }
+
+      onJoined(result.familyId, cleanKey);
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao conectar. Verifique sua conexão e tente novamente.');
     } finally {

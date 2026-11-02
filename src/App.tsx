@@ -71,6 +71,7 @@ import {
   clearStoredMasterKey,
   apiFetch,
   decryptFullState,
+  InvalidMasterKeyError,
   encryptTransaction,
   encryptCategory,
   encryptCreditCard,
@@ -168,6 +169,7 @@ function normalizeLegacyInstallmentTransactions(transactions: Transaction[]): {
 export const App: React.FC = () => {
   const [familyId, setFamilyId] = useState<string | null>(() => getStoredFamilyId());
   const [masterKey, setMasterKey] = useState<string | null>(() => getStoredMasterKey());
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
 
   const [state, setState] = useState<AppState>(() => {
     try {
@@ -187,7 +189,15 @@ export const App: React.FC = () => {
           parsed.settings.theme = parsed.settings.theme === 'light' ? 'light' : 'oled';
         }
         if (Array.isArray(parsed?.transactions)) {
-          parsed.transactions = normalizeLegacyInstallmentTransactions(parsed.transactions).transactions;
+          // If any cached transaction is a corrupted placeholder item, purge them
+          if (
+            parsed.transactions.length > 0 &&
+            parsed.transactions.some((tx: any) => tx.description === '🔒 [Dado Cifrado]')
+          ) {
+            parsed.transactions = [];
+          } else {
+            parsed.transactions = normalizeLegacyInstallmentTransactions(parsed.transactions).transactions;
+          }
         }
         if (!parsed.categories || !Array.isArray(parsed.categories) || parsed.categories.length === 0) {
           parsed.categories = DEFAULT_CORE_CATEGORIES;
@@ -340,6 +350,35 @@ export const App: React.FC = () => {
     setState(FALLBACK_STATE);
   }, []);
 
+  const handleDecryptionFailure = useCallback(
+    (err: any) => {
+      if (err instanceof InvalidMasterKeyError || err?.name === 'InvalidMasterKeyError') {
+        console.error('[E2EE] Invalid Master Key detected. Resetting invalid credentials.');
+        const fid = getStoredFamilyId() || familyId;
+        clearStoredMasterKey();
+        clearStoredFamilyId();
+        if (fid) {
+          try {
+            localStorage.removeItem(`${STORAGE_STATE_KEY}_${fid}`);
+            localStorage.removeItem(`${STORAGE_PENDING_TX_KEY}_${fid}`);
+          } catch {}
+        }
+        try {
+          localStorage.removeItem(STORAGE_STATE_KEY);
+        } catch {}
+        setState(FALLBACK_STATE);
+        setMasterKey(null);
+        setFamilyId(null);
+        setAuthErrorMessage(
+          'Chave Mestre de Segurança inválida para este espaço familiar. Verifique os 12 dígitos digitados.'
+        );
+        return true;
+      }
+      return false;
+    },
+    [familyId]
+  );
+
   const syncWithServer = useCallback(async () => {
     if (!familyId) return;
     // Pause background polling while any modal is actively open to preserve user typing focus and state
@@ -396,10 +435,11 @@ export const App: React.FC = () => {
           body: JSON.stringify({ pendingTransactions: repairedPayload }),
         }).catch(() => {});
       }
-    } catch {
+    } catch (err: any) {
+      if (handleDecryptionFailure(err)) return;
       setIsOnlineWithServer(false);
     }
-  }, [familyId, masterKey, saveStateToCache]);
+  }, [familyId, masterKey, saveStateToCache, handleDecryptionFailure]);
 
   useEffect(() => {
     if (isAnyModalOpen) return;
@@ -887,7 +927,8 @@ export const App: React.FC = () => {
         saveStateToCache(updatedState);
       }
       setIsOnlineWithServer(true);
-    } catch {
+    } catch (err: any) {
+      if (handleDecryptionFailure(err)) return;
       setIsOnlineWithServer(false);
       let nextTransactions: Transaction[];
       if (txData.id) {
@@ -1517,7 +1558,8 @@ export const App: React.FC = () => {
         saveStateToCache(data);
       }
       setIsOnlineWithServer(true);
-    } catch {
+    } catch (err: any) {
+      if (handleDecryptionFailure(err)) return;
       setIsOnlineWithServer(false);
     }
   };
@@ -1540,7 +1582,8 @@ export const App: React.FC = () => {
       const data =
         masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
-    } catch {
+    } catch (err: any) {
+      if (handleDecryptionFailure(err)) return;
       const prevCards = state.creditCards || [];
       const newCard: CreditCard = {
         id: cardData.id || `card-${Date.now()}`,
@@ -1572,7 +1615,8 @@ export const App: React.FC = () => {
       const data =
         masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
       saveStateToCache(data);
-    } catch {
+    } catch (err: any) {
+      if (handleDecryptionFailure(err)) return;
       saveStateToCache({
         ...state,
         creditCards: (state.creditCards || []).filter((c) => c.id !== cardId),
@@ -1703,7 +1747,8 @@ export const App: React.FC = () => {
           masterKey && familyId ? await decryptFullState(rawData, masterKey, familyId) : rawData;
         saveStateToCache(data);
       }
-    } catch {
+    } catch (err: any) {
+      if (handleDecryptionFailure(err)) return;
       // Optimistic state is already cached above
     }
   };
@@ -1753,7 +1798,9 @@ export const App: React.FC = () => {
         onJoined={(newId, newKey) => {
           setFamilyId(newId);
           setMasterKey(newKey);
+          setAuthErrorMessage(null);
         }}
+        initialError={authErrorMessage}
       />
     );
   }

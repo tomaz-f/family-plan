@@ -109,18 +109,6 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
-  const prevNewCatIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (newlyCreatedCategoryId && newlyCreatedCategoryId !== prevNewCatIdRef.current) {
-      prevNewCatIdRef.current = newlyCreatedCategoryId;
-      const cat = categories.find((c) => c.id === newlyCreatedCategoryId);
-      if (cat) {
-        setCategoryId(cat.id);
-        setCategoryPickerOpen(false);
-      }
-    }
-  }, [newlyCreatedCategoryId, categories]);
   const [date, setDate] = useState<string>(getTodayDateStr());
   const [notes, setNotes] = useState<string>('');
   const [selectedCardId, setSelectedCardId] = useState<string>('');
@@ -135,6 +123,19 @@ export const CreditCardExpenseModal: React.FC<CreditCardExpenseModalProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [showSeriesEditConfirm, setShowSeriesEditConfirm] = useState<boolean>(false);
   const [showSeriesDeleteConfirm, setShowSeriesDeleteConfirm] = useState<boolean>(false);
+
+  const prevNewCatIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (newlyCreatedCategoryId && newlyCreatedCategoryId !== prevNewCatIdRef.current) {
+      prevNewCatIdRef.current = newlyCreatedCategoryId;
+      const cat = categories.find((c) => c.id === newlyCreatedCategoryId);
+      if (cat) {
+        setCategoryId(cat.id);
+        setCategoryPickerOpen(false);
+      }
+    }
+  }, [newlyCreatedCategoryId, categories]);
 
   // Filter only expense categories
   const expenseCategories = useMemo(

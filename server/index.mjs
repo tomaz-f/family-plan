@@ -9,7 +9,7 @@ import * as db from './db.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
-const PORT = Number(process.env.PORT || 3456);
+const PORT = Number(process.env.PORT || 4173);
 const isDev = process.argv.includes('--dev');
 
 const app = express();
@@ -114,8 +114,12 @@ app.use('/api', (req, res, next) => {
       return res.status(403).json({ error: 'Invalid origin' });
     }
     const sameHost = originUrl.host.toLowerCase() === String(req.headers.host || '').toLowerCase();
-    const viteDevProxy = originUrl.port === '5173' && isAllowedHostname(originUrl.hostname.toLowerCase());
-    if (!sameHost && !viteDevProxy) {
+    const isBothLoopback =
+      isLoopbackRequest(req) &&
+      (originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1' || originUrl.hostname === '::1');
+    const viteDevProxy =
+      (originUrl.port === '5173' || originUrl.port === '4173') && isAllowedHostname(originUrl.hostname.toLowerCase());
+    if (!sameHost && !viteDevProxy && !isBothLoopback) {
       return res.status(403).json({ error: 'Cross-origin request blocked' });
     }
   }
@@ -139,20 +143,36 @@ function sendServerError(res, err) {
 }
 
 // --- 6. Family code resolver ---
+function isLoopbackRequest(req) {
+  const ip = req.ip || req.socket?.remoteAddress || '';
+  const host = parseHostname(req.headers.host);
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === '::ffff:127.0.0.1' ||
+    host === 'localhost' ||
+    host === '127.0.0.1'
+  );
+}
+
 async function resolveFamilyId(req) {
+  if (req.familyId) return req.familyId;
   const rawId = req.headers['x-family-id'] || req.query.familyId || req.body?.familyId;
   const fid = db.sanitizeFamilyCode(rawId);
   if (fid && (await db.verifyFamily(fid))) {
     return fid;
   }
-  // Check if any family exists in Turso
-  const fallback = await db.turso.execute('SELECT family_id FROM families ORDER BY created_at ASC LIMIT 1');
-  if (fallback.rows.length > 0) {
-    return fallback.rows[0].family_id;
+  // Allow local desktop loopback to auto-resolve or auto-seed the primary family
+  if (isLoopbackRequest(req)) {
+    const fallback = await db.turso.execute('SELECT family_id FROM families ORDER BY created_at ASC LIMIT 1');
+    if (fallback.rows.length > 0) {
+      return fallback.rows[0].family_id;
+    }
+    const initial = await db.createFamily();
+    return initial.familyId;
   }
-  // Auto-seed default initial family if empty
-  const initial = await db.createFamily();
-  return initial.familyId;
+  // Over LAN / Network, an explicit verified family code is strictly required
+  return null;
 }
 
 // =========================================================
@@ -195,6 +215,19 @@ app.get('/api/families/:id/verify', async (req, res) => {
 // =========================================================
 // CORE APP DATA ENDPOINTS (SCOPED BY FAMILY_ID)
 // =========================================================
+
+// Authenticate all core data endpoints against a valid family ID
+app.use('/api', async (req, res, next) => {
+  if (req.path.startsWith('/families/')) {
+    return next();
+  }
+  const familyId = await resolveFamilyId(req);
+  if (!familyId) {
+    return res.status(401).json({ error: 'Acesso negado: código de pareamento familiar ausente ou inválido.' });
+  }
+  req.familyId = familyId;
+  next();
+});
 
 // GET full application state for family
 app.get('/api/state', async (req, res) => {
@@ -485,8 +518,10 @@ async function startServer() {
           req.path === '/' ||
           req.path === '/index.html' ||
           req.path === '/sw.js' ||
+          req.path === '/family-plan' ||
           req.path === '/family-plan/' ||
-          req.path.startsWith('/family-plan/sw.js')
+          req.path.startsWith('/family-plan/sw.js') ||
+          req.path.endsWith('.html')
         ) {
           res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
           res.setHeader('Pragma', 'no-cache');

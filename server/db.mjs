@@ -239,6 +239,21 @@ export async function initDb() {
   await ensureColumn('fuel_logs', 'payload', 'TEXT DEFAULT NULL');
   await ensureColumn('settings', 'encrypted_data', 'TEXT DEFAULT NULL');
 
+  // Self-heal: ensure all families referenced in any table exist in the families table
+  const familyTables = ['transactions', 'settings', 'categories', 'credit_cards', 'fuel_logs', 'recurring_templates'];
+  for (const table of familyTables) {
+    try {
+      await turso.execute(`
+        INSERT OR IGNORE INTO families (family_id, created_at)
+        SELECT DISTINCT family_id, datetime('now')
+        FROM ${table}
+        WHERE family_id IS NOT NULL AND family_id != '' AND family_id NOT IN (SELECT family_id FROM families)
+      `);
+    } catch {
+      // ignore
+    }
+  }
+
   console.log('[Turso] Database tables and indexes ready with Zero-Knowledge encryption support.');
 }
 
@@ -249,7 +264,25 @@ export async function verifyFamily(familyId) {
     sql: 'SELECT family_id FROM families WHERE family_id = ?',
     args: [fid],
   });
-  return res.rows.length > 0;
+  if (res.rows.length > 0) return true;
+
+  // Fallback: check other tables and backfill if found
+  for (const table of ['transactions', 'settings', 'categories']) {
+    try {
+      const fallback = await turso.execute({
+        sql: `SELECT 1 FROM ${table} WHERE family_id = ? LIMIT 1`,
+        args: [fid],
+      });
+      if (fallback.rows.length > 0) {
+        await turso.execute({
+          sql: 'INSERT OR IGNORE INTO families (family_id, created_at) VALUES (?, ?)',
+          args: [fid, new Date().toISOString()],
+        });
+        return true;
+      }
+    } catch {}
+  }
+  return false;
 }
 
 export async function createFamily(requestedId = null) {
@@ -303,6 +336,70 @@ export async function seedDefaultCategories(familyId) {
   await turso.batch(catBatch, 'write');
 }
 
+export async function getSampleEncrypted(familyId) {
+  const fid = sanitizeFamilyCode(familyId);
+  if (!fid) return null;
+
+  // 1. Settings key_check canary
+  try {
+    const resKeyCheck = await turso.execute({
+      sql: "SELECT encrypted_data FROM settings WHERE family_id = ? AND key = 'key_check' AND encrypted_data IS NOT NULL LIMIT 1",
+      args: [fid],
+    });
+    if (resKeyCheck.rows.length > 0 && resKeyCheck.rows[0].encrypted_data) {
+      return resKeyCheck.rows[0].encrypted_data;
+    }
+  } catch {}
+
+  // 2. Settings encrypted_settings or other settings
+  try {
+    const resSettings = await turso.execute({
+      sql: "SELECT encrypted_data FROM settings WHERE family_id = ? AND encrypted_data IS NOT NULL LIMIT 1",
+      args: [fid],
+    });
+    if (resSettings.rows.length > 0 && resSettings.rows[0].encrypted_data) {
+      return resSettings.rows[0].encrypted_data;
+    }
+  } catch {}
+
+  // 3. Transactions
+  try {
+    const resTx = await turso.execute({
+      sql: "SELECT encrypted_data FROM transactions WHERE family_id = ? AND encrypted_data IS NOT NULL LIMIT 1",
+      args: [fid],
+    });
+    if (resTx.rows.length > 0 && resTx.rows[0].encrypted_data) {
+      return resTx.rows[0].encrypted_data;
+    }
+  } catch {}
+
+  // 4. Categories
+  try {
+    const resCat = await turso.execute({
+      sql: "SELECT encrypted_data FROM categories WHERE family_id = ? AND encrypted_data IS NOT NULL LIMIT 1",
+      args: [fid],
+    });
+    if (resCat.rows.length > 0 && resCat.rows[0].encrypted_data) {
+      return resCat.rows[0].encrypted_data;
+    }
+  } catch {}
+
+  // 5. Credit cards, fuel logs, recurring templates
+  for (const table of ['credit_cards', 'fuel_logs', 'recurring_templates']) {
+    try {
+      const res = await turso.execute({
+        sql: `SELECT encrypted_data FROM ${table} WHERE family_id = ? AND encrypted_data IS NOT NULL LIMIT 1`,
+        args: [fid],
+      });
+      if (res.rows.length > 0 && res.rows[0].encrypted_data) {
+        return res.rows[0].encrypted_data;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
 export async function joinFamily(familyId) {
   const fid = sanitizeFamilyCode(familyId);
   if (!fid) {
@@ -312,7 +409,8 @@ export async function joinFamily(familyId) {
   if (!exists) {
     return { valid: false, error: 'Código de pareamento não encontrado. Verifique os caracteres.' };
   }
-  return { valid: true, familyId: fid };
+  const sampleEncrypted = await getSampleEncrypted(fid);
+  return { valid: true, familyId: fid, sampleEncrypted };
 }
 
 export async function getSettingsObject(familyId) {
@@ -363,8 +461,9 @@ export async function updateSettings(familyId, body) {
   if (typeof language === 'string' && (language === 'en' || language === 'pt-BR')) {
     await setSetting(familyId, 'language', language);
   }
-  if (typeof theme === 'string' && ['light', 'dark', 'tokyo-night', 'oled'].includes(theme)) {
-    await setSetting(familyId, 'theme', theme);
+  if (typeof theme === 'string') {
+    const normalizedTheme = theme === 'light' ? 'light' : 'oled';
+    await setSetting(familyId, 'theme', normalizedTheme);
   }
   if (typeof initialBalance === 'number' && !Number.isNaN(initialBalance)) {
     await setSetting(familyId, 'initialBalance', initialBalance.toFixed(2));
@@ -374,6 +473,10 @@ export async function updateSettings(familyId, body) {
   }
   if (encrypted_data) {
     await setSetting(familyId, 'encrypted_settings', '1', encrypted_data);
+  }
+  const keyCheck = body.keyCheck || body.key_check;
+  if (typeof keyCheck === 'string' && keyCheck.startsWith('v1:')) {
+    await setSetting(familyId, 'key_check', '1', keyCheck);
   }
 
   return getFullState(familyId);
@@ -598,7 +701,7 @@ export async function saveTransaction(familyId, txData) {
   const cleanPayload = payload || (encrypted_data && encrypted_data.startsWith('v1:') ? encrypted_data.split(':')[2] : (encrypted_data || null));
   const cleanEncrypted = encrypted_data || (cleanIv && cleanPayload ? `v1:${cleanIv}:${cleanPayload}` : cleanPayload);
 
-  await turso.execute({
+  const mainStmt = {
     sql: `INSERT OR REPLACE INTO transactions
      (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -625,7 +728,9 @@ export async function saveTransaction(familyId, txData) {
       cleanEncrypted,
       cleanPayload,
     ],
-  });
+  };
+
+  const batchStatements = [mainStmt];
 
   if (Array.isArray(futureEntries) && futureEntries.length > 0) {
     for (const fTx of futureEntries) {
@@ -636,7 +741,7 @@ export async function saveTransaction(familyId, txData) {
       const fPayload = fTx.payload || (fTx.encrypted_data && fTx.encrypted_data.startsWith('v1:') ? fTx.encrypted_data.split(':')[2] : (fTx.encrypted_data || null));
       const fEncData = fTx.encrypted_data || (fIv && fPayload ? `v1:${fIv}:${fPayload}` : fPayload);
 
-      await turso.execute({
+      batchStatements.push({
         sql: `INSERT OR REPLACE INTO transactions
          (family_id, id, type, status, amount, description, categoryId, date, notes, recurringId, dueDay, installmentCurrent, installmentTotal, cardId, invoiceMonth, purchaseDate, settledInvoiceKey, createdAt, iv, encrypted_data, payload)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -666,6 +771,8 @@ export async function saveTransaction(familyId, txData) {
       });
     }
   }
+
+  await turso.batch(batchStatements, 'write');
 
   return getFullState(familyId);
 }
@@ -721,7 +828,8 @@ export async function updateTransaction(familyId, id, txData) {
     });
   }
 
-  if (Array.isArray(txData.updatedSeriesEntries)) {
+  if (Array.isArray(txData.updatedSeriesEntries) && txData.updatedSeriesEntries.length > 0) {
+    const seriesBatch = [];
     for (const sEntry of txData.updatedSeriesEntries) {
       if (!sEntry || !sEntry.id) continue;
       const sEnc = Boolean(sEntry.encrypted_data || sEntry.payload);
@@ -729,14 +837,14 @@ export async function updateTransaction(familyId, id, txData) {
         const sIv = sEntry.iv || (sEntry.encrypted_data && sEntry.encrypted_data.startsWith('v1:') ? sEntry.encrypted_data.split(':')[1] : null);
         const sPayload = sEntry.payload || (sEntry.encrypted_data && sEntry.encrypted_data.startsWith('v1:') ? sEntry.encrypted_data.split(':')[2] : (sEntry.encrypted_data || null));
         const sEncrypted = sEntry.encrypted_data || (sIv && sPayload ? `v1:${sIv}:${sPayload}` : sPayload);
-        await turso.execute({
+        seriesBatch.push({
           sql: `UPDATE transactions
            SET type = ?, status = ?, date = ?, amount = NULL, description = NULL, categoryId = NULL, notes = NULL, iv = ?, encrypted_data = ?, payload = ?
            WHERE family_id = ? AND id = ?`,
           args: [sEntry.type || 'expense', sEntry.status || 'unpaid', sEntry.date, sIv, sEncrypted, sPayload, familyId, sEntry.id],
         });
       } else {
-        await turso.execute({
+        seriesBatch.push({
           sql: `UPDATE transactions
            SET type = ?, status = ?, amount = ?, description = ?, categoryId = ?, date = ?, notes = ?
            WHERE family_id = ? AND id = ?`,
@@ -753,6 +861,9 @@ export async function updateTransaction(familyId, id, txData) {
           ],
         });
       }
+    }
+    if (seriesBatch.length > 0) {
+      await turso.batch(seriesBatch, 'write');
     }
   }
 
@@ -786,12 +897,15 @@ export async function updateTransactionStatus(familyId, id, status) {
 
 export async function deleteTransaction(familyId, id, _scope = 'single', deleteIds = null) {
   const ids = Array.isArray(deleteIds) && deleteIds.length > 0 ? deleteIds : [id];
-  for (const targetId of ids) {
-    if (!targetId) continue;
-    await turso.execute({
+  const deleteBatch = ids
+    .filter(Boolean)
+    .map((targetId) => ({
       sql: 'DELETE FROM transactions WHERE family_id = ? AND id = ?',
       args: [familyId, targetId],
-    });
+    }));
+
+  if (deleteBatch.length > 0) {
+    await turso.batch(deleteBatch, 'write');
   }
   return getFullState(familyId);
 }
@@ -858,14 +972,19 @@ export async function updateCreditCard(familyId, id, cardData) {
 }
 
 export async function deleteCreditCard(familyId, id) {
-  await turso.execute({
-    sql: 'DELETE FROM credit_cards WHERE family_id = ? AND id = ?',
-    args: [familyId, id],
-  });
-  await turso.execute({
-    sql: 'DELETE FROM transactions WHERE family_id = ? AND cardId = ?',
-    args: [familyId, id],
-  });
+  await turso.batch(
+    [
+      {
+        sql: 'UPDATE transactions SET cardId = NULL WHERE family_id = ? AND cardId = ?',
+        args: [familyId, id],
+      },
+      {
+        sql: 'DELETE FROM credit_cards WHERE family_id = ? AND id = ?',
+        args: [familyId, id],
+      },
+    ],
+    'write'
+  );
   return getFullState(familyId);
 }
 

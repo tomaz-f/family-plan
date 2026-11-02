@@ -110,6 +110,20 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [amount, setAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
+  const [date, setDate] = useState<string>(getTodayDateStr());
+  const [notes, setNotes] = useState<string>('');
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+
+  // Recurrence / Installment state
+  const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceMode>('single');
+  const [dueDay, setDueDay] = useState<string>('10');
+  const [dueDayManuallyEdited, setDueDayManuallyEdited] = useState<boolean>(false);
+  const [installmentCurrent, setInstallmentCurrent] = useState<string>('1');
+  const [installmentTotal, setInstallmentTotal] = useState<string>('12');
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [showSeriesEditConfirm, setShowSeriesEditConfirm] = useState<boolean>(false);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState<boolean>(false);
+
   const prevNewCatIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -125,19 +139,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
     }
   }, [newlyCreatedCategoryId, categories, type, editingTransaction]);
-  const [date, setDate] = useState<string>(getTodayDateStr());
-  const [notes, setNotes] = useState<string>('');
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-
-  // Recurrence / Installment state
-  const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceMode>('single');
-  const [dueDay, setDueDay] = useState<string>('10');
-  const [dueDayManuallyEdited, setDueDayManuallyEdited] = useState<boolean>(false);
-  const [installmentCurrent, setInstallmentCurrent] = useState<string>('1');
-  const [installmentTotal, setInstallmentTotal] = useState<string>('12');
-  const [submitting, setSubmitting] = useState<boolean>(false);
-  const [showSeriesEditConfirm, setShowSeriesEditConfirm] = useState<boolean>(false);
-  const [categoryPickerOpen, setCategoryPickerOpen] = useState<boolean>(false);
 
   const filteredCategories = categories.filter((c) => c.type === type);
   const selectedCategory = useMemo(

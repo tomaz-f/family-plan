@@ -3,6 +3,7 @@ import {
   directCreateFamily,
   directGetFullState,
   directVerifyFamily,
+  directGetSampleEncrypted,
   directSaveTransaction,
   directUpdateTransaction,
   directUpdateTransactionStatus,
@@ -40,6 +41,7 @@ export {
   encryptRecurringTemplate,
   decryptRecurringTemplate,
   decryptFullState,
+  InvalidMasterKeyError,
 } from './cryptoService';
 
 const STORAGE_FAMILY_KEY = 'familyplan_family_id';
@@ -104,22 +106,14 @@ export function generateFamilyCode(): string {
   return `FP-${code}`;
 }
 
-// Turso DB Credentials read from Vite environment (with fallback to multiple aliases)
-const clientUrl =
-  (import.meta as any).env?.VITE_TURSO_DB_URL ||
-  (import.meta as any).env?.turso_db_url ||
-  (import.meta as any).env?.TURSO_DB_URL ||
-  '';
-const clientAuthToken =
-  (import.meta as any).env?.VITE_TURSO_TOKEN ||
-  (import.meta as any).env?.turso_token ||
-  (import.meta as any).env?.TURSO_TOKEN ||
-  '';
+// Turso DB Credentials read safely from explicit VITE_ env or user-stored config
+const clientUrl = (import.meta as any).env?.VITE_TURSO_DB_URL || '';
+const clientAuthToken = (import.meta as any).env?.VITE_TURSO_TOKEN || '';
 
-export const directWebTurso = clientUrl
+export const directWebTurso = clientUrl && clientAuthToken
   ? createClient({
       url: clientUrl,
-      authToken: clientAuthToken || undefined,
+      authToken: clientAuthToken,
     })
   : null;
 
@@ -365,9 +359,14 @@ export async function createFamily(requestedId?: string): Promise<{ familyId: st
 }
 
 /**
- * Validates and joins an existing Family code
+ * Validates and joins an existing Family code without saving to storage until master key is verified
  */
-export async function joinFamily(familyId: string): Promise<{ valid: boolean; familyId?: string; error?: string }> {
+export async function joinFamily(familyId: string): Promise<{
+  valid: boolean;
+  familyId?: string;
+  sampleEncrypted?: string | null;
+  error?: string;
+}> {
   const sanitized = sanitizeFamilyCode(familyId);
   if (!sanitized) {
     return { valid: false, error: 'O código de pareamento deve conter o formato FP-XXXXXX.' };
@@ -376,8 +375,8 @@ export async function joinFamily(familyId: string): Promise<{ valid: boolean; fa
   if (isStaticHosting() && directWebTurso) {
     const valid = await directVerifyFamily(directWebTurso, sanitized);
     if (valid) {
-      setStoredFamilyId(sanitized);
-      return { valid: true, familyId: sanitized };
+      const sampleEncrypted = await directGetSampleEncrypted(directWebTurso, sanitized);
+      return { valid: true, familyId: sanitized, sampleEncrypted };
     }
     return { valid: false, error: 'Código de pareamento não encontrado. Verifique os caracteres digitados.' };
   }
@@ -391,17 +390,14 @@ export async function joinFamily(familyId: string): Promise<{ valid: boolean; fa
 
     if (res.ok) {
       const data = await res.json();
-      if (data.valid && data.familyId) {
-        setStoredFamilyId(data.familyId);
-      }
       return data;
     }
 
     if (directWebTurso) {
       const valid = await directVerifyFamily(directWebTurso, sanitized);
       if (valid) {
-        setStoredFamilyId(sanitized);
-        return { valid: true, familyId: sanitized };
+        const sampleEncrypted = await directGetSampleEncrypted(directWebTurso, sanitized);
+        return { valid: true, familyId: sanitized, sampleEncrypted };
       }
     }
 
@@ -410,12 +406,12 @@ export async function joinFamily(familyId: string): Promise<{ valid: boolean; fa
       valid: false,
       error: data.error || 'Código de pareamento não encontrado. Verifique os caracteres.',
     };
-  } catch (err) {
+  } catch {
     if (directWebTurso) {
       const valid = await directVerifyFamily(directWebTurso, sanitized);
       if (valid) {
-        setStoredFamilyId(sanitized);
-        return { valid: true, familyId: sanitized };
+        const sampleEncrypted = await directGetSampleEncrypted(directWebTurso, sanitized);
+        return { valid: true, familyId: sanitized, sampleEncrypted };
       }
     }
     return {
