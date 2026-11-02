@@ -1,0 +1,23 @@
+# Adapt to Prumo. Never index secrets, database files, or generated content.
+.git/
+node_modules/
+dist/
+build/
+coverage/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+graphify-out/
+.agents/
+.claude/
+.codex/
+.env
+.env.*
+*.log
+*.tsbuildinfo
+package-lock.json
+*.pdf
+familyplan-backup-*.json
