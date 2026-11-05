@@ -13,6 +13,7 @@ import {
   RotateCcw,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowUpDown,
   Eye,
   EyeOff,
   ChevronDown,
@@ -54,6 +55,71 @@ const formatNumericDate = (dateStr: string): string => {
     year: 'numeric',
   });
 };
+
+const parseTxDate = (dateStr: string): Date | null => {
+  if (!dateStr) return null;
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const y = Number(parts[0]);
+    const m = Number(parts[1]) - 1;
+    const d = Number(parts[2]);
+    const parsed = new Date(y, m, d);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  const parsed = new Date(dateStr);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+export type FeedViewMode = 'timeline' | 'date-desc' | 'date-asc';
+
+const getDayGroupLabel = (
+  dateStr: string,
+  language: AppLanguage = 'pt-BR',
+  mode: FeedViewMode = 'timeline'
+): string => {
+  const targetDate = parseTxDate(dateStr);
+  if (!targetDate) return dateStr;
+
+  // Only "timeline" view mode uses contextual relative labels
+  if (mode === 'timeline') {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    const diffTime = today.getTime() - target.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return language === 'pt-BR' ? 'Hoje' : 'Today';
+    }
+    if (diffDays === 1) {
+      return language === 'pt-BR' ? 'Ontem' : 'Yesterday';
+    }
+    if (diffDays === -1) {
+      return language === 'pt-BR' ? 'Amanhã' : 'Tomorrow';
+    }
+  }
+
+  // Pure formal calendar dates for 'date-desc' and 'date-asc' (or older dates in timeline)
+  if (language === 'pt-BR') {
+    const weekday = targetDate.toLocaleDateString('pt-BR', { weekday: 'short' });
+    const cleanWeekday = weekday.replace('.', '').trim();
+    const capitalizedWeekday = cleanWeekday.charAt(0).toUpperCase() + cleanWeekday.slice(1);
+    const day = targetDate.toLocaleDateString('pt-BR', { day: '2-digit' });
+    const month = targetDate.toLocaleDateString('pt-BR', { month: 'long' });
+    return `${capitalizedWeekday}, ${day} de ${month}`;
+  } else {
+    const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
+    const dayAndMonth = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${weekday}, ${dayAndMonth}`;
+  }
+};
+
+interface DayGroup {
+  date: string;
+  label: string;
+  transactions: Transaction[];
+  dailyNet: number;
+}
 
 interface SwipeableTransactionRowProps {
   tx: Transaction;
@@ -477,6 +543,65 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'>('date-desc');
+  const [feedViewMode, setFeedViewMode] = useState<FeedViewMode>(() => {
+    try {
+      const saved = localStorage.getItem('prumo_feed_view_mode');
+      if (saved === 'timeline' || saved === 'date-desc' || saved === 'date-asc') return saved;
+      const legacy = localStorage.getItem('prumo_feed_sort_order');
+      if (legacy === 'asc') return 'date-asc';
+      if (legacy === 'desc') return 'timeline';
+    } catch {}
+    return 'timeline';
+  });
+
+  const [isOrderMenuOpen, setIsOrderMenuOpen] = useState<boolean>(false);
+  const orderMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const viewModeOptions: { id: FeedViewMode; label: string }[] = useMemo(
+    () => [
+      {
+        id: 'timeline',
+        label: language === 'pt-BR' ? 'Linha do Tempo (Hoje)' : 'Timeline (Today)',
+      },
+      {
+        id: 'date-desc',
+        label: language === 'pt-BR' ? 'Mais Recentes (Data ↓)' : 'Latest (Date ↓)',
+      },
+      {
+        id: 'date-asc',
+        label: language === 'pt-BR' ? 'Mais Antigos (Data ↑)' : 'Oldest (Date ↑)',
+      },
+    ],
+    [language]
+  );
+
+  useEffect(() => {
+    if (!isOrderMenuOpen) return;
+
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (orderMenuRef.current && !orderMenuRef.current.contains(target)) {
+        setIsOrderMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOrderMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOrderMenuOpen]);
+
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
   const [openSwipeRowId, setOpenSwipeRowId] = useState<string | null>(null);
@@ -576,7 +701,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     setVisibleCount(PAGE_SIZE);
     setOpenSwipeRowId(null);
     setIsDropdownOpen(false);
-  }, [selectedMonth, scope, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy]);
+    setIsOrderMenuOpen(false);
+  }, [selectedMonth, scope, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy, feedViewMode]);
 
   // Close open swipe row when tapping outside of it
   useEffect(() => {
@@ -650,12 +776,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         return true;
       })
       .sort((a, b) => {
-        if (sortBy === 'date-desc') return b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt);
-        if (sortBy === 'date-asc') return a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt);
         if (sortBy === 'amount-desc') return b.amount - a.amount;
-        return a.amount - b.amount;
+        if (sortBy === 'amount-asc') return a.amount - b.amount;
+        if (feedViewMode === 'date-asc' || sortBy === 'date-asc') {
+          return a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt);
+        }
+        return b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt);
       });
-  }, [transactions, scope, selectedMonth, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy, categoryMap, language]);
+  }, [transactions, scope, selectedMonth, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy, feedViewMode, categoryMap, language]);
 
   const summary = useMemo(() => {
     let income = 0;
@@ -686,6 +814,37 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     () => filteredTransactions.slice(0, visibleCount),
     [filteredTransactions, visibleCount]
   );
+
+  const groupedTransactions = useMemo(() => {
+    const groups: DayGroup[] = [];
+    const map = new Map<string, DayGroup>();
+
+    for (const tx of visibleTransactions) {
+      const dateKey = tx.date;
+      let group = map.get(dateKey);
+      if (!group) {
+        group = {
+          date: dateKey,
+          label: getDayGroupLabel(dateKey, language, feedViewMode),
+          transactions: [],
+          dailyNet: 0,
+        };
+        map.set(dateKey, group);
+        groups.push(group);
+      }
+      group.transactions.push(tx);
+      if (tx.status !== 'unpaid') {
+        if (tx.type === 'income') {
+          group.dailyNet += tx.amount;
+        } else {
+          group.dailyNet -= tx.amount;
+        }
+      }
+    }
+
+    return groups;
+  }, [visibleTransactions, language, feedViewMode]);
+
   const hasMore = visibleCount < filteredTransactions.length;
 
   // Infinite scroll observer
@@ -990,17 +1149,85 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       {/* Fallback legacy balance card if provided without monthStats */}
       {balanceCard && !monthStats && balanceCard}
 
-      {/* 3. CLEAN TRANSACTIONS LIST: Visual Neutro e Elegante */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+      {/* 2. FEED HEADER BAR: Outside Balance Card (Section Title + Count + Sort Dropdown Popover) */}
+      <div className="flex items-center justify-between px-1 pt-1 pb-0.5">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            {language === 'pt-BR' ? 'Lançamentos' : 'Transactions'}
+          </h2>
+          {filteredTransactions.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 dark:bg-[#161B22] dark:text-slate-400 border border-slate-200/80 dark:border-[#21262D]">
+              {filteredTransactions.length}
+            </span>
+          )}
+        </div>
+
+        {/* Compact "Ordenar" Dropdown Popover */}
+        <div className="relative inline-block text-left" ref={orderMenuRef}>
+          <button
+            type="button"
+            onClick={() => setIsOrderMenuOpen((prev) => !prev)}
+            aria-expanded={isOrderMenuOpen}
+            aria-haspopup="true"
+            className="h-8 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition-colors active:scale-95 bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200 dark:bg-[#161B22] dark:text-slate-200 dark:border-[#21262D] dark:hover:bg-[#21262D] shadow-2xs select-none"
+            title={language === 'pt-BR' ? 'Opções de ordenação e exibição' : 'Sorting and view options'}
+          >
+            <ArrowUpDown size={14} className="shrink-0 text-slate-500 dark:text-slate-400" />
+            <span>{language === 'pt-BR' ? 'Ordenar' : 'Sort'}</span>
+            <ChevronDown
+              size={12}
+              className={`shrink-0 text-slate-400 transition-transform duration-200 ${
+                isOrderMenuOpen ? 'rotate-180' : 'rotate-0'
+              }`}
+            />
+          </button>
+
+          {isOrderMenuOpen && (
+            <div
+              className="absolute right-0 mt-1.5 min-w-[210px] p-1.5 rounded-xl shadow-2xl z-50 flex flex-col gap-1 bg-white border border-slate-200 text-slate-800 shadow-slate-200/60 dark:bg-[#161B22] dark:border-[#21262D] dark:text-slate-100 dark:shadow-black/80 animate-in fade-in"
+              role="menu"
+            >
+              {viewModeOptions.map((opt) => {
+                const isActive = feedViewMode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setFeedViewMode(opt.id);
+                      try {
+                        localStorage.setItem('prumo_feed_view_mode', opt.id);
+                      } catch {}
+                      setIsOrderMenuOpen(false);
+                    }}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors flex items-center justify-between text-left ${
+                      isActive
+                        ? 'bg-emerald-500/10 text-[#10B981] font-semibold dark:bg-emerald-500/15'
+                        : 'hover:bg-slate-100 dark:hover:bg-[#21262D]'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {isActive && <Check size={14} className="text-[#10B981] shrink-0 ml-2" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. CLEAN TRANSACTIONS LIST: Grouped by Day */}
+      <div className="bg-white dark:bg-[#0D1117] rounded-2xl border border-slate-200/80 dark:border-[#21262D] shadow-2xs overflow-hidden">
         {filteredTransactions.length === 0 ? (
           <div className="py-14 text-center space-y-2 px-4">
-            <p className="text-xs sm:text-sm font-semibold text-slate-600">{t.noMatchingEntries}</p>
-            <p className="text-[11px] sm:text-xs text-slate-400">{t.noMatchingDesc}</p>
+            <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">{t.noMatchingEntries}</p>
+            <p className="text-[11px] sm:text-xs text-slate-400 dark:text-slate-500">{t.noMatchingDesc}</p>
             {activeFilterCount > 0 && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 mt-2"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#21262D] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#161B22] mt-2"
               >
                 <RotateCcw size={12} />
                 <span>{t.clearFiltersBtn}</span>
@@ -1009,46 +1236,86 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
         ) : (
           <>
-            <div className="divide-y divide-slate-100">
-              {visibleTransactions.map((tx) => {
-                const cat = categoryMap.get(tx.categoryId);
-                const cardObj = tx.cardId
-                  ? creditCards.find((c) => c.id === tx.cardId)
-                  : tx.settledInvoiceKey
-                  ? creditCards.find((c) => tx.settledInvoiceKey?.startsWith(c.id))
-                  : creditCards.find((c) => tx.description.toLowerCase().includes(c.name.toLowerCase())) || null;
+            <div>
+              {groupedTransactions.map((group, groupIdx) => (
+                <div key={group.date} className="day-group-block">
+                  {/* Clean lightweight sub-header above each daily group */}
+                  <div
+                    className={`flex items-center justify-between py-2 px-3.5 text-xs font-semibold tracking-wide text-slate-500 dark:text-slate-400 bg-slate-50/80 dark:bg-[#161B22]/60 select-none ${
+                      groupIdx > 0 ? 'border-t border-slate-100 dark:border-[#21262D]/60' : ''
+                    } border-b border-slate-100 dark:border-[#21262D]/60`}
+                  >
+                    <span className="capitalize">{group.label}</span>
+                    <div className="flex items-center gap-2 text-[11px] font-normal">
+                      <span className="text-slate-400 dark:text-slate-500">
+                        {group.transactions.length}{' '}
+                        {group.transactions.length === 1
+                          ? language === 'pt-BR'
+                            ? 'lançamento'
+                            : 'entry'
+                          : language === 'pt-BR'
+                          ? 'lançamentos'
+                          : 'entries'}
+                      </span>
+                      {group.dailyNet !== 0 && (
+                        <span
+                          className={`font-semibold ${
+                            group.dailyNet > 0
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {group.dailyNet > 0 ? '+' : '-'}
+                          {formatCurrency(Math.abs(group.dailyNet), currency)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                return (
-                  <SwipeableTransactionRow
-                    key={tx.id}
-                    tx={tx}
-                    cat={cat}
-                    cardObj={cardObj}
-                    currency={currency}
-                    language={language}
-                    isOpen={openSwipeRowId === tx.id}
-                    anyRowOpen={openSwipeRowId !== null}
-                    onSetOpenRow={setOpenSwipeRowId}
-                    onOpenEditModal={onOpenEditModal}
-                    onDeleteTransaction={onDeleteTransaction}
-                    onToggleTransactionStatus={onToggleTransactionStatus}
-                  />
-                );
-              })}
+                  {/* Grouped Transactions List */}
+                  <div className="divide-y divide-slate-100 dark:divide-[#21262D]">
+                    {group.transactions.map((tx) => {
+                      const cat = categoryMap.get(tx.categoryId);
+                      const cardObj = tx.cardId
+                        ? creditCards.find((c) => c.id === tx.cardId)
+                        : tx.settledInvoiceKey
+                        ? creditCards.find((c) => tx.settledInvoiceKey?.startsWith(c.id))
+                        : creditCards.find((c) => tx.description.toLowerCase().includes(c.name.toLowerCase())) || null;
+
+                      return (
+                        <SwipeableTransactionRow
+                          key={tx.id}
+                          tx={tx}
+                          cat={cat}
+                          cardObj={cardObj}
+                          currency={currency}
+                          language={language}
+                          isOpen={openSwipeRowId === tx.id}
+                          anyRowOpen={openSwipeRowId !== null}
+                          onSetOpenRow={setOpenSwipeRowId}
+                          onOpenEditModal={onOpenEditModal}
+                          onDeleteTransaction={onDeleteTransaction}
+                          onToggleTransactionStatus={onToggleTransactionStatus}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Infinite scroll sentinel & pagination footer */}
             {hasMore && (
               <div
                 ref={loadMoreRef}
-                className="p-3 border-t border-slate-100 flex items-center justify-center"
+                className="p-3 border-t border-slate-100 dark:border-[#21262D] flex items-center justify-center"
               >
                 <button
                   type="button"
                   onClick={() =>
                     setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredTransactions.length))
                   }
-                  className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-colors"
+                  className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#161B22] dark:hover:bg-[#21262D] text-slate-600 dark:text-slate-300 text-xs font-semibold transition-colors"
                 >
                   {language === 'pt-BR'
                     ? `Carregar mais (${visibleCount} de ${filteredTransactions.length})`
