@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import {
   AppLanguage,
+  AppTheme,
   Category,
   CreditCard,
   Transaction,
@@ -26,7 +27,7 @@ import {
   TransactionType,
 } from '../types';
 import { CategoryIcon } from './CategoryIcon';
-import { BankIcon, AppIcon } from './icons';
+import { BankIcon, AppIcon, resolveBankInfo } from './icons';
 import {
   computeCardFirstInvoiceMonth,
   formatCurrency,
@@ -54,6 +55,7 @@ interface TransactionModalProps {
   creditCards?: CreditCard[];
   currency: string;
   language: AppLanguage;
+  theme?: AppTheme;
   onClose: () => void;
   onDelete?: (tx: Transaction) => void;
   onManageCategories?: () => void;
@@ -98,6 +100,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   creditCards = [],
   currency,
   language,
+  theme,
   onClose,
   onDelete,
   onSave,
@@ -105,6 +108,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   newlyCreatedCategoryId,
 }) => {
   const t = TRANSLATIONS[language];
+  const isOled =
+    theme === 'oled' ||
+    (!theme &&
+      typeof document !== 'undefined' &&
+      document.documentElement.getAttribute('data-theme') === 'oled');
+
+  const getYesterdayDateStr = (): string => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const [type, setType] = useState<TransactionType>(initialType);
   const [status, setStatus] = useState<TransactionStatus>('paid');
   const [amount, setAmount] = useState<string>('');
@@ -123,7 +138,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [showSeriesEditConfirm, setShowSeriesEditConfirm] = useState<boolean>(false);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState<boolean>(false);
+  const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState<boolean>(false);
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState<boolean>(false);
 
+  const amountInputRef = useRef<HTMLInputElement>(null);
   const prevNewCatIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -150,6 +168,29 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     () => creditCards.find((c) => c.id === effectiveCardId) || null,
     [creditCards, effectiveCardId]
   );
+
+  // Compute real-time available limits for all credit cards
+  const cardAvailableLimits = useMemo(() => {
+    const limits: Record<string, number> = {};
+    creditCards.forEach((card) => {
+      const unpaidCardTxs = allTransactions.filter(
+        (tx) => tx.cardId === card.id && tx.status !== 'paid'
+      );
+      const usedLimit = Math.max(
+        0,
+        Number(
+          unpaidCardTxs
+            .reduce((sum, tx) => {
+              const amt = Number(tx.amount || 0);
+              return sum + (tx.type === 'income' ? -amt : amt);
+            }, 0)
+            .toFixed(2)
+        )
+      );
+      limits[card.id] = Math.max(0, Number((card.totalLimit - usedLimit).toFixed(2)));
+    });
+    return limits;
+  }, [creditCards, allTransactions]);
 
   // Track modal visibility transitions to prevent background polling from resetting user input
   const prevIsOpenRef = useRef<boolean>(false);
@@ -201,15 +242,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         setRecurrenceMode('installment');
         setInstallmentCurrent(String(editingTransaction.installmentCurrent || 1));
         setInstallmentTotal(String(editingTransaction.installmentTotal));
+        setIsMoreOptionsOpen(true);
       } else if (editingTransaction.recurringId) {
         setRecurrenceMode('recurring');
         setInstallmentCurrent('1');
         setInstallmentTotal('12');
+        setIsMoreOptionsOpen(true);
       } else {
         setRecurrenceMode('single');
         setInstallmentCurrent('1');
         setInstallmentTotal('12');
+        setIsMoreOptionsOpen(Boolean(editingTransaction.notes));
       }
+      setIsAccountDropdownOpen(false);
     } else {
       const today = getTodayDateStr();
       setType(initialType);
@@ -223,6 +268,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setDate(today);
       setNotes('');
       setRecurrenceMode('single');
+      setIsMoreOptionsOpen(false);
+      setIsAccountDropdownOpen(false);
       const cardObj = initCard ? creditCards.find((c) => c.id === initCard) : null;
       setDueDay(String(cardObj ? cardObj.dueDay : Number(today.split('-')[2]) || 10));
       setDueDayManuallyEdited(false);
@@ -400,6 +447,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   };
 
+  const handleAmountChange = (raw: string) => {
+    let cleaned = raw.replace(/[^\d.,]/g, '');
+    const commaCount = (cleaned.match(/,/g) || []).length;
+    const dotCount = (cleaned.match(/\./g) || []).length;
+    if (commaCount + dotCount > 1) {
+      const firstSepIdx = cleaned.search(/[,.]/);
+      cleaned =
+        cleaned.slice(0, firstSepIdx + 1) +
+        cleaned.slice(firstSepIdx + 1).replace(/[,.]/g, '');
+    }
+    setAmount(cleaned);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsedAmount = parseFloat(amount.replace(',', '.'));
@@ -431,7 +491,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 animate-fadeIn"
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm bg-black/60 animate-fadeIn"
         onMouseDown={(e) => {
           backdropMouseDownTargetRef.current = e.target;
         }}
@@ -442,473 +502,677 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         }}
       >
         <div
-          className="tx-compact-modal bg-white w-[92%] max-w-[420px] mx-auto rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col"
+          className={`w-full max-w-md max-h-[88dvh] sm:max-h-[90vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl transition-all ${
+            isOled
+              ? 'bg-[#0D1117] border border-[#21262D] text-slate-100 shadow-black/90'
+              : 'bg-white border border-slate-200 text-slate-900 shadow-xl'
+          }`}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-        {/* Compact Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
-          <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-            {editingTransaction
-              ? type === 'income'
-                ? language === 'pt-BR'
-                  ? 'Editar Entrada'
-                  : 'Edit Income'
+          {/* Compact Header */}
+          <div className={`flex items-center justify-between px-5 py-3.5 border-b shrink-0 ${
+            isOled ? 'border-[#21262D]' : 'border-slate-100'
+          }`}>
+            <h2 className={`text-sm sm:text-base font-bold tracking-tight ${
+              isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+            }`}>
+              {editingTransaction
+                ? type === 'income'
+                  ? language === 'pt-BR'
+                    ? 'Editar Entrada'
+                    : 'Edit Income'
+                  : language === 'pt-BR'
+                  ? 'Editar Despesa'
+                  : 'Edit Expense'
                 : language === 'pt-BR'
-                ? 'Editar Despesa'
-                : 'Edit Expense'
-              : type === 'income'
-              ? language === 'pt-BR'
-                ? 'Nova Entrada'
-                : 'New Income'
-              : language === 'pt-BR'
-              ? 'Nova Despesa'
-              : 'New Expense'}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            aria-label={t.cancelBtn}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto no-scrollbar">
-          {/* Compact Segmented Type Toggle */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
+                ? 'Novo Lançamento'
+                : 'New Transaction'}
+            </h2>
             <button
               type="button"
-              onClick={() => setType('expense')}
-              className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-                type === 'expense'
-                  ? 'bg-[#EF4444] text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900'
+              onClick={onClose}
+              className={`p-1.5 rounded-full transition-colors ${
+                isOled
+                  ? 'text-slate-400 hover:text-white hover:bg-[#161B22]'
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
               }`}
+              aria-label={t.cancelBtn}
             >
-              <ArrowDownRight size={14} strokeWidth={2.5} />
-              <span>{language === 'pt-BR' ? 'Despesa' : 'Expense'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setType('income')}
-              className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-                type === 'income'
-                  ? 'bg-[#10B981] text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <ArrowUpRight size={14} strokeWidth={2.5} />
-              <span>{language === 'pt-BR' ? 'Entrada' : 'Income'}</span>
+              <X size={18} />
             </button>
           </div>
 
-          {/* Prominent Amount Input with R$ Prefix */}
-          <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-              {type === 'expense' && (recurrenceMode === 'installment' || selectedCard)
-                ? language === 'pt-BR'
-                  ? 'Valor Total da Compra'
-                  : 'Total Purchase Amount'
-                : language === 'pt-BR'
-                ? 'Valor'
-                : 'Amount'}
-            </label>
-            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 focus-within:border-[#6E5440] transition-all">
-              <span
-                className={`text-lg sm:text-xl font-bold select-none shrink-0 ${
-                  type === 'income' ? 'text-[#10B981]' : 'text-[#EF4444]'
-                }`}
-              >
-                {currencySymbol}
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required
-                autoFocus
-                placeholder="0,00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className={`tx-amount-input w-full text-2xl sm:text-3xl font-bold focus:outline-none p-0 leading-none ${
-                  type === 'income' ? 'tx-amount-input-income' : 'tx-amount-input-expense'
-                }`}
-              />
-            </div>
-            {recurrenceMode === 'installment' && (
-              <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
-                <Layers size={12} className="text-[#D0B595] shrink-0" />
-                <span className="truncate">
-                  {language === 'pt-BR'
-                    ? `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} em ${installmentBreakdown.count}x de ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`
-                    : `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} in ${installmentBreakdown.count}x of ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`}
-                  {installmentBreakdown.remainderCents > 0 && installmentBreakdown.count > 1
-                    ? ` (1ª: ${formatCurrency(installmentBreakdown.firstInstallmentAmount, currency)})`
-                    : ''}
-                </span>
+          <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 no-scrollbar">
+              {/* Type Switcher */}
+              <div className={`grid grid-cols-2 gap-1 p-1 rounded-2xl border ${
+                isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-slate-100 border-slate-200/80'
+              }`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType('expense');
+                    if (!selectedCardId && initialCardId) {
+                      setSelectedCardId(initialCardId);
+                    }
+                  }}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
+                    type === 'expense'
+                      ? 'bg-[#EF4444] text-white shadow-xs'
+                      : isOled
+                      ? 'text-slate-400 hover:text-slate-200'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <ArrowDownRight size={14} strokeWidth={2.5} />
+                  <span>{language === 'pt-BR' ? 'Despesa' : 'Expense'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType('income');
+                    setSelectedCardId(null);
+                    setIsAccountDropdownOpen(false);
+                  }}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
+                    type === 'income'
+                      ? 'bg-[#10B981] text-white shadow-xs'
+                      : isOled
+                      ? 'text-slate-400 hover:text-slate-200'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <ArrowUpRight size={14} strokeWidth={2.5} />
+                  <span>{language === 'pt-BR' ? 'Entrada' : 'Income'}</span>
+                </button>
               </div>
-            )}
-          </div>
 
-          {/* Side-by-Side Description & Date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                {language === 'pt-BR' ? 'Descrição' : 'Description'}
-              </label>
-              <input
-                type="text"
-                required
-                placeholder={type === 'income' ? t.incomeDescPlaceholder : t.expenseDescPlaceholder}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                {language === 'pt-BR' ? 'Data' : 'Date'}
-              </label>
-              <input
-                type="date"
-                required
-                value={date}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="w-full h-11 px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none transition-colors"
-              />
-            </div>
-          </div>
-
-          {/* Category Picker Trigger (Option B: Compact Button + BottomSheet) */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {language === 'pt-BR' ? 'Categoria' : 'Category'}
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setCategoryPickerOpen(false);
-                  onManageCategories?.();
-                }}
-                className="text-xs font-semibold text-[#6E5440] hover:text-[#7E624B] active:scale-95 transition-colors py-1 px-1.5 min-h-[36px] flex items-center gap-1"
+              {/* Unified Contiguous Monetary Value Input */}
+              <div
+                className="relative flex flex-col items-center justify-center my-3 sm:my-4 cursor-text"
+                onClick={() => amountInputRef.current?.focus()}
               >
-                <Tag size={13} />
-                <span>{language === 'pt-BR' ? 'Gerenciar' : 'Manage'}</span>
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setCategoryPickerOpen(true)}
-              className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between text-slate-900 transition-colors active:scale-[0.99] hover:bg-slate-100"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <CategoryIcon
-                  icon={selectedCategory?.icon || 'Tag'}
-                  color={selectedCategory?.color || '#94A3B8'}
-                  size={18}
-                  badgeSize="sm"
+                {/* Contiguous Visual Display */}
+                <div className="flex items-baseline justify-center select-none pointer-events-none">
+                  <span
+                    className={`text-2xl sm:text-3xl font-bold opacity-60 mr-1.5 ${
+                      isOled ? 'text-[#D0B595]' : 'text-[#6E5440]'
+                    }`}
+                  >
+                    {currencySymbol}
+                  </span>
+                  <span
+                    className={`text-4xl sm:text-5xl font-black tracking-tight ${
+                      isOled ? 'text-slate-50' : 'text-slate-900'
+                    }`}
+                  >
+                    {amount ? amount.replace('.', ',') : '0,00'}
+                  </span>
+                </div>
+
+                {/* Invisible Overlay Input Capturing Focus & Mobile Numpad */}
+                <input
+                  ref={amountInputRef}
+                  type="text"
+                  inputMode="decimal"
+                  autoFocus={!editingTransaction}
+                  value={amount}
+                  onChange={(e) => handleAmountChange(e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-text w-full h-full text-center z-10"
+                  aria-label={language === 'pt-BR' ? 'Valor' : 'Amount'}
                 />
-                <span className="text-xs font-bold truncate">
-                  {getCategoryDisplayName(selectedCategory, language) || (language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category')}
-                </span>
-              </div>
-              <ChevronDown size={16} className="text-slate-400 shrink-0" />
-            </button>
-          </div>
 
-          {/* Account / Card Compact Pill Selector (For Expenses) */}
-          {type === 'expense' && (
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                {language === 'pt-BR' ? 'Conta / Cartão' : 'Account / Card'}
-              </label>
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                <button
-                  type="button"
-                  onClick={() => handleSelectCard(null)}
-                  className={`rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-medium border whitespace-nowrap shrink-0 transition-all active:scale-95 ${
-                    !selectedCardId
-                      ? 'filter-chip-active font-semibold shadow-xs'
-                      : 'filter-chip-inactive'
-                  }`}
-                >
-                  <Landmark size={13} className="shrink-0" />
-                  <span>{language === 'pt-BR' ? 'Conta / Pix' : 'Bank / Cash'}</span>
-                  {!selectedCardId && <Check size={12} className="shrink-0 ml-0.5" />}
-                </button>
-
-                {creditCards.map((card) => {
-                  const isSelected = selectedCardId === card.id;
-                  return (
-                    <button
-                      key={card.id}
-                      type="button"
-                      onClick={() => handleSelectCard(card.id)}
-                      className={`rounded-xl px-3 py-2 flex items-center gap-1.5 text-xs font-medium border whitespace-nowrap shrink-0 transition-all active:scale-95 ${
-                        isSelected
-                          ? 'filter-chip-active font-semibold shadow-xs'
-                          : 'filter-chip-inactive'
-                      }`}
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: card.color || '#6366f1' }}
-                      />
-                      <BankIcon card={card} size={14} className="shrink-0" />
-                      <span>{card.name}</span>
-                      {isSelected && <Check size={12} className="shrink-0 ml-0.5" />}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Compact Smart Cycle Pill when Card is Selected */}
-              {selectedCard && cardCycleInfo && (
-                <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between gap-2 text-[11px]">
-                  <span className="flex items-center gap-1 text-slate-600 font-medium truncate">
-                    <Sparkles size={12} className="text-[#D0B595] shrink-0" />
+                {/* Dynamic Installments Subtitle */}
+                {recurrenceMode === 'installment' && parsedInstTot > 1 && (
+                  <div
+                    className={`mt-2 px-3 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1.5 ${
+                      isOled
+                        ? 'bg-[#161B22] text-slate-300 border border-[#21262D]'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    <Layers size={12} className="text-[#D0B595] shrink-0" />
                     <span>
-                      {t.invoiceCycleLabel}: <strong className="text-slate-900">{cardCycleInfo.formattedMonth}</strong>
+                      {language === 'pt-BR'
+                        ? `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} em ${installmentBreakdown.count}x de ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`
+                        : `Total ${formatCurrency(installmentBreakdown.totalAmount, currency)} in ${installmentBreakdown.count}x of ${formatCurrency(installmentBreakdown.regularInstallmentAmount, currency)}`}
                     </span>
-                  </span>
-                  <span className="text-slate-500 font-semibold shrink-0">
-                    {t.dueDayShort}: {selectedCard.dueDay}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Compact Payment Status & Frequency Controls */}
-          <div className="space-y-2.5">
-            {!selectedCard && (
-              <div>
-                <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                  {language === 'pt-BR' ? 'Status' : 'Status'}
-                </span>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
-                  <button
-                    type="button"
-                    onClick={() => setStatus('paid')}
-                    className={`flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
-                      status === 'paid'
-                        ? 'bg-[#10B981] text-white shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <ThumbsUp size={13} />
-                    <span>{language === 'pt-BR' ? 'Pago' : 'Paid'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStatus('unpaid')}
-                    className={`flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
-                      status === 'unpaid'
-                        ? 'bg-[#F59E0B] text-slate-950 shadow-xs'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                  >
-                    <span>{language === 'pt-BR' ? 'Pendente' : 'Pending'}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Frequency Segmented Control */}
-            <div>
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                {language === 'pt-BR' ? 'Frequência' : 'Frequency'}
-              </span>
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/60">
-                <button
-                  type="button"
-                  onClick={() => setRecurrenceMode('single')}
-                  className={`flex items-center justify-center gap-1 h-8 px-2 rounded-lg text-xs font-semibold transition-all ${
-                    recurrenceMode === 'single'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <Check size={12} />
-                  <span>{language === 'pt-BR' ? 'Única' : 'Single'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setRecurrenceMode('recurring')}
-                  className={`flex items-center justify-center gap-1 h-8 px-2 rounded-lg text-xs font-semibold transition-all ${
-                    recurrenceMode === 'recurring'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <Repeat size={12} />
-                  <span>{language === 'pt-BR' ? 'Fixa' : 'Fixed'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setRecurrenceMode('installment')}
-                  className={`flex items-center justify-center gap-1 h-8 px-2 rounded-lg text-xs font-semibold transition-all ${
-                    recurrenceMode === 'installment'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <Layers size={12} />
-                  <span>{language === 'pt-BR' ? 'Parcelada' : 'Installments'}</span>
-                </button>
+                  </div>
+                )}
               </div>
 
-              {/* Extra compact fields for Fixa or Parcelada */}
-              {recurrenceMode === 'recurring' && (
-                <div className="flex items-center justify-between gap-2 mt-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <label className="text-xs font-medium text-slate-600">
-                    {type === 'income' ? t.expectedDayShortLabel : t.dueDayShortLabel}:
-                  </label>
+              {/* Unified Essential Fields Card */}
+              <div className={`rounded-2xl border overflow-hidden ${
+                isOled ? 'bg-[#161B22]/70 border-[#21262D]' : 'bg-slate-50 border-slate-200'
+              }`}>
+                {/* 1. Descrição */}
+                <div className={`px-3.5 py-3 border-b ${
+                  isOled ? 'border-[#21262D]/60' : 'border-slate-200/60'
+                }`}>
                   <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={dueDay}
-                    onChange={(e) => {
-                      setDueDay(e.target.value);
-                      setDueDayManuallyEdited(true);
-                    }}
-                    className="w-14 h-7 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
+                    type="text"
+                    required
+                    placeholder={
+                      language === 'pt-BR'
+                        ? 'Descrição do lançamento'
+                        : 'Transaction description'
+                    }
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className={`w-full bg-transparent text-xs sm:text-sm font-medium focus:outline-none placeholder:text-slate-500 ${
+                      isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+                    }`}
                   />
                 </div>
-              )}
 
-              {recurrenceMode === 'installment' && (
-                <div className="space-y-2 mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
-                    {[2, 3, 4, 6, 10, 12, 18, 24].map((n) => {
-                      const active = parsedInstTot === n;
-                      return (
+                {/* 2. Categoria */}
+                <button
+                  type="button"
+                  onClick={() => setCategoryPickerOpen(true)}
+                  className={`w-full px-3.5 py-2.5 flex items-center justify-between border-b transition-colors active:scale-[0.99] ${
+                    isOled
+                      ? 'border-[#21262D]/60 hover:bg-[#161B22]'
+                      : 'border-slate-200/60 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <CategoryIcon
+                      icon={selectedCategory?.icon || 'Tag'}
+                      color={selectedCategory?.color || '#94A3B8'}
+                      size={16}
+                      badgeSize="sm"
+                    />
+                    <span className={`text-xs sm:text-sm font-semibold truncate ${
+                      isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+                    }`}>
+                      {getCategoryDisplayName(selectedCategory, language) ||
+                        (language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category')}
+                    </span>
+                  </div>
+                  <ChevronDown size={15} className="text-slate-400 shrink-0" />
+                </button>
+
+                {/* 3. Conta / Cartão (For Expenses) */}
+                {type === 'expense' && (
+                  <div className={`px-3.5 py-3 border-b space-y-2 ${
+                    isOled ? 'border-[#21262D]/60' : 'border-slate-200/60'
+                  }`}>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      {language === 'pt-BR' ? 'Conta / Cartão' : 'Account / Card'}
+                    </label>
+
+                    {/* Trigger Row */}
+                    <button
+                      type="button"
+                      onClick={() => setIsAccountDropdownOpen((prev) => !prev)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors cursor-pointer text-left ${
+                        isOled
+                          ? 'border-[#21262D] bg-[#161B22]/50 hover:bg-[#21262D]'
+                          : 'border-slate-200/80 bg-slate-50/50 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {!selectedCard ? (
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[#6E5440]/20 text-[#D0B595] border border-[#D0B595]/30">
+                            <Landmark size={18} />
+                          </div>
+                        ) : (
+                          <div
+                            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white shadow-xs"
+                            style={{
+                              backgroundColor:
+                                selectedCard.color && selectedCard.color !== '#6E5440'
+                                  ? selectedCard.color
+                                  : resolveBankInfo(selectedCard).primaryColor || selectedCard.color || '#6E5440',
+                            }}
+                          >
+                            <AppIcon name={resolveBankInfo(selectedCard).iconName} size={18} color="#FFFFFF" />
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <h4 className={`text-xs sm:text-sm font-semibold truncate ${isOled ? 'text-slate-100' : 'text-slate-800'}`}>
+                            {!selectedCard
+                              ? (language === 'pt-BR' ? 'Conta Principal / Pix' : 'Main Account / Cash')
+                              : selectedCard.name}
+                          </h4>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {!selectedCard ? (
+                              <span className="text-[11px] text-slate-400">
+                                {language === 'pt-BR' ? 'Saldo em conta corrente' : 'Checking account balance'}
+                              </span>
+                            ) : (
+                              <>
+                                <span className="text-[11px] font-mono text-slate-400">
+                                  •••• {selectedCard.lastDigits || '••••'}
+                                </span>
+                                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                                  {formatCurrency(cardAvailableLimits[selectedCard.id] ?? selectedCard.totalLimit, currency)} disp.
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <ChevronDown
+                        size={16}
+                        className={`text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${
+                          isAccountDropdownOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {/* Dropdown Options List */}
+                    {isAccountDropdownOpen && (
+                      <div className={`mt-1.5 rounded-xl border overflow-hidden divide-y animate-fadeIn ${
+                        isOled
+                          ? 'bg-[#0D1117] border-[#21262D] divide-[#21262D]/60'
+                          : 'bg-white border-slate-200 divide-slate-100'
+                      }`}>
+                        {/* Checking / Pix Option */}
                         <button
-                          key={n}
                           type="button"
-                          onClick={() => setInstallmentTotal(String(n))}
-                          className={`py-1 px-2.5 rounded-lg text-[11px] font-bold border shrink-0 transition-all ${
-                            active
-                              ? 'filter-chip-active shadow-2xs'
-                              : 'filter-chip-inactive'
+                          onClick={() => {
+                            handleSelectCard(null);
+                            setIsAccountDropdownOpen(false);
+                          }}
+                          className={`w-full min-h-[48px] p-3 flex items-center justify-between transition-colors text-left ${
+                            !selectedCardId
+                              ? isOled ? 'bg-[#161B22]/70' : 'bg-slate-50'
+                              : isOled ? 'hover:bg-[#161B22]/40' : 'hover:bg-slate-50/70'
                           }`}
                         >
-                          {n}x
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[#6E5440]/20 text-[#D0B595] border border-[#D0B595]/30">
+                              <Landmark size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <h5 className={`text-xs sm:text-sm font-semibold truncate ${isOled ? 'text-slate-100' : 'text-slate-800'}`}>
+                                {language === 'pt-BR' ? 'Conta Principal / Pix' : 'Main Account / Cash'}
+                              </h5>
+                              <span className="text-[11px] text-slate-400 block">
+                                {language === 'pt-BR' ? 'Saldo em conta corrente' : 'Checking account balance'}
+                              </span>
+                            </div>
+                          </div>
+                          {!selectedCardId && <Check size={16} className="text-[#10B981] shrink-0 ml-2" />}
                         </button>
-                      );
-                    })}
+
+                        {/* Credit Card Options */}
+                        {creditCards.map((card) => {
+                          const isSelected = selectedCardId === card.id;
+                          const bankInfo = resolveBankInfo(card);
+                          const brandBgColor =
+                            card.color && card.color !== '#6E5440'
+                              ? card.color
+                              : bankInfo.primaryColor || card.color || '#6E5440';
+                          const cardAvail = cardAvailableLimits[card.id] ?? card.totalLimit;
+
+                          return (
+                            <button
+                              key={card.id}
+                              type="button"
+                              onClick={() => {
+                                handleSelectCard(card.id);
+                                setIsAccountDropdownOpen(false);
+                              }}
+                              className={`w-full min-h-[48px] p-3 flex items-center justify-between transition-colors text-left ${
+                                isSelected
+                                  ? isOled ? 'bg-[#161B22]/70' : 'bg-slate-50'
+                                  : isOled ? 'hover:bg-[#161B22]/40' : 'hover:bg-slate-50/70'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div
+                                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white shadow-xs"
+                                  style={{ backgroundColor: brandBgColor }}
+                                >
+                                  <AppIcon name={bankInfo.iconName} size={18} color="#FFFFFF" />
+                                </div>
+                                <div className="min-w-0">
+                                  <h5 className={`text-xs sm:text-sm font-semibold truncate ${isOled ? 'text-slate-100' : 'text-slate-800'}`}>
+                                    {card.name}
+                                  </h5>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-[11px] font-mono text-slate-400">
+                                      •••• {card.lastDigits || '••••'}
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                                      {formatCurrency(cardAvail, currency)} disp.
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              {isSelected && <Check size={16} className="text-[#10B981] shrink-0 ml-2" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Compact Smart Cycle Pill when Card is Selected */}
+                    {selectedCard && cardCycleInfo && (
+                      <div className={`px-2.5 py-1 rounded-lg border flex items-center justify-between gap-2 text-[10px] ${
+                        isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-slate-100 border-slate-200'
+                      }`}>
+                        <span className="flex items-center gap-1 text-slate-400 font-medium truncate">
+                          <Sparkles size={11} className="text-[#D0B595] shrink-0" />
+                          <span>
+                            {t.invoiceCycleLabel}: <strong className={isOled ? 'text-white' : 'text-slate-900'}>{cardCycleInfo.formattedMonth}</strong>
+                          </span>
+                        </span>
+                        <span className="text-slate-400 font-semibold shrink-0">
+                          {t.dueDayShort}: {selectedCard.dueDay}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. Data & Status */}
+                <div className="px-3.5 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+                  {/* Date with quick chips */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleDateChange(getTodayDateStr())}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                        date === getTodayDateStr()
+                          ? 'bg-[#6E5440] text-white shadow-2xs'
+                          : isOled
+                          ? 'bg-[#0D1117] text-slate-400 hover:text-white'
+                          : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                      }`}
+                    >
+                      {language === 'pt-BR' ? 'Hoje' : 'Today'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDateChange(getYesterdayDateStr())}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                        date === getYesterdayDateStr()
+                          ? 'bg-[#6E5440] text-white shadow-2xs'
+                          : isOled
+                          ? 'bg-[#0D1117] text-slate-400 hover:text-white'
+                          : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                      }`}
+                    >
+                      {language === 'pt-BR' ? 'Ontem' : 'Yesterday'}
+                    </button>
+                    <input
+                      type="date"
+                      required
+                      value={date}
+                      onChange={(e) => handleDateChange(e.target.value)}
+                      className={`text-[11px] font-medium bg-transparent focus:outline-none cursor-pointer ${
+                        isOled ? 'text-slate-300' : 'text-slate-700'
+                      }`}
+                    />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  {/* Status binary toggle */}
+                  {!selectedCard && (
+                    <div className={`flex items-center p-0.5 rounded-xl border ${
+                      isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200'
+                    }`}>
+                      <button
+                        type="button"
+                        onClick={() => setStatus('paid')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                          status === 'paid'
+                            ? 'bg-[#10B981] text-white shadow-2xs'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {language === 'pt-BR' ? 'Pago' : 'Paid'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStatus('unpaid')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                          status === 'unpaid'
+                            ? 'bg-[#F59E0B] text-slate-950 shadow-2xs'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {language === 'pt-BR' ? 'Pendente' : 'Pending'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Collapsible "Mais opções" Accordion */}
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setIsMoreOptionsOpen((prev) => !prev)}
+                  className={`w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold transition-colors ${
+                    isOled ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <span>{language === 'pt-BR' ? 'Mais opções' : 'More options'}</span>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${isMoreOptionsOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {isMoreOptionsOpen && (
+                  <div className={`mt-2 p-3 rounded-2xl border space-y-3 animate-fadeIn ${
+                    isOled ? 'bg-[#161B22]/50 border-[#21262D]' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    {/* Frequency Control */}
                     <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                        {t.currentInstLabel}
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="240"
-                        value={installmentCurrent}
-                        onChange={(e) => setInstallmentCurrent(e.target.value)}
-                        className="w-full h-8 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
-                      />
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                        {language === 'pt-BR' ? 'Frequência' : 'Frequency'}
+                      </span>
+                      <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl border ${
+                        isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200'
+                      }`}>
+                        <button
+                          type="button"
+                          onClick={() => setRecurrenceMode('single')}
+                          className={`flex items-center justify-center gap-1 h-7 px-2 rounded-lg text-xs font-semibold transition-all ${
+                            recurrenceMode === 'single'
+                              ? isOled ? 'bg-[#21262D] text-white shadow-2xs' : 'bg-slate-800 text-white shadow-2xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Check size={12} />
+                          <span>{language === 'pt-BR' ? 'Única' : 'Single'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setRecurrenceMode('recurring')}
+                          className={`flex items-center justify-center gap-1 h-7 px-2 rounded-lg text-xs font-semibold transition-all ${
+                            recurrenceMode === 'recurring'
+                              ? isOled ? 'bg-[#21262D] text-white shadow-2xs' : 'bg-slate-800 text-white shadow-2xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Repeat size={12} />
+                          <span>{language === 'pt-BR' ? 'Fixa' : 'Fixed'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setRecurrenceMode('installment')}
+                          className={`flex items-center justify-center gap-1 h-7 px-2 rounded-lg text-xs font-semibold transition-all ${
+                            recurrenceMode === 'installment'
+                              ? isOled ? 'bg-[#21262D] text-white shadow-2xs' : 'bg-slate-800 text-white shadow-2xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Layers size={12} />
+                          <span>{language === 'pt-BR' ? 'Parcelada' : 'Installments'}</span>
+                        </button>
+                      </div>
+
+                      {recurrenceMode === 'recurring' && (
+                        <div className={`flex items-center justify-between gap-2 mt-2 px-3 py-1.5 rounded-xl border ${
+                          isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200'
+                        }`}>
+                          <label className="text-xs font-medium text-slate-400">
+                            {type === 'income' ? t.expectedDayShortLabel : t.dueDayShortLabel}:
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={dueDay}
+                            onChange={(e) => {
+                              setDueDay(e.target.value);
+                              setDueDayManuallyEdited(true);
+                            }}
+                            className={`w-14 h-7 px-2 rounded-lg border text-center text-xs font-bold ${
+                              isOled ? 'bg-[#161B22] border-[#21262D] text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                            }`}
+                          />
+                        </div>
+                      )}
+
+                      {recurrenceMode === 'installment' && (
+                        <div className={`space-y-2 mt-2 p-2.5 rounded-xl border ${
+                          isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200'
+                        }`}>
+                          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+                            {[2, 3, 4, 6, 10, 12, 18, 24].map((n) => {
+                              const active = parsedInstTot === n;
+                              return (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  onClick={() => setInstallmentTotal(String(n))}
+                                  className={`py-1 px-2.5 rounded-lg text-[11px] font-bold border shrink-0 transition-all ${
+                                    active
+                                      ? isOled
+                                        ? 'bg-[#6E5440] text-white border-[#D0B595]/30'
+                                        : 'bg-[#6E5440] text-white border-transparent'
+                                      : isOled
+                                      ? 'bg-[#161B22] text-slate-400 border-[#21262D]'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200'
+                                  }`}
+                                >
+                                  {n}x
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                                {t.currentInstLabel}
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="240"
+                                value={installmentCurrent}
+                                onChange={(e) => setInstallmentCurrent(e.target.value)}
+                                className={`w-full h-8 px-2 rounded-lg border text-center text-xs font-bold ${
+                                  isOled ? 'bg-[#161B22] border-[#21262D] text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                                }`}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                                {t.totalInstLabel}
+                              </label>
+                              <input
+                                type="number"
+                                min="2"
+                                max="240"
+                                value={installmentTotal}
+                                onChange={(e) => setInstallmentTotal(e.target.value)}
+                                className={`w-full h-8 px-2 rounded-lg border text-center text-xs font-bold ${
+                                  isOled ? 'bg-[#161B22] border-[#21262D] text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                                }`}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
+                                {type === 'income' ? t.expectedDayShortLabel : t.dueDayShortLabel}
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="31"
+                                disabled={Boolean(selectedCard)}
+                                value={selectedCard ? selectedCard.dueDay : dueDay}
+                                onChange={(e) => {
+                                  setDueDay(e.target.value);
+                                  setDueDayManuallyEdited(true);
+                                }}
+                                className={`w-full h-8 px-2 rounded-lg border text-center text-xs font-bold ${
+                                  selectedCard
+                                    ? isOled ? 'bg-[#161B22]/50 border-[#21262D] text-slate-500' : 'bg-slate-100 border-slate-200 text-slate-400'
+                                    : isOled ? 'bg-[#161B22] border-[#21262D] text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                                }`}
+                              />
+                            </div>
+                          </div>
+
+                          <p className="text-[10px] text-slate-400 text-center">
+                            {t.installmentHintSummary(parsedInstCur, parsedInstTot, concludingMonthLabel, parsedDueDay)}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
+                    {/* Observações */}
                     <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                        {t.totalInstLabel}
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                        {language === 'pt-BR' ? 'Observações' : 'Notes'}
                       </label>
                       <input
-                        type="number"
-                        min="2"
-                        max="240"
-                        value={installmentTotal}
-                        onChange={(e) => setInstallmentTotal(e.target.value)}
-                        className="w-full h-8 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-semibold text-slate-400 mb-0.5">
-                        {type === 'income' ? t.expectedDayShortLabel : t.dueDayShortLabel}
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="31"
-                        disabled={Boolean(selectedCard)}
-                        value={selectedCard ? selectedCard.dueDay : dueDay}
-                        onChange={(e) => {
-                          setDueDay(e.target.value);
-                          setDueDayManuallyEdited(true);
-                        }}
-                        className={`w-full h-8 px-2 rounded-lg border border-slate-200 text-center text-xs font-bold ${
-                          selectedCard ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                        type="text"
+                        placeholder={t.notesPlaceholder}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className={`w-full h-9 px-3 rounded-xl border text-xs focus:outline-none transition-colors ${
+                          isOled
+                            ? 'bg-[#0D1117] border-[#21262D] text-white placeholder:text-slate-500'
+                            : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
                         }`}
                       />
                     </div>
                   </div>
-
-                  <p className="text-[10px] text-slate-400 text-center">
-                    {t.installmentHintSummary(parsedInstCur, parsedInstTot, concludingMonthLabel, parsedDueDay)}
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Streamlined Single-Line Notes Input */}
-          <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-              {language === 'pt-BR' ? 'Observações' : 'Notes'}
-            </label>
-            <input
-              type="text"
-              placeholder={t.notesPlaceholder}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none transition-colors"
-            />
-          </div>
+            {/* Pinned Action Footer */}
+            <div className={`p-3.5 sm:p-4 border-t shrink-0 flex items-center gap-2 ${
+              isOled ? 'border-[#21262D] bg-[#0D1117]' : 'border-slate-100 bg-white'
+            }`}>
+              {editingTransaction && onDelete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(editingTransaction);
+                    onClose();
+                  }}
+                  disabled={submitting}
+                  className="h-12 w-12 rounded-2xl border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 active:scale-95 flex items-center justify-center shrink-0 transition-all"
+                  title={language === 'pt-BR' ? 'Excluir lançamento' : 'Delete transaction'}
+                  aria-label={language === 'pt-BR' ? 'Excluir lançamento' : 'Delete transaction'}
+                >
+                  <Trash2 size={18} />
+                </button>
+              )}
 
-          {/* Compact Action Footer */}
-          <div className="flex items-center justify-between gap-2.5 pt-1">
-            {editingTransaction && onDelete ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onDelete(editingTransaction);
-                  onClose();
-                }}
-                disabled={submitting}
-                className="py-2.5 px-3 rounded-xl border border-rose-500/40 text-rose-500 hover:bg-rose-50 active:scale-95 flex items-center justify-center gap-1 font-bold text-xs transition-colors shrink-0"
-                title="Excluir lançamento"
-              >
-                <Trash2 size={14} />
-                <span>{language === 'pt-BR' ? 'Excluir' : 'Delete'}</span>
-              </button>
-            ) : null}
-
-            <div className="flex items-center gap-2 flex-1 justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="py-2.5 px-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 text-xs font-semibold transition-colors"
-              >
-                {t.cancelBtn}
-              </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className={`flex-1 max-w-[200px] py-2.5 px-4 rounded-xl text-white text-xs font-semibold shadow-xs transition-all ${
+                className={`w-full flex-1 h-12 rounded-2xl font-bold text-sm text-white shadow-md transition-all active:scale-[0.99] flex items-center justify-center ${
                   type === 'income'
                     ? 'bg-[#10B981] hover:bg-emerald-600'
                     : 'bg-[#EF4444] hover:bg-rose-600'
@@ -916,105 +1180,114 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               >
                 {submitting
                   ? t.savingBtn
-                  : editingTransaction
-                  ? t.saveChangesBtn
                   : type === 'income'
                   ? language === 'pt-BR'
-                    ? 'Adicionar Entrada'
-                    : 'Add Income'
+                    ? 'Salvar Entrada'
+                    : 'Save Income'
                   : language === 'pt-BR'
-                  ? 'Adicionar Despesa'
-                  : 'Add Expense'}
+                  ? 'Salvar Despesa'
+                  : 'Save Expense'}
               </button>
             </div>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    {/* Category Picker BottomSheet Modal */}
-    {categoryPickerOpen && (
-      <div
-        className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
-        onMouseDown={(e) => {
-          categoryMouseDownTargetRef.current = e.target;
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (e.target === e.currentTarget && categoryMouseDownTargetRef.current === e.currentTarget) {
-            setCategoryPickerOpen(false);
-          }
-        }}
-      >
-        <div
-          className="w-full max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="sticky top-0 z-10 bg-white border-b border-slate-100 shrink-0 flex items-center justify-between px-5 py-3.5">
-            <div>
-              <h4 className="text-sm font-bold">
-                {language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category'}
-              </h4>
-              <p className="text-[11px] text-slate-500">
-                {language === 'pt-BR' ? 'Toque para escolher' : 'Tap to select'}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setCategoryPickerOpen(false);
-                  onManageCategories?.();
-                }}
-                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 min-h-[36px] bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-95"
-              >
-                <Tag size={14} className="text-[#6E5440]" />
-                <span>{language === 'pt-BR' ? 'Gerenciar' : 'Manage'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCategoryPickerOpen(false)}
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
-              >
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-          <div className="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2.5">
-            {filteredCategories.map((cat) => {
-              const selected = cat.id === categoryId;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCategoryId(cat.id);
-                    setCategoryPickerOpen(false);
-                  }}
-                  className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 gap-2 ${
-                    selected
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <CategoryIcon
-                    icon={cat.icon}
-                    color={selected ? '#ffffff' : cat.color}
-                    size={20}
-                    badgeSize="md"
-                  />
-                  <span className="text-xs font-bold text-center truncate max-w-full">
-                    {getCategoryDisplayName(cat, language)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          </form>
         </div>
       </div>
-    )}
+
+      {/* Category Picker Modal */}
+      {categoryPickerOpen && (
+        <div
+          className="fixed inset-0 z-[75] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+          onMouseDown={(e) => {
+            categoryMouseDownTargetRef.current = e.target;
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (e.target === e.currentTarget && categoryMouseDownTargetRef.current === e.currentTarget) {
+              setCategoryPickerOpen(false);
+            }
+          }}
+        >
+          <div
+            className={`w-full max-w-md rounded-3xl border shadow-2xl overflow-hidden flex flex-col max-h-[80vh] ${
+              isOled ? 'bg-[#0D1117] border-[#21262D] text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+            }`}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`sticky top-0 z-10 border-b shrink-0 flex items-center justify-between px-5 py-3.5 ${
+              isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-100'
+            }`}>
+              <div>
+                <h4 className="text-sm font-bold">
+                  {language === 'pt-BR' ? 'Selecionar Categoria' : 'Select Category'}
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  {language === 'pt-BR' ? 'Toque para escolher' : 'Tap to select'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryPickerOpen(false);
+                    onManageCategories?.();
+                  }}
+                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 min-h-[36px] ${
+                    isOled ? 'bg-[#161B22] text-slate-200 hover:bg-[#21262D]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Tag size={13} className="text-[#D0B595]" />
+                  <span>{language === 'pt-BR' ? 'Gerenciar' : 'Manage'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryPickerOpen(false)}
+                  className={`p-1.5 rounded-full transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center ${
+                    isOled ? 'text-slate-400 hover:text-white hover:bg-[#161B22]' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 overflow-y-auto grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+              {filteredCategories.map((cat) => {
+                const selected = cat.id === categoryId;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCategoryId(cat.id);
+                      setCategoryPickerOpen(false);
+                    }}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 gap-2 ${
+                      selected
+                        ? isOled
+                          ? 'bg-[#161B22] border-[#D0B595] text-white shadow-xs'
+                          : 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                        : isOled
+                        ? 'bg-[#161B22]/50 border-[#21262D] text-slate-300 hover:bg-[#161B22]'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <CategoryIcon
+                      icon={cat.icon}
+                      color={selected ? '#ffffff' : cat.color}
+                      size={20}
+                      badgeSize="md"
+                    />
+                    <span className="text-xs font-bold text-center truncate max-w-full">
+                      {getCategoryDisplayName(cat, language)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
     <SeriesConfirmModal
       isOpen={showSeriesEditConfirm}

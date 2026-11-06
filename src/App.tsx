@@ -2247,6 +2247,7 @@ export const App: React.FC = () => {
         creditCards={state.creditCards || []}
         currency={state.settings.currency}
         language={language}
+        theme={theme}
         onClose={() => setTxModalOpen(false)}
         onDelete={(tx) => handleDeleteTransaction(tx.id)}
         onSave={handleSaveTransaction}
