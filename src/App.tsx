@@ -1788,7 +1788,9 @@ export const App: React.FC = () => {
 
   const handleExportMonthlyPDF = () => {
     setFabMenuOpen(false);
-    exportFilteredHistoryToPDF(buildCurrentMonthExportOptions());
+    void exportFilteredHistoryToPDF(buildCurrentMonthExportOptions()).catch((err) => {
+      console.error('Failed to export monthly PDF report:', err);
+    });
   };
 
   const handleExportMonthlySpreadsheet = () => {

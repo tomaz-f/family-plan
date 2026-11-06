@@ -27,6 +27,9 @@ import {
   Wifi,
   AlertTriangle,
   Calendar,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import { AppLanguage, AppState, AppTheme, Category, TransactionType } from '../types';
 import { CURRENCIES, formatCurrency } from '../utils/format';
@@ -231,6 +234,8 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
   const [exportYear, setExportYear] = useState<string>(currentYearStr);
   const [exportMonth, setExportMonth] = useState<string>(currentMonthNum);
   const [exportTypeFilter, setExportTypeFilter] = useState<ExportTypeFilter>('all');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [pdfToast, setPdfToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const availableYears = useMemo(() => {
     const yearsSet = new Set<string>([currentYearStr, String(Number(currentYearStr) - 1)]);
@@ -285,6 +290,37 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
     () => computeExportData(exportFilterOptions),
     [exportFilterOptions]
   );
+
+  const handleDownloadPDF = async () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    setPdfToast(null);
+    try {
+      // Yield to event loop for immediate spinner feedback
+      await new Promise((r) => setTimeout(r, 60));
+      await exportFilteredHistoryToPDF(exportFilterOptions);
+      setPdfToast({
+        type: 'success',
+        message:
+          language === 'pt-BR'
+            ? 'Relatório PDF baixado com sucesso!'
+            : 'PDF Report downloaded successfully!',
+      });
+      setTimeout(() => setPdfToast(null), 4000);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      setPdfToast({
+        type: 'error',
+        message:
+          language === 'pt-BR'
+            ? 'Não foi possível gerar o PDF. Tente novamente.'
+            : 'Could not generate PDF. Please try again.',
+      });
+      setTimeout(() => setPdfToast(null), 5000);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   const prevIsOpenRef = useRef<boolean>(false);
 
@@ -2006,13 +2042,41 @@ export const MobileSyncModal: React.FC<MobileSyncModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => exportFilteredHistoryToPDF(exportFilterOptions)}
-                  className="min-h-[46px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#6E5440] hover:bg-[#7E624B] text-white text-xs font-bold shadow-xs transition-all"
+                  onClick={handleDownloadPDF}
+                  disabled={isGeneratingPdf}
+                  className="min-h-[46px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#6E5440] hover:bg-[#7E624B] text-white text-xs font-bold shadow-xs transition-all disabled:opacity-75 disabled:cursor-wait"
                 >
-                  <FileText size={16} className="shrink-0" />
-                  {t.exportDownloadPdfBtn}
+                  {isGeneratingPdf ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin shrink-0 text-white" />
+                      <span>{language === 'pt-BR' ? 'Gerando PDF...' : 'Generating PDF...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={16} className="shrink-0" />
+                      <span>{t.exportDownloadPdfBtn}</span>
+                    </>
+                  )}
                 </button>
               </div>
+
+              {pdfToast && (
+                <div
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold animate-fadeIn ${
+                    pdfToast.type === 'success'
+                      ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400'
+                  }`}
+                >
+                  {pdfToast.type === 'success' ? (
+                    <CheckCircle2 size={15} className="shrink-0 text-emerald-500" />
+                  ) : (
+                    <AlertCircle size={15} className="shrink-0 text-red-500" />
+                  )}
+                  <span>{pdfToast.message}</span>
+                </div>
+              )}
+
               <p className="text-[11px] text-slate-500 text-center leading-relaxed px-2">
                 {t.exportPdfIncludesNote}
               </p>
