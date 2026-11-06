@@ -1996,6 +1996,7 @@ export const App: React.FC = () => {
         {activeTab === 'cards' && (
           <ErrorBoundary fallbackTitle="Erro ao carregar Cartões de Crédito">
             <CreditCardsView
+              selectedMonth={selectedMonth}
               creditCards={state.creditCards || []}
               transactions={state.transactions}
               categories={state.categories}

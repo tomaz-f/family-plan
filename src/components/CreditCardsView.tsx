@@ -1,14 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   CreditCard as CreditCardIcon,
-  Plus,
   CheckCircle2,
   Clock,
   AlertCircle,
   Pencil,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
   DollarSign,
   X,
   ShieldCheck,
@@ -35,6 +32,7 @@ import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
 import { CreditCardModal } from './CreditCardModal';
 
 interface CreditCardsViewProps {
+  selectedMonth?: string;
   creditCards: CreditCard[];
   transactions: Transaction[];
   categories: Category[];
@@ -400,6 +398,7 @@ const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
 };
 
 export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
+  selectedMonth,
   creditCards,
   transactions,
   categories,
@@ -430,7 +429,8 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     return computeCardFirstInvoiceMonth(todayStr, card.closingDay).invoiceMonth;
   }, [creditCards, todayStr, currentMonthStr]);
 
-  const [statementMonth, setStatementMonth] = useState<string>(defaultOpenMonth);
+  const [internalStatementMonth, setInternalStatementMonth] = useState<string>(defaultOpenMonth);
+  const statementMonth = selectedMonth || internalStatementMonth;
 
   // Active open swipe row id in invoice statement
   const [openRowId, setOpenRowId] = useState<string | null>(null);
@@ -439,9 +439,23 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const [cardModalOpen, setCardModalOpen] = useState<boolean>(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
 
+  // Manage Cards Modal state
+  const [isManageModalOpen, setIsManageModalOpen] = useState<boolean>(false);
+
   useEffect(() => {
-    onModalOpenChange?.(cardModalOpen);
-  }, [cardModalOpen, onModalOpenChange]);
+    onModalOpenChange?.(cardModalOpen || isManageModalOpen);
+  }, [cardModalOpen, isManageModalOpen, onModalOpenChange]);
+
+  useEffect(() => {
+    if (!isManageModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsManageModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isManageModalOpen]);
 
   // Delete Card modal state
   const [deleteConfirmCardId, setDeleteConfirmCardId] = useState<string | null>(null);
@@ -467,12 +481,12 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
   const prevActiveCardIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (activeCard && activeCard.id !== prevActiveCardIdRef.current) {
+    if (!selectedMonth && activeCard && activeCard.id !== prevActiveCardIdRef.current) {
       prevActiveCardIdRef.current = activeCard.id;
       const cardOpenMonth = computeCardFirstInvoiceMonth(todayStr, activeCard.closingDay).invoiceMonth;
-      setStatementMonth(cardOpenMonth);
+      setInternalStatementMonth(cardOpenMonth);
     }
-  }, [activeCard?.id, activeCard?.closingDay, todayStr]);
+  }, [selectedMonth, activeCard?.id, activeCard?.closingDay, todayStr]);
 
   // Helper to determine the invoiceMonth of any card transaction
   const getTxInvoiceMonth = (tx: Transaction, card: CreditCard): string => {
@@ -763,14 +777,70 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     setCarouselDragOffset(0);
   };
 
+  const mouseDragRef = useRef<{
+    startX: number;
+    active: boolean;
+    hasMoved: boolean;
+  }>({
+    startX: 0,
+    active: false,
+    hasMoved: false,
+  });
+
+  const handleCarouselMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (creditCards.length <= 1 || e.button !== 0) return;
+    mouseDragRef.current = {
+      startX: e.clientX,
+      active: true,
+      hasMoved: false,
+    };
+    setIsCarouselDragging(true);
+  };
+
+  const handleCarouselMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!mouseDragRef.current.active) return;
+    const deltaX = e.clientX - mouseDragRef.current.startX;
+    if (Math.abs(deltaX) > 4) {
+      mouseDragRef.current.hasMoved = true;
+    }
+    let damped = deltaX;
+    if (activeIndex === 0 && deltaX > 0) {
+      damped = deltaX * 0.25;
+    } else if (activeIndex === creditCards.length - 1 && deltaX < 0) {
+      damped = deltaX * 0.25;
+    }
+    setCarouselDragOffset(damped);
+  };
+
+  const handleCarouselMouseUp = () => {
+    if (!mouseDragRef.current.active) return;
+    mouseDragRef.current.active = false;
+    const threshold = 45;
+    if (carouselDragOffset < -threshold && activeIndex < creditCards.length - 1) {
+      setActiveIndex((prev) => prev + 1);
+    } else if (carouselDragOffset > threshold && activeIndex > 0) {
+      setActiveIndex((prev) => prev - 1);
+    }
+    setIsCarouselDragging(false);
+    setCarouselDragOffset(0);
+  };
+
+  const handleCarouselClickCapture = (e: React.MouseEvent) => {
+    if (mouseDragRef.current.hasMoved) {
+      e.stopPropagation();
+      e.preventDefault();
+      mouseDragRef.current.hasMoved = false;
+    }
+  };
+
   // Handlers for Add/Edit Card Modal
   const openAddCardModal = () => {
     setEditingCard(null);
     setCardModalOpen(true);
   };
 
-  const openEditCardModal = (card: CreditCard, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const openEditCardModal = (card: CreditCard, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setEditingCard(card);
     setCardModalOpen(true);
   };
@@ -789,39 +859,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
   return (
     <div className="space-y-4 pb-12 animate-fadeIn max-w-lg mx-auto w-full">
-      {/* 1. Compact Top Action Bar: Lean Global Limits + Novo Cartão */}
-      <div className="flex items-center justify-between gap-2.5 px-0.5">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar min-w-0">
-          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs shrink-0 ${
-            isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200 shadow-xs'
-          }`}>
-            <span className={`text-[11px] font-medium ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>Limite:</span>
-            <span className={`font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
-              {formatCurrency(consolidated.totalLimit, currency)}
-            </span>
-          </div>
-
-          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs shrink-0 ${
-            isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200 shadow-xs'
-          }`}>
-            <span className={`text-[11px] font-medium ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>Disponível:</span>
-            <span className="font-bold text-[#10B981]">
-              {formatCurrency(consolidated.totalAvailable, currency)}
-            </span>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={openAddCardModal}
-          className="shrink-0 flex items-center gap-1.5 py-2 px-3.5 text-xs rounded-xl font-medium bg-[#6E5440] hover:bg-[#7E624B] text-[#FFFDF5] border border-[#8A6F57]/40 shadow-xs transition-all active:scale-95"
-        >
-          <Plus size={14} />
-          <span>Adicionar Cartão</span>
-        </button>
-      </div>
-
-      {/* 2. Interactive Single-Card Carousel or Empty State */}
+      {/* 1. Interactive Single-Card Carousel or Empty State */}
       {creditCards.length === 0 ? (
         <div className={`p-8 rounded-2xl border border-dashed text-center space-y-3 ${
           isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-300 shadow-xs'
@@ -840,22 +878,32 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
           <button
             type="button"
             onClick={openAddCardModal}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#6E5440] hover:bg-[#7E624B] text-white text-xs font-bold transition-colors active:scale-95"
+            className="px-4 py-2 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-semibold transition-colors active:scale-95 shadow-sm"
           >
-            <Plus size={15} />
-            <span>Adicionar Cartão</span>
+            {language === 'pt-BR' ? 'Cadastrar cartão' : 'Add card'}
           </button>
         </div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-2">
           {/* Carousel Viewport Container */}
           <div className="relative w-full max-w-[400px] mx-auto px-3.5 sm:px-4">
             <div
-              className="relative w-full overflow-hidden touch-pan-y rounded-2xl"
+              className={`relative w-full overflow-hidden touch-pan-y rounded-2xl select-none ${
+                creditCards.length > 1
+                  ? isCarouselDragging
+                    ? 'cursor-grabbing'
+                    : 'cursor-grab'
+                  : ''
+              }`}
               onTouchStart={handleCarouselTouchStart}
               onTouchMove={handleCarouselTouchMove}
               onTouchEnd={handleCarouselTouchEnd}
               onTouchCancel={handleCarouselTouchEnd}
+              onMouseDown={handleCarouselMouseDown}
+              onMouseMove={handleCarouselMouseMove}
+              onMouseUp={handleCarouselMouseUp}
+              onMouseLeave={handleCarouselMouseUp}
+              onClickCapture={handleCarouselClickCapture}
             >
               <div
                 className="flex w-full"
@@ -876,8 +924,7 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                   };
 
                   const bankInfo = resolveBankInfo(card);
-                  // Apply official brand color (e.g. Nubank purple #820AD1, Bradesco red #CC092F, Shopee orange #EE4D2D)
-                  // or custom color selected by user if modified from the default iron tone
+                  // Apply official brand color or custom color selected by user
                   const brandBgColor =
                     card.color && card.color !== '#6E5440'
                       ? card.color
@@ -885,19 +932,16 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
                   return (
                     <div key={card.id} className="w-full shrink-0">
-                      <div className={`relative rounded-2xl p-5 sm:p-6 min-h-[215px] sm:min-h-[225px] border overflow-hidden flex flex-col justify-between transition-colors ${
-                        isOled
-                          ? 'bg-[#0D1117] border-[#21262D] shadow-xl text-[#F8FAFC]'
-                          : 'bg-white border-slate-200 shadow-lg shadow-slate-300/50 text-slate-900'
-                      }`}>
-                        {/* Top ambient color edge accent */}
-                        <div
-                          className="absolute top-0 left-0 right-0 h-1.5 opacity-90"
-                          style={{ backgroundColor: brandBgColor }}
-                        />
-
+                      <div
+                        className={`relative rounded-2xl p-5 sm:p-6 min-h-[215px] sm:min-h-[225px] border-2 overflow-hidden flex flex-col justify-between transition-colors ${
+                          isOled
+                            ? 'bg-[#0D1117] shadow-xl text-[#F8FAFC]'
+                            : 'bg-white shadow-lg shadow-slate-300/50 text-slate-900'
+                        }`}
+                        style={{ borderColor: card.color || brandBgColor }}
+                      >
                         {/* Top Row: Nickname/Bank + Chip/Brand + Edit/Delete */}
-                        <div className="flex items-center justify-between gap-3 pt-1">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div
                               className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm text-white"
@@ -919,36 +963,6 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                                 </span>
                               )}
                             </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={(e) => openEditCardModal(card, e)}
-                              className={`p-2 rounded-xl border border-transparent transition-colors ${
-                                isOled
-                                  ? 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#161B22] hover:border-[#21262D]'
-                                  : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100 hover:border-slate-200'
-                              }`}
-                              title={t.editCardBtn || 'Editar cartão'}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirmCardId(card.id);
-                              }}
-                              className={`p-2 rounded-xl border border-transparent transition-colors ${
-                                isOled
-                                  ? 'text-[#94A3B8] hover:text-rose-400 hover:bg-[#161B22] hover:border-[#21262D]'
-                                  : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200'
-                              }`}
-                              title={t.deleteCardBtn || 'Excluir cartão'}
-                            >
-                              <Trash2 size={14} />
-                            </button>
                           </div>
                         </div>
 
@@ -1029,45 +1043,11 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                 })}
               </div>
             </div>
-
-            {/* Left/Right Chevron Tap Controls if multiple cards */}
-            {creditCards.length > 1 && (
-              <>
-                {activeIndex > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveIndex((i) => Math.max(0, i - 1))}
-                    className={`absolute -left-1 sm:-left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center border transition-all active:scale-90 z-20 ${
-                      isOled
-                        ? 'bg-[#161B22]/90 backdrop-blur-xs text-[#94A3B8] hover:text-[#F8FAFC] border-[#21262D] shadow-md'
-                        : 'bg-white/95 backdrop-blur-xs text-slate-600 hover:text-slate-900 border-slate-200 shadow-md'
-                    }`}
-                    aria-label="Cartão anterior"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                )}
-                {activeIndex < creditCards.length - 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveIndex((i) => Math.min(creditCards.length - 1, i + 1))}
-                    className={`absolute -right-1 sm:-right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center border transition-all active:scale-90 z-20 ${
-                      isOled
-                        ? 'bg-[#161B22]/90 backdrop-blur-xs text-[#94A3B8] hover:text-[#F8FAFC] border-[#21262D] shadow-md'
-                        : 'bg-white/95 backdrop-blur-xs text-slate-600 hover:text-slate-900 border-slate-200 shadow-md'
-                    }`}
-                    aria-label="Próximo cartão"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                )}
-              </>
-            )}
           </div>
 
           {/* Centered Pagination Dots */}
           {creditCards.length > 1 && (
-            <div className="flex justify-center items-center gap-1.5 py-2.5">
+            <div className="flex justify-center items-center gap-1.5 py-1">
               {creditCards.map((card, idx) => (
                 <button
                   key={card.id}
@@ -1085,6 +1065,45 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
               ))}
             </div>
           )}
+
+          {/* 2. Global Limits Summary & "Cadastrar Cartão" Button (Strict Single Row Below Carousel) */}
+          <div className="flex items-center justify-between gap-2 flex-nowrap w-full py-1">
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar min-w-0">
+              <div
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] sm:text-xs shrink-0 ${
+                  isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200 shadow-2xs'
+                }`}
+              >
+                <span className={`font-medium ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
+                  {language === 'pt-BR' ? 'Limite:' : 'Limit:'}
+                </span>
+                <span className={`font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
+                  {formatCurrency(consolidated.totalLimit, currency)}
+                </span>
+              </div>
+
+              <div
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] sm:text-xs shrink-0 ${
+                  isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200 shadow-2xs'
+                }`}
+              >
+                <span className={`font-medium ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
+                  {language === 'pt-BR' ? 'Disponível:' : 'Available:'}
+                </span>
+                <span className="font-bold text-[#10B981]">
+                  {formatCurrency(consolidated.totalAvailable, currency)}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsManageModalOpen(true)}
+              className="bg-[#10B981] hover:bg-emerald-600 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition-colors shadow-sm flex-shrink-0 whitespace-nowrap active:scale-95"
+            >
+              {language === 'pt-BR' ? 'Gerenciar Cartões' : 'Manage Cards'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -1095,156 +1114,80 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
             ? 'bg-[#0D1117] border-[#21262D] shadow-xl text-[#F8FAFC]'
             : 'bg-white border-slate-200 shadow-sm text-slate-900'
         }`}>
-          {/* Invoice Header Bar */}
-          <div className={`space-y-3 pb-3 border-b ${
-            isOled ? 'border-[#21262D]' : 'border-slate-200'
-          }`}>
-            <div className="flex items-center justify-between gap-2">
-              {/* Cycle Status Badge + Month Switcher */}
-              <div className="flex items-center gap-2">
-                <span
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 border ${
-                    invoiceCycleStatus.color === 'emerald'
-                      ? isOled
-                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                        : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                      : invoiceCycleStatus.color === 'amber'
-                      ? isOled
-                        ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-                        : 'bg-amber-50 border-amber-200 text-amber-700'
-                      : isOled
-                      ? 'bg-sky-500/15 border-sky-500/30 text-sky-400'
-                      : 'bg-sky-50 border-sky-200 text-sky-700'
-                  }`}
-                >
-                  {statementData.isSettled ? (
-                    <CheckCircle2 size={13} />
-                  ) : statementData.isPendingPayment ? (
-                    <Clock size={13} />
-                  ) : (
-                    <span className="w-1.5 h-1.5 rounded-full bg-current inline-block" />
-                  )}
-                  <span>{invoiceCycleStatus.label}</span>
-                </span>
+          {/* New Header Layout: Status Left, Action Buttons Right */}
+          <div className="flex items-center justify-between gap-2 w-full pb-3 border-b border-slate-100 dark:border-[#21262D]">
+            {/* Left Side: Invoice Status Badge */}
+            <span
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 border shrink-0 ${
+                invoiceCycleStatus.color === 'emerald'
+                  ? isOled
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : invoiceCycleStatus.color === 'amber'
+                  ? isOled
+                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                    : 'bg-amber-50 border-amber-200 text-amber-700'
+                  : isOled
+                  ? 'bg-sky-500/15 border-sky-500/30 text-sky-400'
+                  : 'bg-sky-50 border-sky-200 text-sky-700'
+              }`}
+            >
+              {statementData.isSettled ? (
+                <CheckCircle2 size={13} />
+              ) : statementData.isPendingPayment ? (
+                <Clock size={13} />
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full bg-current inline-block" />
+              )}
+              <span>{invoiceCycleStatus.label}</span>
+            </span>
 
-                {/* Month Switcher Controls */}
-                <div className={`flex items-center rounded-xl border p-0.5 ${
-                  isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-slate-100 border-slate-200'
-                }`}>
-                  <button
-                    type="button"
-                    onClick={() => setStatementMonth((m) => shiftMonth(m, -1))}
-                    className={`p-1 rounded-lg transition-colors ${
-                      isOled ? 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#21262D]' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                    }`}
-                    title={t.prevMonthBtn || 'Mês anterior'}
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span className={`text-xs font-bold px-2 min-w-[110px] text-center capitalize ${
-                    isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
-                  }`}>
-                    {formatMonthLabel(statementMonth, language)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setStatementMonth((m) => shiftMonth(m, 1))}
-                    className={`p-1 rounded-lg transition-colors ${
-                      isOled ? 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#21262D]' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                    }`}
-                    title={t.nextMonthBtn || 'Próximo mês'}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Invoice Total Sum */}
-              <div className="text-right">
-                <p className={`text-base sm:text-lg font-black ${
-                  isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
-                }`}>
-                  {formatCurrency(statementData.total, currency)}
-                </p>
-                <span className={`text-[11px] block ${
-                  isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-                }`}>
-                  {statementData.txs.length} {statementData.txs.length === 1 ? 'compra' : 'compras'}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Actions Row */}
-            <div className="flex items-center gap-2 pt-1">
+            {/* Right Side: Grouped Action Buttons */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => onOpenAddExpense(activeCard.id)}
-                className={`flex-1 py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition-colors active:scale-95 ${
-                  isOled
-                    ? 'bg-[#161B22] hover:bg-[#21262D] text-[#F8FAFC] border-[#21262D]'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200 shadow-xs'
-                }`}
+                className="text-xs font-semibold px-3.5 py-2 rounded-xl border border-slate-200 dark:border-[#21262D] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#161B22] transition-colors active:scale-95 shrink-0 whitespace-nowrap"
               >
-                <Plus size={14} />
-                <span>Lançar Despesa</span>
+                {language === 'pt-BR' ? 'Lançar compra' : 'Add purchase'}
               </button>
 
-              <button
-                type="button"
-                disabled={statementData.total <= 0 || statementData.isSettled}
-                onClick={() =>
-                  setPayingInvoiceCycle({
-                    cardId: activeCard.id,
-                    invoiceMonth: statementMonth,
-                  })
-                }
-                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                  statementData.isSettled
-                    ? isOled
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 cursor-default'
-                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
-                    : statementData.total > 0
-                    ? 'bg-[#10B981] hover:bg-[#059669] text-white shadow-xs active:scale-95'
-                    : isOled
-                    ? 'bg-[#161B22] text-[#94A3B8] opacity-60 border border-[#21262D] cursor-not-allowed'
-                    : 'bg-slate-100 text-slate-400 opacity-60 border border-slate-200 cursor-not-allowed'
-                }`}
-              >
-                {statementData.isSettled ? (
-                  <>
-                    <CheckCircle2 size={13} />
-                    <span>Fatura Paga</span>
-                  </>
-                ) : (
-                  <>
-                    <DollarSign size={13} />
-                    <span>Pagar Fatura</span>
-                  </>
-                )}
-              </button>
+              {statementData.isSettled ? (
+                <span className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                  <CheckCircle2 size={13} />
+                  <span>{language === 'pt-BR' ? 'Fatura Paga' : 'Paid'}</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={statementData.total <= 0}
+                  onClick={() =>
+                    setPayingInvoiceCycle({
+                      cardId: activeCard.id,
+                      invoiceMonth: statementMonth,
+                    })
+                  }
+                  className={`text-xs font-semibold px-3.5 py-2 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white flex items-center gap-1 shadow-sm transition-all shrink-0 whitespace-nowrap active:scale-95 ${
+                    statementData.total <= 0 ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <DollarSign size={13} />
+                  <span>{language === 'pt-BR' ? 'Pagar Fatura' : 'Pay Invoice'}</span>
+                </button>
+              )}
             </div>
           </div>
 
           {/* Statement Items List with Swipe-to-Reveal */}
           {statementData.txs.length === 0 ? (
-            <div className={`p-7 rounded-xl border text-center space-y-2 ${
+            <div className={`py-6 px-4 rounded-xl border text-center ${
               isOled ? 'bg-[#161B22]/50 border-[#21262D]' : 'bg-slate-50 border-slate-200'
             }`}>
-              <p className={`text-xs font-semibold ${isOled ? 'text-[#94A3B8]' : 'text-slate-600'}`}>
-                Nenhuma compra lançada nesta fatura.
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                {language === 'pt-BR'
+                  ? 'Nenhuma compra lançada nesta fatura.'
+                  : 'No purchases recorded for this invoice.'}
               </p>
-              <button
-                type="button"
-                onClick={() => onOpenAddExpense(activeCard.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                  isOled
-                    ? 'bg-[#6E5440]/20 hover:bg-[#6E5440]/30 text-[#D0B595] border-[#6E5440]/40'
-                    : 'bg-[#6E5440]/10 hover:bg-[#6E5440]/20 text-[#6E5440] border-[#6E5440]/30'
-                }`}
-              >
-                <Plus size={13} />
-                <span>Lançar Compra</span>
-              </button>
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -1384,6 +1327,145 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
                 {payingSubmitting
                   ? (t.generatingInvoicePayment || 'Gerando...')
                   : (t.confirmPayInvoiceBtn || 'Confirmar Pagamento')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Manage Cards */}
+      {isManageModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsManageModalOpen(false);
+          }}
+        >
+          <div
+            className={`border w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4 ${
+              isOled
+                ? 'bg-[#0D1117] border-[#21262D] text-slate-100 shadow-black/80'
+                : 'bg-white border-slate-200 text-slate-800'
+            }`}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-[#21262D]">
+              <h3 className={`text-sm sm:text-base font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
+                {language === 'pt-BR' ? 'Gerenciar Cartões' : 'Manage Cards'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsManageModalOpen(false)}
+                className={`p-1.5 rounded-xl border border-transparent transition-colors ${
+                  isOled ? 'text-slate-400 hover:text-white hover:bg-[#161B22]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+                aria-label={language === 'pt-BR' ? 'Fechar' : 'Close'}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Cards Stack */}
+            <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1 my-3">
+              {creditCards.length === 0 ? (
+                <p className={`text-xs text-center py-4 ${isOled ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {language === 'pt-BR' ? 'Nenhum cartão cadastrado.' : 'No cards registered.'}
+                </p>
+              ) : (
+                creditCards.map((card) => {
+                  const bankInfo = resolveBankInfo(card);
+                  const brandBgColor =
+                    card.color && card.color !== '#6E5440'
+                      ? card.color
+                      : bankInfo.primaryColor || card.color || '#6E5440';
+
+                  return (
+                    <div
+                      key={card.id}
+                      className={`flex items-center justify-between p-3 rounded-xl border ${
+                        isOled
+                          ? 'border-[#21262D] bg-[#161B22]/50'
+                          : 'border-slate-200/80 bg-slate-50/50'
+                      }`}
+                    >
+                      {/* Left: Card Info */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm text-white"
+                          style={{ backgroundColor: brandBgColor }}
+                        >
+                          <AppIcon name={bankInfo.iconName} size={18} color="#FFFFFF" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4
+                            className={`text-xs sm:text-sm font-semibold truncate ${
+                              isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
+                            }`}
+                          >
+                            {card.name}
+                          </h4>
+                          <span
+                            className={`text-[11px] font-mono block ${
+                              isOled ? 'text-slate-400' : 'text-slate-500'
+                            }`}
+                          >
+                            •••• {card.lastDigits || '••••'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right: Discrete Action Buttons */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsManageModalOpen(false);
+                            openEditCardModal(card);
+                          }}
+                          className={`p-2 rounded-lg transition-colors ${
+                            isOled
+                              ? 'text-slate-400 hover:text-slate-200 hover:bg-[#21262D]'
+                              : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200/60'
+                          }`}
+                          title={language === 'pt-BR' ? 'Editar cartão' : 'Edit card'}
+                          aria-label={language === 'pt-BR' ? 'Editar cartão' : 'Edit card'}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsManageModalOpen(false);
+                            setDeleteConfirmCardId(card.id);
+                          }}
+                          className={`p-2 rounded-lg transition-colors ${
+                            isOled
+                              ? 'text-slate-400 hover:text-red-500 hover:bg-red-500/20'
+                              : 'text-slate-400 hover:text-red-500 hover:bg-red-500/10'
+                          }`}
+                          title={language === 'pt-BR' ? 'Excluir cartão' : 'Delete card'}
+                          aria-label={language === 'pt-BR' ? 'Excluir cartão' : 'Delete card'}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer Action Button */}
+            <div className="pt-3 border-t border-slate-100 dark:border-[#21262D] flex flex-col w-full">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManageModalOpen(false);
+                  openAddCardModal();
+                }}
+                className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm bg-[#10B981] hover:bg-emerald-600 active:bg-emerald-700 text-white transition-colors shadow-sm text-center"
+              >
+                {language === 'pt-BR' ? 'Cadastrar Novo Cartão' : 'Register New Card'}
               </button>
             </div>
           </div>
