@@ -1,401 +1,29 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import {
-  CreditCard as CreditCardIcon,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Pencil,
-  Trash2,
-  DollarSign,
-  X,
-  ShieldCheck,
-  TrendingUp,
-} from 'lucide-react';
-import {
-  AppLanguage,
-  AppTheme,
-  Category,
-  CreditCard,
-  CreditCardBrand,
-  Transaction,
-} from '../types';
-import { CategoryIcon } from './CategoryIcon';
-import { AppIcon, BankIcon, resolveBankInfo } from './icons';
-import {
-  computeCardFirstInvoiceMonth,
-  formatCurrency,
-  formatMonthLabel,
-  getTodayDateStr,
-  shiftMonth,
-} from '../utils/format';
-import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
+import { CreditCard } from '../types';
+import { computeCardFirstInvoiceMonth, getTodayDateStr } from '../utils/format';
+import { TRANSLATIONS } from '../utils/i18n';
 import { CreditCardModal } from './CreditCardModal';
+import {
+  CreditCardsViewProps,
+  computeCardsMetrics,
+  computeConsolidatedLimits,
+  computeInvoiceCycleStatus,
+  computeStatementData,
+} from './cards/cardStatementMath';
+import { CreditCardCarousel } from './cards/CreditCardCarousel';
+import {
+  CardBrandBadge,
+  CardInvoiceHeaderAndActions,
+} from './cards/CardInvoiceHeaderAndActions';
+import { CardInvoiceItemsList } from './cards/CardInvoiceItemsList';
+import {
+  DeleteCardConfirmModal,
+  ManageCardsModal,
+  PayInvoiceConfirmModal,
+} from './cards/ManageCardsModal';
 
-interface CreditCardsViewProps {
-  selectedMonth?: string;
-  creditCards: CreditCard[];
-  transactions: Transaction[];
-  categories: Category[];
-  currency: string;
-  language: AppLanguage;
-  theme: AppTheme;
-  onSaveCard: (card: Partial<CreditCard> & { name: string; totalLimit: number; closingDay: number; dueDay: number }) => Promise<void>;
-  onDeleteCard: (cardId: string) => Promise<void>;
-  onPayInvoice: (cardId: string, invoiceMonth: string) => Promise<void>;
-  onOpenAddExpense: (cardId?: string) => void;
-  onEditTransaction: (tx: Transaction) => void;
-  onDeleteTransaction: (tx: Transaction) => void;
-  onActiveCardChange?: (cardId: string | null) => void;
-  onModalOpenChange?: (open: boolean) => void;
-}
-
-const BRAND_OPTIONS: { id: CreditCardBrand; name: string }[] = [
-  { id: 'mastercard', name: 'Mastercard' },
-  { id: 'visa', name: 'Visa' },
-  { id: 'elo', name: 'Elo' },
-  { id: 'amex', name: 'American Express' },
-  { id: 'default', name: 'Outro / Genérico' },
-];
-
-const PRESET_COLORS = [
-  '#820ad1', // Nubank purple
-  '#ff7a00', // Inter orange
-  '#003399', // Itaú / Bradesco blue
-  '#059669', // Emerald
-  '#dc2626', // Santander red
-  '#0284c7', // Sky blue
-  '#4f46e5', // Indigo
-  '#6E5440', // Prumo iron
-  '#d97706', // Amber gold
-  '#ec4899', // Pink
-];
-
-const formatShortNumericDate = (dateStr?: string | null): string => {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    const day = parts[2].padStart(2, '0');
-    const month = parts[1].padStart(2, '0');
-    const year = parts[0].slice(-2);
-    return `${day}/${month}/${year}`;
-  }
-  return dateStr;
-};
-
-// Visual brand and institution badge component powered by @edusites/icons
-export const CardBrandBadge: React.FC<{
-  brand?: CreditCardBrand;
-  card?: CreditCard;
-  className?: string;
-  size?: number;
-  color?: string;
-}> = ({
-  brand = 'default',
-  card,
-  className = '',
-  size = 22,
-  color,
-}) => {
-  const bank = resolveBankInfo(card || brand);
-  return (
-    <AppIcon
-      name={bank.iconName}
-      size={size}
-      color={color || (className.includes('text-white') ? '#FFFFFF' : undefined)}
-      className={className}
-    />
-  );
-};
-
-/* Swipe configuration for invoice statement items */
-const INVOICE_SWIPE_WIDTH = 110;
-const INVOICE_SWIPE_SNAP = 50;
-const INVOICE_SWIPE_MAX = 130;
-
-interface SwipeableInvoiceItemProps {
-  tx: Transaction;
-  cat?: Category;
-  currency: string;
-  language: AppLanguage;
-  isOled?: boolean;
-  isOpen: boolean;
-  anyRowOpen: boolean;
-  onSetOpenRow: (id: string | null) => void;
-  onEditTransaction: (tx: Transaction) => void;
-  onDeleteTransaction: (tx: Transaction) => void;
-}
-
-const SwipeableInvoiceItem: React.FC<SwipeableInvoiceItemProps> = ({
-  tx,
-  cat,
-  currency,
-  language,
-  isOled = true,
-  isOpen,
-  anyRowOpen,
-  onSetOpenRow,
-  onEditTransaction,
-  onDeleteTransaction,
-}) => {
-  const [dragOffset, setDragOffset] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-
-  const gestureRef = useRef<{
-    startX: number;
-    startY: number;
-    initialOffset: number;
-    lock: 'none' | 'horizontal' | 'vertical';
-    currentOffset: number;
-    active: boolean;
-  }>({
-    startX: 0,
-    startY: 0,
-    initialOffset: 0,
-    lock: 'none',
-    currentOffset: 0,
-    active: false,
-  });
-
-  const clampSwipeOffset = (rawOffset: number): number => {
-    if (rawOffset > 0) return 0;
-    if (rawOffset < -INVOICE_SWIPE_WIDTH) {
-      const extra = rawOffset + INVOICE_SWIPE_WIDTH;
-      return Math.max(-INVOICE_SWIPE_MAX, -INVOICE_SWIPE_WIDTH + extra * 0.25);
-    }
-    return rawOffset;
-  };
-
-  const finishSwipeGesture = () => {
-    const g = gestureRef.current;
-    if (!g.active) return;
-    g.active = false;
-
-    if (g.lock === 'horizontal') {
-      const finalOffset = g.currentOffset;
-      if (g.initialOffset === 0) {
-        if (finalOffset <= -INVOICE_SWIPE_SNAP) {
-          onSetOpenRow(tx.id);
-        } else {
-          onSetOpenRow(null);
-        }
-      } else {
-        if (finalOffset > -INVOICE_SWIPE_WIDTH + 30) {
-          onSetOpenRow(null);
-        } else {
-          onSetOpenRow(tx.id);
-        }
-      }
-    }
-
-    g.lock = 'none';
-    setIsDragging(false);
-    setDragOffset(null);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    if (anyRowOpen && !isOpen) {
-      onSetOpenRow(null);
-    }
-    const initial = isOpen ? -INVOICE_SWIPE_WIDTH : 0;
-    gestureRef.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      initialOffset: initial,
-      lock: 'none',
-      currentOffset: initial,
-      active: true,
-    };
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    const g = gestureRef.current;
-    if (!g.active || e.touches.length !== 1) return;
-
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - g.startX;
-    const deltaY = touch.clientY - g.startY;
-
-    if (g.lock === 'none') {
-      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
-      if (Math.abs(deltaY) > Math.abs(deltaX)) {
-        g.lock = 'vertical';
-        g.active = false;
-        return;
-      }
-      g.lock = 'horizontal';
-      setIsDragging(true);
-    }
-
-    if (g.lock === 'horizontal') {
-      if (e.cancelable) e.preventDefault();
-      const clamped = clampSwipeOffset(g.initialOffset + deltaX);
-      g.currentOffset = clamped;
-      setDragOffset(clamped);
-    }
-  };
-
-  const handleTouchEnd = () => finishSwipeGesture();
-
-  const translateX = dragOffset !== null ? dragOffset : isOpen ? -INVOICE_SWIPE_WIDTH : 0;
-  const hasInstallment = tx.installmentTotal && tx.installmentTotal > 1;
-
-  return (
-    <div className="relative overflow-hidden select-none rounded-xl group">
-      {/* Background action buttons (Revealed on left swipe) */}
-      <div
-        className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-2 pr-3 z-0"
-        style={{ width: `${INVOICE_SWIPE_WIDTH}px` }}
-      >
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSetOpenRow(null);
-            onEditTransaction(tx);
-          }}
-          className="swipe-action-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0 shadow-xs"
-          title="Editar compra"
-        >
-          <Pencil size={15} />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSetOpenRow(null);
-            onDeleteTransaction(tx);
-          }}
-          className="swipe-action-btn-danger w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 shrink-0 shadow-xs"
-          title="Excluir compra"
-        >
-          <Trash2 size={15} />
-        </button>
-      </div>
-
-      {/* Foreground Swipeable Item */}
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
-        onClick={() => {
-          if (isOpen) {
-            onSetOpenRow(null);
-          } else {
-            onEditTransaction(tx);
-          }
-        }}
-        style={{
-          transform: `translate3d(${translateX}px, 0, 0)`,
-          transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
-          willChange: isDragging || isOpen ? 'transform' : 'auto',
-        }}
-        className={`swipe-foreground-layer relative z-10 flex items-center justify-between p-3 transition-colors gap-2.5 cursor-pointer border rounded-xl ${
-          isOled
-            ? 'bg-[#0D1117] border-[#21262D] hover:bg-[#161B22]/60'
-            : 'bg-white border-slate-200 hover:bg-slate-50 shadow-xs'
-        }`}
-      >
-        {/* Left: Category Icon & Purchase Info */}
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <CategoryIcon
-            icon={cat?.icon || 'Tag'}
-            color={cat?.color || '#94A3B8'}
-            size={16}
-            badgeSize="md"
-          />
-
-          <div className="min-w-0 flex-1">
-            <p className={`text-xs sm:text-sm font-semibold truncate leading-snug ${
-              isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
-            }`}>
-              {tx.description}
-            </p>
-
-            <div className={`flex items-center gap-1.5 flex-wrap text-[11px] mt-0.5 leading-none ${
-              isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-            }`}>
-              <span className={`font-medium truncate max-w-[120px] ${
-                isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-              }`}>
-                {getCategoryDisplayName(cat, language)}
-              </span>
-
-              {hasInstallment && (
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
-                  isOled
-                    ? 'bg-[#161B22] border-[#21262D] text-[#D0B595]'
-                    : 'bg-slate-100 border-slate-200 text-slate-700'
-                }`}>
-                  {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                </span>
-              )}
-
-              {tx.notes && (
-                <>
-                  <span>•</span>
-                  <span className={`italic truncate max-w-[120px] ${
-                    isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-                  }`}>{tx.notes}</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Amount & Short Numeric Date Stack + Desktop Hover Fallback */}
-        <div className="flex items-center gap-2 shrink-0 pl-1">
-          <div className="flex flex-col items-end justify-center text-right">
-            <span className="text-sm font-semibold text-[#EF4444] whitespace-nowrap leading-tight">
-              -{formatCurrency(tx.amount, currency)}
-            </span>
-            <span className={`text-xs mt-0.5 whitespace-nowrap leading-none ${
-              isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-            }`}>
-              {formatShortNumericDate(tx.purchaseDate || tx.date)}
-            </span>
-          </div>
-
-          {/* Desktop Fallback Hover Actions (Visible on mouse hover, hidden on mobile touch) */}
-          <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEditTransaction(tx);
-              }}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${
-                isOled
-                  ? 'bg-[#161B22] border-[#21262D] text-[#94A3B8] hover:text-[#F8FAFC]'
-                  : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-              }`}
-              title="Editar compra"
-            >
-              <Pencil size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDeleteTransaction(tx);
-              }}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${
-                isOled
-                  ? 'bg-[#161B22] border-[#21262D] text-[#EF4444] hover:bg-rose-500/20'
-                  : 'bg-slate-100 border-slate-200 text-[#EF4444] hover:bg-rose-50'
-              }`}
-              title="Excluir compra"
-            >
-              <Trash2 size={12} />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+export { CardBrandBadge };
+export type { CreditCardsViewProps };
 
 export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   selectedMonth,
@@ -419,10 +47,8 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const todayStr = getTodayDateStr();
   const currentMonthStr = todayStr.slice(0, 7);
 
-  // Active Carousel Index
   const [activeIndex, setActiveIndex] = useState<number>(0);
 
-  // Selected month for card statement view (defaults to active card's open invoice cycle or current month)
   const defaultOpenMonth = useMemo(() => {
     const card = creditCards[0];
     if (!card) return currentMonthStr;
@@ -432,14 +58,9 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   const [internalStatementMonth, setInternalStatementMonth] = useState<string>(defaultOpenMonth);
   const statementMonth = selectedMonth || internalStatementMonth;
 
-  // Active open swipe row id in invoice statement
   const [openRowId, setOpenRowId] = useState<string | null>(null);
-
-  // Card Add/Edit Modal state
   const [cardModalOpen, setCardModalOpen] = useState<boolean>(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
-
-  // Manage Cards Modal state
   const [isManageModalOpen, setIsManageModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -449,20 +70,19 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   useEffect(() => {
     if (!isManageModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsManageModalOpen(false);
-      }
+      if (e.key === 'Escape') setIsManageModalOpen(false);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isManageModalOpen]);
 
-  // Delete Card modal state
   const [deleteConfirmCardId, setDeleteConfirmCardId] = useState<string | null>(null);
-  const [payingInvoiceCycle, setPayingInvoiceCycle] = useState<{ cardId: string; invoiceMonth: string } | null>(null);
+  const [payingInvoiceCycle, setPayingInvoiceCycle] = useState<{
+    cardId: string;
+    invoiceMonth: string;
+  } | null>(null);
   const [payingSubmitting, setPayingSubmitting] = useState<boolean>(false);
 
-  // Keep activeIndex within bounds
   useEffect(() => {
     if (creditCards.length === 0) {
       setActiveIndex(0);
@@ -471,9 +91,10 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
     }
   }, [creditCards.length, activeIndex]);
 
-  const activeCard = useMemo(() => {
-    return creditCards[activeIndex] || creditCards[0] || null;
-  }, [creditCards, activeIndex]);
+  const activeCard = useMemo(
+    () => creditCards[activeIndex] || creditCards[0] || null,
+    [creditCards, activeIndex]
+  );
 
   useEffect(() => {
     onActiveCardChange?.(activeCard?.id || null);
@@ -483,369 +104,41 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   useEffect(() => {
     if (!selectedMonth && activeCard && activeCard.id !== prevActiveCardIdRef.current) {
       prevActiveCardIdRef.current = activeCard.id;
-      const cardOpenMonth = computeCardFirstInvoiceMonth(todayStr, activeCard.closingDay).invoiceMonth;
+      const cardOpenMonth = computeCardFirstInvoiceMonth(
+        todayStr,
+        activeCard.closingDay
+      ).invoiceMonth;
       setInternalStatementMonth(cardOpenMonth);
     }
   }, [selectedMonth, activeCard?.id, activeCard?.closingDay, todayStr]);
 
-  // Helper to determine the invoiceMonth of any card transaction
-  const getTxInvoiceMonth = (tx: Transaction, card: CreditCard): string => {
-    if (tx.invoiceMonth) return tx.invoiceMonth;
-    const firstMonth = computeCardFirstInvoiceMonth(
-      tx.purchaseDate || tx.date,
-      card.closingDay
-    ).invoiceMonth;
-    if (
-      tx.installmentTotal &&
-      tx.installmentTotal > 1 &&
-      tx.installmentCurrent &&
-      tx.installmentCurrent > 1
-    ) {
-      return shiftMonth(firstMonth, tx.installmentCurrent - 1);
-    }
-    return firstMonth;
-  };
+  const cardsMetrics = useMemo(
+    () => computeCardsMetrics(creditCards, transactions, currentMonthStr, statementMonth),
+    [creditCards, transactions, currentMonthStr, statementMonth]
+  );
 
-  // Compute card metrics for all cards
-  const cardsMetrics = useMemo(() => {
-    return creditCards.map((card) => {
-      const cardTxs = transactions.filter((tx) => tx.cardId === card.id);
+  const consolidated = useMemo(() => computeConsolidatedLimits(cardsMetrics), [cardsMetrics]);
 
-      // Total Unsettled Obligations:
-      // In credit card accounting, installment purchases immediately hold/block their full
-      // total value against the credit line upon creation.
-      // Sum all pending transactions where status !== 'paid' (one-time purchases, current/closed unpaid
-      // invoice charges, and all remaining future installments belonging to this card).
-      const unpaidCardTxs = cardTxs.filter((tx) => tx.status !== 'paid');
-      const usedLimit = Math.max(
-        0,
-        Number(
-          unpaidCardTxs
-            .reduce((sum, tx) => {
-              const amt = Number(tx.amount || 0);
-              return sum + (tx.type === 'income' ? -amt : amt);
-            }, 0)
-            .toFixed(2)
-        )
-      );
+  const statementData = useMemo(
+    () => computeStatementData(activeCard, transactions, statementMonth),
+    [activeCard, transactions, statementMonth]
+  );
 
-      // Real Available Limit = Total Credit Limit - Total Unsettled Obligations
-      const availableLimit = Math.max(0, Number((card.totalLimit - usedLimit).toFixed(2)));
+  const invoiceCycleStatus = useMemo(
+    () => computeInvoiceCycleStatus(activeCard, statementData.isSettled, statementMonth),
+    [activeCard, statementData.isSettled, statementMonth]
+  );
 
-      // Used Percentage = (Total Used / Total Card Limit) * 100
-      const usedPercentage =
-        card.totalLimit > 0 ? Math.min(100, Math.round((usedLimit / card.totalLimit) * 100)) : 0;
-      const usedPercentFloat =
-        card.totalLimit > 0 ? Math.min(100, (usedLimit / card.totalLimit) * 100) : 0;
-
-      // Current month invoice total
-      const currentInvoiceTotal = Math.max(
-        0,
-        Number(
-          cardTxs
-            .filter((tx) => getTxInvoiceMonth(tx, card) === currentMonthStr)
-            .reduce((sum, tx) => {
-              const amt = Number(tx.amount || 0);
-              return sum + (tx.type === 'income' ? -amt : amt);
-            }, 0)
-            .toFixed(2)
-        )
-      );
-
-      // Next month invoice total
-      const nextMonthStr = shiftMonth(currentMonthStr, 1);
-      const nextInvoiceTotal = Math.max(
-        0,
-        Number(
-          cardTxs
-            .filter((tx) => getTxInvoiceMonth(tx, card) === nextMonthStr)
-            .reduce((sum, tx) => {
-              const amt = Number(tx.amount || 0);
-              return sum + (tx.type === 'income' ? -amt : amt);
-            }, 0)
-            .toFixed(2)
-        )
-      );
-
-      // Selected/Active billing cycle invoice total (reflects statementMonth)
-      const cycleSettledKey = `${card.id}__${statementMonth}`;
-      const cycleSettlementTx = transactions.find((tx) => tx.settledInvoiceKey === cycleSettledKey);
-      const isCycleSettled = Boolean(cycleSettlementTx && cycleSettlementTx.status === 'paid');
-
-      // If the cycle has been paid, open balance resets to 0 (or any new unpaid charges added after payment)
-      const selectedCycleTotal = isCycleSettled
-        ? Math.max(
-            0,
-            Number(
-              cardTxs
-                .filter((tx) => getTxInvoiceMonth(tx, card) === statementMonth && tx.status !== 'paid')
-                .reduce((sum, tx) => {
-                  const amt = Number(tx.amount || 0);
-                  return sum + (tx.type === 'income' ? -amt : amt);
-                }, 0)
-                .toFixed(2)
-            )
-          )
-        : Math.max(
-            0,
-            Number(
-              cardTxs
-                .filter((tx) => getTxInvoiceMonth(tx, card) === statementMonth)
-                .reduce((sum, tx) => {
-                  const amt = Number(tx.amount || 0);
-                  return sum + (tx.type === 'income' ? -amt : amt);
-                }, 0)
-                .toFixed(2)
-            )
-          );
-
-      // Check current invoice settlement
-      const currentSettledKey = `${card.id}__${currentMonthStr}`;
-      const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === currentSettledKey);
-      const isCurrentInvoiceSettled = Boolean(settlementTx && settlementTx.status === 'paid');
-      const isCurrentInvoicePending = Boolean(settlementTx && settlementTx.status === 'unpaid');
-
-      return {
-        card,
-        usedLimit,
-        availableLimit,
-        usedPercentage,
-        usedPercentFloat,
-        currentInvoiceTotal,
-        selectedCycleTotal,
-        nextInvoiceTotal,
-        settlementTx,
-        isCurrentInvoiceSettled,
-        isCurrentInvoicePending,
-        isCycleSettled,
-      };
-    });
-  }, [creditCards, transactions, currentMonthStr, statementMonth]);
-
-  // Consolidated Global Limits Summary
-  const consolidated = useMemo(() => {
-    let totalLimit = 0;
-    let totalUsed = 0;
-    let totalAvailable = 0;
-
-    cardsMetrics.forEach((m) => {
-      totalLimit += m.card.totalLimit;
-      totalUsed += m.usedLimit;
-      totalAvailable += m.availableLimit;
-    });
-
-    totalLimit = Number(totalLimit.toFixed(2));
-    totalUsed = Number(totalUsed.toFixed(2));
-    totalAvailable = Number(totalAvailable.toFixed(2));
-    const combinedPercentage =
-      totalLimit > 0 ? Math.min(100, Math.round((totalUsed / totalLimit) * 100)) : 0;
-
-    return {
-      totalLimit,
-      totalUsed,
-      totalAvailable,
-      combinedPercentage,
-    };
-  }, [cardsMetrics]);
-
-  // Active Card Metrics
-  const activeMetric = useMemo(() => {
-    if (!activeCard) return null;
-    return cardsMetrics.find((m) => m.card.id === activeCard.id) || null;
-  }, [activeCard, cardsMetrics]);
-
-  // Statement transactions for active card and selected statementMonth
-  const statementData = useMemo(() => {
-    if (!activeCard) {
-      return {
-        txs: [],
-        total: 0,
-        isSettled: false,
-        isPendingPayment: false,
-      };
-    }
-
-    const txs = transactions
-      .filter((tx) => tx.cardId === activeCard.id && getTxInvoiceMonth(tx, activeCard) === statementMonth)
-      .sort((a, b) => (b.purchaseDate || b.date).localeCompare(a.purchaseDate || a.date));
-
-    const total = Number(txs.reduce((sum, tx) => sum + Number(tx.amount || 0), 0).toFixed(2));
-
-    const settlementKey = `${activeCard.id}__${statementMonth}`;
-    const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === settlementKey) || null;
-    const isSettled = Boolean(settlementTx && settlementTx.status === 'paid');
-    const isPendingPayment = Boolean(settlementTx && settlementTx.status === 'unpaid');
-
-    return {
-      txs,
-      total,
-      isSettled,
-      isPendingPayment,
-    };
-  }, [activeCard, transactions, statementMonth]);
-
-  // Invoice cycle status badge helper
-  const invoiceCycleStatus = useMemo(() => {
-    if (!activeCard) return { label: 'Aberta', color: 'sky' };
-    if (statementData.isSettled) return { label: 'Fatura Paga', color: 'emerald' };
-
-    const today = new Date();
-    const todayYm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-    const todayDay = today.getDate();
-
-    if (statementMonth < todayYm) {
-      return { label: 'Fatura Fechada', color: 'amber' };
-    } else if (statementMonth > todayYm) {
-      return { label: 'Fatura Futura', color: 'sky' };
-    } else {
-      if (todayDay >= activeCard.closingDay) {
-        return { label: 'Fatura Fechada', color: 'amber' };
-      }
-      return { label: 'Fatura Aberta', color: 'sky' };
-    }
-  }, [activeCard, statementData.isSettled, statementMonth]);
-
-  // Carousel Swipe Gesture Handling
-  const [carouselDragOffset, setCarouselDragOffset] = useState<number>(0);
-  const [isCarouselDragging, setIsCarouselDragging] = useState<boolean>(false);
-  const carouselTouchStartRef = useRef<{ x: number; y: number; active: boolean; lock: 'none' | 'h' | 'v' }>({
-    x: 0,
-    y: 0,
-    active: false,
-    lock: 'none',
-  });
-
-  const handleCarouselTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1 || creditCards.length <= 1) return;
-    const touch = e.touches[0];
-    carouselTouchStartRef.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-      active: true,
-      lock: 'none',
-    };
-  };
-
-  const handleCarouselTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    const s = carouselTouchStartRef.current;
-    if (!s.active || e.touches.length !== 1) return;
-
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - s.x;
-    const deltaY = touch.clientY - s.y;
-
-    if (s.lock === 'none') {
-      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
-      if (Math.abs(deltaY) > Math.abs(deltaX)) {
-        s.lock = 'v';
-        s.active = false;
-        return;
-      }
-      s.lock = 'h';
-      setIsCarouselDragging(true);
-    }
-
-    if (s.lock === 'h') {
-      if (e.cancelable) e.preventDefault();
-      // Apply rubber-band damping at carousel boundaries
-      let damped = deltaX;
-      if (activeIndex === 0 && deltaX > 0) {
-        damped = deltaX * 0.25;
-      } else if (activeIndex === creditCards.length - 1 && deltaX < 0) {
-        damped = deltaX * 0.25;
-      }
-      setCarouselDragOffset(damped);
-    }
-  };
-
-  const handleCarouselTouchEnd = () => {
-    const s = carouselTouchStartRef.current;
-    if (!s.active) return;
-    s.active = false;
-
-    if (s.lock === 'h') {
-      const threshold = 45;
-      if (carouselDragOffset < -threshold && activeIndex < creditCards.length - 1) {
-        setActiveIndex((prev) => prev + 1);
-      } else if (carouselDragOffset > threshold && activeIndex > 0) {
-        setActiveIndex((prev) => prev - 1);
-      }
-    }
-
-    s.lock = 'none';
-    setIsCarouselDragging(false);
-    setCarouselDragOffset(0);
-  };
-
-  const mouseDragRef = useRef<{
-    startX: number;
-    active: boolean;
-    hasMoved: boolean;
-  }>({
-    startX: 0,
-    active: false,
-    hasMoved: false,
-  });
-
-  const handleCarouselMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (creditCards.length <= 1 || e.button !== 0) return;
-    mouseDragRef.current = {
-      startX: e.clientX,
-      active: true,
-      hasMoved: false,
-    };
-    setIsCarouselDragging(true);
-  };
-
-  const handleCarouselMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!mouseDragRef.current.active) return;
-    const deltaX = e.clientX - mouseDragRef.current.startX;
-    if (Math.abs(deltaX) > 4) {
-      mouseDragRef.current.hasMoved = true;
-    }
-    let damped = deltaX;
-    if (activeIndex === 0 && deltaX > 0) {
-      damped = deltaX * 0.25;
-    } else if (activeIndex === creditCards.length - 1 && deltaX < 0) {
-      damped = deltaX * 0.25;
-    }
-    setCarouselDragOffset(damped);
-  };
-
-  const handleCarouselMouseUp = () => {
-    if (!mouseDragRef.current.active) return;
-    mouseDragRef.current.active = false;
-    const threshold = 45;
-    if (carouselDragOffset < -threshold && activeIndex < creditCards.length - 1) {
-      setActiveIndex((prev) => prev + 1);
-    } else if (carouselDragOffset > threshold && activeIndex > 0) {
-      setActiveIndex((prev) => prev - 1);
-    }
-    setIsCarouselDragging(false);
-    setCarouselDragOffset(0);
-  };
-
-  const handleCarouselClickCapture = (e: React.MouseEvent) => {
-    if (mouseDragRef.current.hasMoved) {
-      e.stopPropagation();
-      e.preventDefault();
-      mouseDragRef.current.hasMoved = false;
-    }
-  };
-
-  // Handlers for Add/Edit Card Modal
   const openAddCardModal = () => {
     setEditingCard(null);
     setCardModalOpen(true);
   };
 
-  const openEditCardModal = (card: CreditCard, e?: React.MouseEvent) => {
-    e?.stopPropagation();
+  const openEditCardModal = (card: CreditCard) => {
     setEditingCard(card);
     setCardModalOpen(true);
   };
 
-  // Handlers for Pay Invoice
   const handleConfirmPayInvoice = async () => {
     if (!payingInvoiceCycle) return;
     setPayingSubmitting(true);
@@ -859,362 +152,55 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
 
   return (
     <div className="space-y-4 pb-12 animate-fadeIn max-w-lg mx-auto w-full">
-      {/* 1. Interactive Single-Card Carousel or Empty State */}
-      {creditCards.length === 0 ? (
-        <div className={`p-8 rounded-2xl border border-dashed text-center space-y-3 ${
-          isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-300 shadow-xs'
-        }`}>
-          <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${
-            isOled ? 'bg-[#161B22] text-[#D0B595]' : 'bg-slate-100 text-[#6E5440]'
-          }`}>
-            <AppIcon name="cartao" size={24} />
-          </div>
-          <p className={`text-sm font-semibold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
-            {t.noCardsRegisteredYet || 'Nenhum cartão cadastrado'}
-          </p>
-          <p className={`text-xs max-w-sm mx-auto ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-            {t.noCardsRegisteredDesc || 'Adicione seus cartões para acompanhar limites, faturas e parcelas.'}
-          </p>
-          <button
-            type="button"
-            onClick={openAddCardModal}
-            className="px-4 py-2 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white text-xs font-semibold transition-colors active:scale-95 shadow-sm"
-          >
-            {language === 'pt-BR' ? 'Cadastrar cartão' : 'Add card'}
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {/* Carousel Viewport Container */}
-          <div className="relative w-full max-w-[400px] mx-auto px-3.5 sm:px-4">
-            <div
-              className={`relative w-full overflow-hidden touch-pan-y rounded-2xl select-none ${
-                creditCards.length > 1
-                  ? isCarouselDragging
-                    ? 'cursor-grabbing'
-                    : 'cursor-grab'
-                  : ''
-              }`}
-              onTouchStart={handleCarouselTouchStart}
-              onTouchMove={handleCarouselTouchMove}
-              onTouchEnd={handleCarouselTouchEnd}
-              onTouchCancel={handleCarouselTouchEnd}
-              onMouseDown={handleCarouselMouseDown}
-              onMouseMove={handleCarouselMouseMove}
-              onMouseUp={handleCarouselMouseUp}
-              onMouseLeave={handleCarouselMouseUp}
-              onClickCapture={handleCarouselClickCapture}
-            >
-              <div
-                className="flex w-full"
-                style={{
-                  transform: `translate3d(calc(-${activeIndex * 100}% + ${carouselDragOffset}px), 0, 0)`,
-                  transition: isCarouselDragging ? 'none' : 'transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1)',
-                  willChange: isCarouselDragging ? 'transform' : 'auto',
-                }}
-              >
-                {creditCards.map((card) => {
-                  const metric = cardsMetrics.find((m) => m.card.id === card.id) || {
-                    usedLimit: 0,
-                    availableLimit: card.totalLimit,
-                    usedPercentage: 0,
-                    usedPercentFloat: 0,
-                    currentInvoiceTotal: 0,
-                    selectedCycleTotal: 0,
-                  };
+      <CreditCardCarousel
+        creditCards={creditCards}
+        cardsMetrics={cardsMetrics}
+        consolidated={consolidated}
+        activeIndex={activeIndex}
+        setActiveIndex={setActiveIndex}
+        currency={currency}
+        language={language}
+        isOled={isOled}
+        t={t}
+        onOpenAddCard={openAddCardModal}
+        onOpenManageCards={() => setIsManageModalOpen(true)}
+      />
 
-                  const bankInfo = resolveBankInfo(card);
-                  // Apply official brand color or custom color selected by user
-                  const brandBgColor =
-                    card.color && card.color !== '#6E5440'
-                      ? card.color
-                      : bankInfo.primaryColor || card.color || '#6E5440';
-
-                  return (
-                    <div key={card.id} className="w-full shrink-0">
-                      <div
-                        className={`relative rounded-2xl p-5 sm:p-6 min-h-[215px] sm:min-h-[225px] border-2 overflow-hidden flex flex-col justify-between transition-colors ${
-                          isOled
-                            ? 'bg-[#0D1117] shadow-xl text-[#F8FAFC]'
-                            : 'bg-white shadow-lg shadow-slate-300/50 text-slate-900'
-                        }`}
-                        style={{ borderColor: card.color || brandBgColor }}
-                      >
-                        {/* Top Row: Nickname/Bank + Chip/Brand + Edit/Delete */}
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div
-                              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm text-white"
-                              style={{ backgroundColor: brandBgColor }}
-                            >
-                              <AppIcon name={bankInfo.iconName} size={22} color="#FFFFFF" />
-                            </div>
-                            <div className="min-w-0">
-                              <h3 className={`text-sm sm:text-base font-bold truncate ${
-                                isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
-                              }`}>
-                                {card.name}
-                              </h3>
-                              {card.lastDigits && (
-                                <span className={`text-[11px] font-mono block mt-0.5 ${
-                                  isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-                                }`}>
-                                  •••• {card.lastDigits}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Middle Row: Fatura Atual + Limit Progress Indicator */}
-                        <div className="my-auto py-3 space-y-2.5">
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span className={`text-[11px] uppercase font-bold tracking-wider ${
-                              isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-                            }`}>
-                              Fatura Atual
-                            </span>
-                            <span className={`text-xl sm:text-2xl font-black tracking-tight ${
-                              isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
-                            }`}>
-                              {formatCurrency(metric.selectedCycleTotal, currency)}
-                            </span>
-                          </div>
-
-                          {/* Available limit bar */}
-                          <div className="space-y-1.5">
-                            <div className={`h-2.5 w-full rounded-full overflow-hidden p-0.5 border ${
-                              isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-slate-100 border-slate-200'
-                            }`}>
-                              <div
-                                className={`h-full rounded-full transition-all duration-300 ${
-                                  metric.usedPercentage > 85
-                                    ? 'bg-[#EF4444]'
-                                    : metric.usedPercentage > 65
-                                    ? 'bg-[#F59E0B]'
-                                    : 'bg-[#10B981]'
-                                }`}
-                                style={{
-                                  width: `${Math.min(
-                                    100,
-                                    metric.usedPercentFloat !== undefined
-                                      ? metric.usedPercentFloat
-                                      : metric.usedPercentage
-                                  )}%`,
-                                }}
-                              />
-                            </div>
-
-                            <div className={`flex items-center justify-between text-xs ${
-                              isOled ? 'text-[#94A3B8]' : 'text-slate-500'
-                            }`}>
-                              <span>
-                                Disponível:{' '}
-                                <strong className="text-[#10B981] font-semibold">
-                                  {formatCurrency(metric.availableLimit, currency)}
-                                </strong>
-                              </span>
-                              <span>{metric.usedPercentage}% usado</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Bottom Row: Closing & Due Tags + Total Limit */}
-                        <div className={`pt-3 border-t flex items-center justify-between text-xs ${
-                          isOled ? 'border-[#21262D] text-[#94A3B8]' : 'border-slate-200 text-slate-500'
-                        }`}>
-                          <div className="flex items-center gap-1.5 text-[11px] font-medium">
-                            <span className={`px-2.5 py-1 rounded-lg border ${
-                              isOled ? 'bg-[#161B22] border-[#21262D] text-[#E2E8F0]' : 'bg-slate-100 border-slate-200 text-slate-700'
-                            }`}>
-                              Fecha dia <strong>{card.closingDay}</strong> • Vence dia <strong>{card.dueDay}</strong>
-                            </span>
-                          </div>
-
-                          <span className={`text-xs font-semibold ${
-                            isOled ? 'text-[#E2E8F0]' : 'text-slate-700'
-                          }`}>
-                            Limite: {formatCurrency(card.totalLimit, currency)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Centered Pagination Dots */}
-          {creditCards.length > 1 && (
-            <div className="flex justify-center items-center gap-1.5 py-1">
-              {creditCards.map((card, idx) => (
-                <button
-                  key={card.id}
-                  type="button"
-                  onClick={() => setActiveIndex(idx)}
-                  aria-label={`Ir para ${card.name}`}
-                  className={`transition-all duration-300 ${
-                    activeIndex === idx
-                      ? 'w-4 h-1.5 rounded-full bg-[#6E5440]'
-                      : isOled
-                      ? 'w-1.5 h-1.5 rounded-full bg-[#21262D] hover:bg-[#475569]'
-                      : 'w-1.5 h-1.5 rounded-full bg-slate-300 hover:bg-slate-400'
-                  }`}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* 2. Global Limits Summary & "Cadastrar Cartão" Button (Strict Single Row Below Carousel) */}
-          <div className="flex items-center justify-between gap-2 flex-nowrap w-full py-1">
-            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar min-w-0">
-              <div
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] sm:text-xs shrink-0 ${
-                  isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200 shadow-2xs'
-                }`}
-              >
-                <span className={`font-medium ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                  {language === 'pt-BR' ? 'Limite:' : 'Limit:'}
-                </span>
-                <span className={`font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
-                  {formatCurrency(consolidated.totalLimit, currency)}
-                </span>
-              </div>
-
-              <div
-                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] sm:text-xs shrink-0 ${
-                  isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200 shadow-2xs'
-                }`}
-              >
-                <span className={`font-medium ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                  {language === 'pt-BR' ? 'Disponível:' : 'Available:'}
-                </span>
-                <span className="font-bold text-[#10B981]">
-                  {formatCurrency(consolidated.totalAvailable, currency)}
-                </span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsManageModalOpen(true)}
-              className="bg-[#10B981] hover:bg-emerald-600 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition-colors shadow-sm flex-shrink-0 whitespace-nowrap active:scale-95"
-            >
-              {language === 'pt-BR' ? 'Gerenciar Cartões' : 'Manage Cards'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Synchronized Invoice Statement (Extrato da Fatura) */}
       {activeCard && (
-        <div className={`rounded-2xl p-4 border space-y-3.5 transition-colors ${
-          isOled
-            ? 'bg-[#0D1117] border-[#21262D] shadow-xl text-[#F8FAFC]'
-            : 'bg-white border-slate-200 shadow-sm text-slate-900'
-        }`}>
-          {/* New Header Layout: Status Left, Action Buttons Right */}
-          <div className="flex items-center justify-between gap-2 w-full pb-3 border-b border-slate-100 dark:border-[#21262D]">
-            {/* Left Side: Invoice Status Badge */}
-            <span
-              className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 border shrink-0 ${
-                invoiceCycleStatus.color === 'emerald'
-                  ? isOled
-                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : invoiceCycleStatus.color === 'amber'
-                  ? isOled
-                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-                    : 'bg-amber-50 border-amber-200 text-amber-700'
-                  : isOled
-                  ? 'bg-sky-500/15 border-sky-500/30 text-sky-400'
-                  : 'bg-sky-50 border-sky-200 text-sky-700'
-              }`}
-            >
-              {statementData.isSettled ? (
-                <CheckCircle2 size={13} />
-              ) : statementData.isPendingPayment ? (
-                <Clock size={13} />
-              ) : (
-                <span className="w-1.5 h-1.5 rounded-full bg-current inline-block" />
-              )}
-              <span>{invoiceCycleStatus.label}</span>
-            </span>
+        <div
+          className={`rounded-2xl p-4 border space-y-3.5 transition-colors ${
+            isOled
+              ? 'bg-[#0D1117] border-[#21262D] shadow-xl text-[#F8FAFC]'
+              : 'bg-white border-slate-200 shadow-sm text-slate-900'
+          }`}
+        >
+          <CardInvoiceHeaderAndActions
+            isOled={isOled}
+            language={language}
+            activeCard={activeCard}
+            statementMonth={statementMonth}
+            statementData={statementData}
+            invoiceCycleStatus={invoiceCycleStatus}
+            onOpenAddExpense={onOpenAddExpense}
+            onPayInvoiceClick={(cardId, invoiceMonth) =>
+              setPayingInvoiceCycle({ cardId, invoiceMonth })
+            }
+          />
 
-            {/* Right Side: Grouped Action Buttons */}
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => onOpenAddExpense(activeCard.id)}
-                className="text-xs font-semibold px-3.5 py-2 rounded-xl border border-slate-200 dark:border-[#21262D] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#161B22] transition-colors active:scale-95 shrink-0 whitespace-nowrap"
-              >
-                {language === 'pt-BR' ? 'Lançar compra' : 'Add purchase'}
-              </button>
-
-              {statementData.isSettled ? (
-                <span className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1 shrink-0 whitespace-nowrap">
-                  <CheckCircle2 size={13} />
-                  <span>{language === 'pt-BR' ? 'Fatura Paga' : 'Paid'}</span>
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  disabled={statementData.total <= 0}
-                  onClick={() =>
-                    setPayingInvoiceCycle({
-                      cardId: activeCard.id,
-                      invoiceMonth: statementMonth,
-                    })
-                  }
-                  className={`text-xs font-semibold px-3.5 py-2 rounded-xl bg-[#10B981] hover:bg-emerald-600 text-white flex items-center gap-1 shadow-sm transition-all shrink-0 whitespace-nowrap active:scale-95 ${
-                    statementData.total <= 0 ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                >
-                  <DollarSign size={13} />
-                  <span>{language === 'pt-BR' ? 'Pagar Fatura' : 'Pay Invoice'}</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Statement Items List with Swipe-to-Reveal */}
-          {statementData.txs.length === 0 ? (
-            <div className={`py-6 px-4 rounded-xl border text-center ${
-              isOled ? 'bg-[#161B22]/50 border-[#21262D]' : 'bg-slate-50 border-slate-200'
-            }`}>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                {language === 'pt-BR'
-                  ? 'Nenhuma compra lançada nesta fatura.'
-                  : 'No purchases recorded for this invoice.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              {statementData.txs.map((tx) => {
-                const cat = categories.find((c) => c.id === tx.categoryId);
-                return (
-                  <SwipeableInvoiceItem
-                    key={tx.id}
-                    tx={tx}
-                    cat={cat}
-                    currency={currency}
-                    language={language}
-                    isOled={isOled}
-                    isOpen={openRowId === tx.id}
-                    anyRowOpen={openRowId !== null}
-                    onSetOpenRow={setOpenRowId}
-                    onEditTransaction={onEditTransaction}
-                    onDeleteTransaction={onDeleteTransaction}
-                  />
-                );
-              })}
-            </div>
-          )}
+          <CardInvoiceItemsList
+            txs={statementData.txs}
+            categories={categories}
+            currency={currency}
+            language={language}
+            isOled={isOled}
+            openRowId={openRowId}
+            onSetOpenRow={setOpenRowId}
+            onEditTransaction={onEditTransaction}
+            onDeleteTransaction={onDeleteTransaction}
+          />
         </div>
       )}
 
-      {/* MODAL: Register / Edit Credit Card */}
       <CreditCardModal
         isOpen={cardModalOpen}
         editingCard={editingCard}
@@ -1229,248 +215,38 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
         onSaveCard={onSaveCard}
       />
 
-      {/* MODAL: Delete Card Confirmation */}
-      {deleteConfirmCardId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className={`border w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4 ${
-            isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200'
-          }`}>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400">
-                <AlertCircle size={22} />
-              </div>
-              <div>
-                <h3 className={`text-base font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
-                  {t.deleteCardModalTitle || 'Excluir Cartão'}
-                </h3>
-                <p className={`text-xs mt-0.5 ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                  {t.deleteCardModalDesc || 'Tem certeza de que deseja remover este cartão?'}
-                </p>
-              </div>
-            </div>
+      <DeleteCardConfirmModal
+        deleteConfirmCardId={deleteConfirmCardId}
+        isOled={isOled}
+        t={t}
+        onCancel={() => setDeleteConfirmCardId(null)}
+        onConfirmDelete={async (id) => {
+          setDeleteConfirmCardId(null);
+          await onDeleteCard(id);
+        }}
+      />
 
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteConfirmCardId(null)}
-                className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-colors ${
-                  isOled ? 'border-[#21262D] text-[#94A3B8] hover:bg-[#161B22]' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {t.cancelBtn || 'Cancelar'}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const id = deleteConfirmCardId;
-                  setDeleteConfirmCardId(null);
-                  await onDeleteCard(id);
-                }}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-xs transition-all active:scale-95"
-              >
-                {t.confirmDeleteCardBtn || 'Excluir'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PayInvoiceConfirmModal
+        payingInvoiceCycle={payingInvoiceCycle}
+        creditCards={creditCards}
+        language={language}
+        isOled={isOled}
+        payingSubmitting={payingSubmitting}
+        t={t}
+        onCancel={() => setPayingInvoiceCycle(null)}
+        onConfirmPayInvoice={handleConfirmPayInvoice}
+      />
 
-      {/* MODAL: Pay Invoice Confirmation */}
-      {payingInvoiceCycle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className={`border w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4 ${
-            isOled ? 'bg-[#0D1117] border-[#21262D]' : 'bg-white border-slate-200'
-          }`}>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-[#6E5440]/20 text-[#D0B595]">
-                <DollarSign size={22} />
-              </div>
-              <div>
-                <h3 className={`text-base font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
-                  {t.payInvoiceConfirmTitle || 'Confirmar Pagamento de Fatura'}
-                </h3>
-                <p className={`text-xs mt-0.5 ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                  {t.payInvoiceConfirmDesc?.(
-                    creditCards.find((c) => c.id === payingInvoiceCycle.cardId)?.name || '',
-                    formatMonthLabel(payingInvoiceCycle.invoiceMonth, language)
-                  ) || 'Gerar despesa no extrato bancário para esta fatura?'}
-                </p>
-              </div>
-            </div>
-
-            <div className={`p-3.5 rounded-xl border text-xs space-y-1 ${
-              isOled ? 'bg-[#161B22] border-[#21262D] text-[#E2E8F0]' : 'bg-slate-50 border-slate-200 text-slate-700'
-            }`}>
-              <p className={`font-semibold ${isOled ? 'text-[#D0B595]' : 'text-[#6E5440]'}`}>Como funciona:</p>
-              <p className={`text-[11px] leading-relaxed ${isOled ? 'text-[#94A3B8]' : 'text-slate-500'}`}>
-                {t.payInvoiceHowItWorksDesc ||
-                  'Uma despesa consolidada será criada no extrato principal com a data do pagamento da fatura. Seu saldo bancário será debitado e o limite do cartão será liberado.'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setPayingInvoiceCycle(null)}
-                className={`flex-1 py-2.5 px-4 rounded-xl border text-xs font-bold transition-colors ${
-                  isOled ? 'border-[#21262D] text-[#94A3B8] hover:bg-[#161B22]' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {t.cancelBtn || 'Cancelar'}
-              </button>
-              <button
-                type="button"
-                disabled={payingSubmitting}
-                onClick={handleConfirmPayInvoice}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold shadow-xs transition-all active:scale-95"
-              >
-                {payingSubmitting
-                  ? (t.generatingInvoicePayment || 'Gerando...')
-                  : (t.confirmPayInvoiceBtn || 'Confirmar Pagamento')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Manage Cards */}
-      {isManageModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsManageModalOpen(false);
-          }}
-        >
-          <div
-            className={`border w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4 ${
-              isOled
-                ? 'bg-[#0D1117] border-[#21262D] text-slate-100 shadow-black/80'
-                : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-[#21262D]">
-              <h3 className={`text-sm sm:text-base font-bold ${isOled ? 'text-[#F8FAFC]' : 'text-slate-900'}`}>
-                {language === 'pt-BR' ? 'Gerenciar Cartões' : 'Manage Cards'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsManageModalOpen(false)}
-                className={`p-1.5 rounded-xl border border-transparent transition-colors ${
-                  isOled ? 'text-slate-400 hover:text-white hover:bg-[#161B22]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-                aria-label={language === 'pt-BR' ? 'Fechar' : 'Close'}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Cards Stack */}
-            <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1 my-3">
-              {creditCards.length === 0 ? (
-                <p className={`text-xs text-center py-4 ${isOled ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {language === 'pt-BR' ? 'Nenhum cartão cadastrado.' : 'No cards registered.'}
-                </p>
-              ) : (
-                creditCards.map((card) => {
-                  const bankInfo = resolveBankInfo(card);
-                  const brandBgColor =
-                    card.color && card.color !== '#6E5440'
-                      ? card.color
-                      : bankInfo.primaryColor || card.color || '#6E5440';
-
-                  return (
-                    <div
-                      key={card.id}
-                      className={`flex items-center justify-between p-3 rounded-xl border ${
-                        isOled
-                          ? 'border-[#21262D] bg-[#161B22]/50'
-                          : 'border-slate-200/80 bg-slate-50/50'
-                      }`}
-                    >
-                      {/* Left: Card Info */}
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm text-white"
-                          style={{ backgroundColor: brandBgColor }}
-                        >
-                          <AppIcon name={bankInfo.iconName} size={18} color="#FFFFFF" />
-                        </div>
-                        <div className="min-w-0">
-                          <h4
-                            className={`text-xs sm:text-sm font-semibold truncate ${
-                              isOled ? 'text-[#F8FAFC]' : 'text-slate-900'
-                            }`}
-                          >
-                            {card.name}
-                          </h4>
-                          <span
-                            className={`text-[11px] font-mono block ${
-                              isOled ? 'text-slate-400' : 'text-slate-500'
-                            }`}
-                          >
-                            •••• {card.lastDigits || '••••'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Right: Discrete Action Buttons */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsManageModalOpen(false);
-                            openEditCardModal(card);
-                          }}
-                          className={`p-2 rounded-lg transition-colors ${
-                            isOled
-                              ? 'text-slate-400 hover:text-slate-200 hover:bg-[#21262D]'
-                              : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200/60'
-                          }`}
-                          title={language === 'pt-BR' ? 'Editar cartão' : 'Edit card'}
-                          aria-label={language === 'pt-BR' ? 'Editar cartão' : 'Edit card'}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsManageModalOpen(false);
-                            setDeleteConfirmCardId(card.id);
-                          }}
-                          className={`p-2 rounded-lg transition-colors ${
-                            isOled
-                              ? 'text-slate-400 hover:text-red-500 hover:bg-red-500/20'
-                              : 'text-slate-400 hover:text-red-500 hover:bg-red-500/10'
-                          }`}
-                          title={language === 'pt-BR' ? 'Excluir cartão' : 'Delete card'}
-                          aria-label={language === 'pt-BR' ? 'Excluir cartão' : 'Delete card'}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Footer Action Button */}
-            <div className="pt-3 border-t border-slate-100 dark:border-[#21262D] flex flex-col w-full">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsManageModalOpen(false);
-                  openAddCardModal();
-                }}
-                className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm bg-[#10B981] hover:bg-emerald-600 active:bg-emerald-700 text-white transition-colors shadow-sm text-center"
-              >
-                {language === 'pt-BR' ? 'Cadastrar Novo Cartão' : 'Register New Card'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ManageCardsModal
+        isOpen={isManageModalOpen}
+        creditCards={creditCards}
+        language={language}
+        isOled={isOled}
+        onClose={() => setIsManageModalOpen(false)}
+        onEditCard={openEditCardModal}
+        onRequestDeleteCard={(cardId) => setDeleteConfirmCardId(cardId)}
+        onRegisterNewCard={openAddCardModal}
+      />
     </div>
   );
 };

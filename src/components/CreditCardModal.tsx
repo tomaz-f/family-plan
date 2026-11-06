@@ -2,25 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { AppLanguage, AppTheme, CreditCard, CreditCardBrand } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { BankIcon, AppIcon, KNOWN_BANKS } from './icons';
+import { BankIcon } from './icons';
+import { BRAND_OPTIONS, PRESET_COLORS } from './card-modal/cardModalPresets';
+import { CardAppearanceFields } from './card-modal/CardAppearanceFields';
 
-export const BRAND_OPTIONS: { id: CreditCardBrand; name: string }[] = [
-  ...KNOWN_BANKS.map((b) => ({ id: b.id as CreditCardBrand, name: b.name })),
-  { id: 'other' as CreditCardBrand, name: 'Outro / Genérico' },
-];
-
-export const PRESET_COLORS = [
-  '#6E5440', // Brand rustic oxidized iron
-  '#8A2BE2', // Nubank purple
-  '#FF6F00', // Inter orange
-  '#EC7000', // Itaú orange
-  '#CC092F', // Bradesco red
-  '#E60000', // Santander red
-  '#161616', // C6 black
-  '#00579E', // Caixa blue
-  '#0A2F64', // BB blue
-  '#0D9488', // Teal
-];
+export { BRAND_OPTIONS, PRESET_COLORS };
 
 export interface CreditCardModalProps {
   isOpen: boolean;
@@ -255,86 +241,18 @@ export const CreditCardModal: React.FC<CreditCardModalProps> = ({
             </div>
           </div>
 
-          {/* Brand & Last Digits */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-              }`}>
-                {t.cardBrandLabel || 'Bandeira / Banco'}
-              </label>
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                    isOled ? 'bg-[#161B22] border-[#21262D]' : 'bg-slate-50 border-slate-200'
-                  }`}
-                  style={{
-                    backgroundColor: `${cardFormColor}18`,
-                    color: cardFormColor,
-                  }}
-                >
-                  <BankIcon brand={cardFormBrand} size={18} color={cardFormColor} />
-                </div>
-                <select
-                  value={cardFormBrand}
-                  onChange={(e) => setCardFormBrand(e.target.value as CreditCardBrand)}
-                  className={`flex-1 px-3 py-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                    isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                  }`}
-                >
-                  {BRAND_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
-                isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-              }`}>
-                {t.cardLastDigitsLabel || 'Últimos 4 Dígitos'}
-              </label>
-              <input
-                type="text"
-                maxLength={4}
-                placeholder="Ex: 1234"
-                value={cardFormLastDigits}
-                onChange={(e) => setCardFormLastDigits(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-mono text-center focus:outline-none focus:ring-1 focus:ring-[#6E5440] ${
-                  isOled ? 'bg-[#161B22] border-[#21262D] text-[#F8FAFC]' : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white'
-                }`}
-              />
-            </div>
-          </div>
-
-          {/* Color Picker */}
-          <div>
-            <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${
-              isOled ? 'text-[#94A3B8]' : 'text-slate-600'
-            }`}>
-              {t.cardColorLabel || 'Cor do Cartão'}
-            </label>
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setCardFormColor(c)}
-                  className={`w-7 h-7 rounded-full shrink-0 transition-transform active:scale-90 ${
-                    cardFormColor === c ? 'ring-2 ring-offset-2 ring-[#6E5440] scale-110' : 'opacity-80 hover:opacity-100'
-                  }`}
-                  style={{
-                    backgroundColor: c,
-                    outlineColor: isOled ? '#0D1117' : '#FFFFFF',
-                  }}
-                  title={c}
-                />
-              ))}
-            </div>
-          </div>
+          <CardAppearanceFields
+            isOled={isOled}
+            cardBrandLabel={t.cardBrandLabel || 'Bandeira / Banco'}
+            cardLastDigitsLabel={t.cardLastDigitsLabel || 'Últimos 4 Dígitos'}
+            cardColorLabel={t.cardColorLabel || 'Cor do Cartão'}
+            cardFormBrand={cardFormBrand}
+            onChangeBrand={setCardFormBrand}
+            cardFormLastDigits={cardFormLastDigits}
+            onChangeLastDigits={setCardFormLastDigits}
+            cardFormColor={cardFormColor}
+            onChangeColor={setCardFormColor}
+          />
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-3">

@@ -1,1529 +1,186 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React from 'react';
 import {
-  Search,
-  SlidersHorizontal,
-  X,
-  Download,
-  Pencil,
-  Trash2,
-  Clock,
-  ThumbsUp,
-  CreditCard as CreditCardIcon,
-  Repeat,
-  RotateCcw,
-  ArrowUpRight,
-  ArrowDownRight,
-  ArrowUpDown,
-  Eye,
-  EyeOff,
-  ChevronDown,
-  Check,
-} from 'lucide-react';
-import { AppLanguage, Category, CreditCard, Transaction, TransactionType } from '../types';
+  DayGroup,
+  FeedViewMode,
+  FilterChipId,
+  SortByMode,
+  TransactionsViewProps,
+} from './transactions/transactionsViewMath';
+import { useTransactionsViewData } from './transactions/useTransactionsViewData';
+import { TransactionsHeroSummary } from './transactions/TransactionsHeroSummary';
 import {
-  exportTransactionsToCSV,
-  formatCurrency,
-  formatMonthLabel,
-} from '../utils/format';
-import { getCategoryDisplayName, TRANSLATIONS } from '../utils/i18n';
-import { CategoryIcon } from './CategoryIcon';
-import { BankIcon, AppIcon } from './icons';
+  TransactionsFeedHeaderBar,
+  TransactionsFilterSheetModal,
+} from './transactions/TransactionsFilterBar';
+import { TransactionDayGroupFeed } from './transactions/TransactionDayGroupFeed';
+import { SwipeableTransactionRow } from './transactions/TransactionFeedItem';
 
-export type FilterChipId =
-  | 'all'
-  | 'pending-expense'
-  | 'pending-income'
-  | 'paid-expense'
-  | 'paid-income'
-  | 'fixed'
-  | 'installment';
-
-const PAGE_SIZE = 30;
-const SWIPE_REVEAL_WIDTH = 140;
-const SWIPE_SNAP_THRESHOLD = 55;
-const SWIPE_MAX_DRAG = 165;
-
-const formatNumericDate = (dateStr: string): string => {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-  if (Number.isNaN(date.getTime())) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  return date.toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+export { SwipeableTransactionRow };
+export type {
+  DayGroup,
+  FeedViewMode,
+  FilterChipId,
+  SortByMode,
+  TransactionsViewProps,
 };
 
-const parseTxDate = (dateStr: string): Date | null => {
-  if (!dateStr) return null;
-  const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    const y = Number(parts[0]);
-    const m = Number(parts[1]) - 1;
-    const d = Number(parts[2]);
-    const parsed = new Date(y, m, d);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-  const parsed = new Date(dateStr);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-export type FeedViewMode = 'timeline' | 'date-desc' | 'date-asc';
-
-const getDayGroupLabel = (
-  dateStr: string,
-  language: AppLanguage = 'pt-BR',
-  mode: FeedViewMode = 'timeline'
-): string => {
-  const targetDate = parseTxDate(dateStr);
-  if (!targetDate) return dateStr;
-
-  // Only "timeline" view mode uses contextual relative labels
-  if (mode === 'timeline') {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-    const diffTime = today.getTime() - target.getTime();
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      return language === 'pt-BR' ? 'Hoje' : 'Today';
-    }
-    if (diffDays === 1) {
-      return language === 'pt-BR' ? 'Ontem' : 'Yesterday';
-    }
-    if (diffDays === -1) {
-      return language === 'pt-BR' ? 'Amanhã' : 'Tomorrow';
-    }
-  }
-
-  // Pure formal calendar dates for 'date-desc' and 'date-asc' (or older dates in timeline)
-  if (language === 'pt-BR') {
-    const weekday = targetDate.toLocaleDateString('pt-BR', { weekday: 'short' });
-    const cleanWeekday = weekday.replace('.', '').trim();
-    const capitalizedWeekday = cleanWeekday.charAt(0).toUpperCase() + cleanWeekday.slice(1);
-    const day = targetDate.toLocaleDateString('pt-BR', { day: '2-digit' });
-    const month = targetDate.toLocaleDateString('pt-BR', { month: 'long' });
-    return `${capitalizedWeekday}, ${day} de ${month}`;
-  } else {
-    const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
-    const dayAndMonth = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return `${weekday}, ${dayAndMonth}`;
-  }
-};
-
-interface DayGroup {
-  date: string;
-  label: string;
-  transactions: Transaction[];
-  dailyNet: number;
-}
-
-interface SwipeableTransactionRowProps {
-  tx: Transaction;
-  cat?: Category;
-  cardObj?: CreditCard | null;
-  currency: string;
-  language: AppLanguage;
-  isOpen: boolean;
-  anyRowOpen: boolean;
-  onSetOpenRow: (id: string | null) => void;
-  onOpenEditModal: (tx: Transaction) => void;
-  onDeleteTransaction: (id: string) => Promise<void>;
-  onToggleTransactionStatus: (tx: Transaction) => Promise<void>;
-}
-
-const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = ({
-  tx,
-  cat,
-  cardObj,
-  currency,
-  language,
-  isOpen,
-  anyRowOpen,
-  onSetOpenRow,
-  onOpenEditModal,
-  onDeleteTransaction,
-  onToggleTransactionStatus,
-}) => {
-  const t = TRANSLATIONS[language];
-  const isUnpaid = tx.status === 'unpaid';
-  const isInvoice = Boolean(tx.settledInvoiceKey || (tx.description && /^fatura\b/i.test(tx.description)));
-
-  const [dragOffset, setDragOffset] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-
-  const gestureRef = useRef<{
-    startX: number;
-    startY: number;
-    initialOffset: number;
-    lock: 'none' | 'horizontal' | 'vertical';
-    currentOffset: number;
-    active: boolean;
-  }>({
-    startX: 0,
-    startY: 0,
-    initialOffset: 0,
-    lock: 'none',
-    currentOffset: 0,
-    active: false,
-  });
-
-  const lastSwipeTimeRef = useRef<number>(0);
-
-  const clampSwipeOffset = (rawOffset: number): number => {
-    if (rawOffset > 0) return 0;
-    if (rawOffset < -SWIPE_REVEAL_WIDTH) {
-      const extra = rawOffset + SWIPE_REVEAL_WIDTH;
-      return Math.max(-SWIPE_MAX_DRAG, -SWIPE_REVEAL_WIDTH + extra * 0.25);
-    }
-    return rawOffset;
-  };
-
-  const finishSwipeGesture = () => {
-    const g = gestureRef.current;
-    if (!g.active) return;
-    g.active = false;
-
-    if (g.lock === 'horizontal') {
-      lastSwipeTimeRef.current = Date.now();
-      const finalOffset = g.currentOffset;
-      if (g.initialOffset === 0) {
-        if (finalOffset <= -SWIPE_SNAP_THRESHOLD) {
-          onSetOpenRow(tx.id);
-        } else {
-          onSetOpenRow(null);
-        }
-      } else {
-        // Started open (-SWIPE_REVEAL_WIDTH): close if user dragged right by > 35px
-        if (finalOffset > -SWIPE_REVEAL_WIDTH + 35) {
-          onSetOpenRow(null);
-        } else {
-          onSetOpenRow(tx.id);
-        }
-      }
-    }
-
-    g.lock = 'none';
-    setIsDragging(false);
-    setDragOffset(null);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    if (anyRowOpen && !isOpen) {
-      onSetOpenRow(null);
-    }
-    const initial = isOpen ? -SWIPE_REVEAL_WIDTH : 0;
-    gestureRef.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      initialOffset: initial,
-      lock: 'none',
-      currentOffset: initial,
-      active: true,
-    };
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    const g = gestureRef.current;
-    if (!g.active || e.touches.length !== 1) return;
-
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - g.startX;
-    const deltaY = touch.clientY - g.startY;
-
-    if (g.lock === 'none') {
-      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
-      if (Math.abs(deltaY) > Math.abs(deltaX)) {
-        g.lock = 'vertical';
-        g.active = false;
-        return;
-      }
-      g.lock = 'horizontal';
-      setIsDragging(true);
-    }
-
-    if (g.lock === 'horizontal') {
-      const next = clampSwipeOffset(g.initialOffset + deltaX);
-      g.currentOffset = next;
-      setDragOffset(next);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    finishSwipeGesture();
-  };
-
-  // Desktop mouse click-and-drag fallback
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    if (anyRowOpen && !isOpen) {
-      onSetOpenRow(null);
-    }
-    const initial = isOpen ? -SWIPE_REVEAL_WIDTH : 0;
-    gestureRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      initialOffset: initial,
-      lock: 'none',
-      currentOffset: initial,
-      active: true,
-    };
-
-    const handleWindowMouseMove = (ev: MouseEvent) => {
-      const g = gestureRef.current;
-      if (!g.active) return;
-      const deltaX = ev.clientX - g.startX;
-      const deltaY = ev.clientY - g.startY;
-
-      if (g.lock === 'none') {
-        if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) return;
-        if (Math.abs(deltaY) > Math.abs(deltaX)) {
-          g.lock = 'vertical';
-          g.active = false;
-          return;
-        }
-        g.lock = 'horizontal';
-        setIsDragging(true);
-      }
-
-      if (g.lock === 'horizontal') {
-        const next = clampSwipeOffset(g.initialOffset + deltaX);
-        g.currentOffset = next;
-        setDragOffset(next);
-      }
-    };
-
-    const handleWindowMouseUp = () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleWindowMouseUp);
-      finishSwipeGesture();
-    };
-
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', handleWindowMouseUp);
-  };
-
-  const handleRowClick = () => {
-    if (Date.now() - lastSwipeTimeRef.current < 260) return;
-    if (isOpen || anyRowOpen) {
-      onSetOpenRow(null);
-      return;
-    }
-    onOpenEditModal(tx);
-  };
-
-  const translateX = dragOffset !== null ? dragOffset : isOpen ? -SWIPE_REVEAL_WIDTH : 0;
-
-  return (
-    <div
-      data-swipe-row-id={tx.id}
-      className="relative overflow-hidden select-none"
-    >
-      {/* Background Action Layer (Revealed beneath on left-swipe) */}
-      <div
-        className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-2 pr-3 pl-2 z-0"
-        style={{ width: `${SWIPE_REVEAL_WIDTH}px` }}
-        aria-hidden={!isOpen && dragOffset === null}
-      >
-        {/* 1. Status Toggle (Paid / Pending) */}
-        <button
-          type="button"
-          tabIndex={isOpen ? 0 : -1}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSetOpenRow(null);
-            onToggleTransactionStatus(tx);
-          }}
-          className="swipe-action-btn w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
-          title={isUnpaid ? t.markAsPaidTooltip : t.markAsUnpaidTooltip}
-        >
-          {isUnpaid ? (
-            <Clock size={15} className="text-amber-500" />
-          ) : (
-            <ThumbsUp size={15} className="text-emerald-500" />
-          )}
-        </button>
-
-        {/* 2. Edit Transaction */}
-        <button
-          type="button"
-          tabIndex={isOpen ? 0 : -1}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSetOpenRow(null);
-            onOpenEditModal(tx);
-          }}
-          className="swipe-action-btn w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
-          title={t.editTooltip}
-        >
-          <Pencil size={15} />
-        </button>
-
-        {/* 3. Delete Transaction */}
-        <button
-          type="button"
-          tabIndex={isOpen ? 0 : -1}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSetOpenRow(null);
-            onDeleteTransaction(tx.id);
-          }}
-          className="swipe-action-btn-danger w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0"
-          title={t.deleteTooltip}
-        >
-          <Trash2 size={15} />
-        </button>
-      </div>
-
-      {/* Foreground Content Layer (Swipeable solid surface card) */}
-      <div
-        role="button"
-        tabIndex={0}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
-        onMouseDown={handleMouseDown}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          onSetOpenRow(isOpen ? null : tx.id);
-        }}
-        onClick={handleRowClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onOpenEditModal(tx);
-          } else if (e.key === 'ArrowLeft') {
-            onSetOpenRow(tx.id);
-          } else if (e.key === 'ArrowRight' || e.key === 'Escape') {
-            onSetOpenRow(null);
-          }
-        }}
-        style={{
-          transform: `translate3d(${translateX}px, 0, 0)`,
-          transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
-          willChange: isDragging || isOpen ? 'transform' : 'auto',
-        }}
-        className="swipe-foreground-layer relative z-10 flex items-center justify-between p-3 sm:p-3.5 transition-colors gap-2 sm:gap-3 select-none cursor-pointer"
-      >
-        {/* Left: Category Icon or Bank Icon for Invoices + Transaction Details */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-          {isInvoice ? (
-            <BankIcon
-              card={cardObj}
-              name={tx.description}
-              size={20}
-              badgeSize="lg"
-            />
-          ) : (
-            <CategoryIcon
-              icon={cat?.icon || 'Tag'}
-              color={cat?.color || '#64748b'}
-              size={20}
-              badgeSize="lg"
-            />
-          )}
-
-          <div className="min-w-0 flex-1">
-            {/* Line 1: Description & Category with Bullet Separator */}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                {tx.description}
-              </span>
-              <span className="text-slate-400 dark:text-slate-600 text-xs shrink-0 select-none">•</span>
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate shrink-0 max-w-[40%] sm:max-w-none">
-                {getCategoryDisplayName(cat, language)}
-              </span>
-            </div>
-
-            {/* Line 2: Flags & Badges Only */}
-            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-              {isInvoice ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[11px] font-medium">
-                  <span>{language === 'pt-BR' ? 'Fatura Cartão' : 'Card Invoice'}</span>
-                </span>
-              ) : (
-                <>
-                  {tx.installmentTotal && tx.installmentTotal > 1 && (
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-300 dark:border dark:border-[#21262D] text-[11px] font-medium">
-                      {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                    </span>
-                  )}
-
-                  {isUnpaid ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-medium">
-                      <Clock size={11} className="shrink-0" />
-                      <span>{t.pendingBadge}</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-medium">
-                      <Check size={11} className="shrink-0" />
-                      <span>{tx.type === 'income' ? (language === 'pt-BR' ? 'Recebido' : 'Received') : (t.paidBadge || 'Pago')}</span>
-                    </span>
-                  )}
-
-                  {tx.recurringId && !tx.installmentTotal && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-500 dark:text-slate-400 dark:border dark:border-[#21262D] text-[11px] font-medium">
-                      <Repeat size={11} className="shrink-0" />
-                      <span>{language === 'pt-BR' ? 'Fixa' : 'Fixed'}</span>
-                    </span>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Formatted Transaction Amount & Numeric Date Stack */}
-        <div className="flex flex-col items-end justify-center text-right shrink-0 pl-2">
-          <span
-            className={`text-sm sm:text-base font-bold whitespace-nowrap leading-tight ${
-              tx.type === 'income' ? 'text-[#10B981]' : 'text-[#EF4444]'
-            }`}
-          >
-            {tx.type === 'income' ? '+' : '-'}
-            {formatCurrency(tx.amount, currency)}
-          </span>
-          <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mt-0.5 whitespace-nowrap leading-none text-right">
-            {formatNumericDate(tx.date)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface TransactionsViewProps {
-  selectedMonth: string;
-  currency: string;
-  language: AppLanguage;
-  categories: Category[];
-  creditCards?: CreditCard[];
-  transactions: Transaction[];
-  onOpenAddModal: (type: TransactionType) => void;
-  onOpenEditModal: (tx: Transaction) => void;
-  onDeleteTransaction: (id: string) => Promise<void>;
-  onToggleTransactionStatus: (tx: Transaction) => Promise<void>;
-  balanceCard?: React.ReactNode;
-  currentBankBalance?: number;
-  monthStats?: {
-    income: number;
-    expense: number;
-    pendingIncome: number;
-    pendingExpense: number;
-  };
-  onOpenBalanceModal?: () => void;
-}
-
-export const TransactionsView: React.FC<TransactionsViewProps> = ({
-  selectedMonth,
-  currency,
-  language,
-  categories,
-  creditCards = [],
-  transactions,
-  onOpenEditModal,
-  onDeleteTransaction,
-  onToggleTransactionStatus,
-  balanceCard,
-  currentBankBalance,
-  monthStats,
-  onOpenBalanceModal,
-}) => {
-  const t = TRANSLATIONS[language];
-  const [activeFilterChip, setActiveFilterChip] = useState<FilterChipId>('all');
-  const [scope, setScope] = useState<'month' | 'all'>('month');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'>('date-desc');
-  const [feedViewMode, setFeedViewMode] = useState<FeedViewMode>(() => {
-    try {
-      const saved = localStorage.getItem('prumo_feed_view_mode');
-      if (saved === 'timeline' || saved === 'date-desc' || saved === 'date-asc') return saved;
-      const legacy = localStorage.getItem('prumo_feed_sort_order');
-      if (legacy === 'asc') return 'date-asc';
-      if (legacy === 'desc') return 'timeline';
-    } catch {}
-    return 'timeline';
-  });
-
-  const [isOrderMenuOpen, setIsOrderMenuOpen] = useState<boolean>(false);
-  const orderMenuRef = useRef<HTMLDivElement | null>(null);
-
-  const viewModeOptions: { id: FeedViewMode; label: string }[] = useMemo(
-    () => [
-      {
-        id: 'timeline',
-        label: language === 'pt-BR' ? 'Linha do Tempo (Hoje)' : 'Timeline (Today)',
-      },
-      {
-        id: 'date-desc',
-        label: language === 'pt-BR' ? 'Mais Recentes (Data ↓)' : 'Latest (Date ↓)',
-      },
-      {
-        id: 'date-asc',
-        label: language === 'pt-BR' ? 'Mais Antigos (Data ↑)' : 'Oldest (Date ↑)',
-      },
-    ],
-    [language]
-  );
-
-  useEffect(() => {
-    if (!isOrderMenuOpen) return;
-
-    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
-      if (orderMenuRef.current && !orderMenuRef.current.contains(target)) {
-        setIsOrderMenuOpen(false);
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsOrderMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('touchstart', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOrderMenuOpen]);
-
-  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState<boolean>(false);
-  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
-  const [openSwipeRowId, setOpenSwipeRowId] = useState<string | null>(null);
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
-
-  const primaryFilterChips: { id: FilterChipId; label: string }[] = useMemo(
-    () => [
-      { id: 'all', label: language === 'pt-BR' ? 'Todos' : 'All' },
-      { id: 'pending-expense', label: language === 'pt-BR' ? 'Despesas a pagar' : 'Pending expenses' },
-    ],
-    [language]
-  );
-
-  const dropdownFilters: { id: FilterChipId; label: string }[] = useMemo(
-    () => [
-      { id: 'pending-income', label: language === 'pt-BR' ? 'Entradas a pagar' : 'Pending income' },
-      { id: 'paid-expense', label: language === 'pt-BR' ? 'Pagas / Concluídas' : 'Paid / Completed' },
-      { id: 'paid-income', label: language === 'pt-BR' ? 'Recebidas' : 'Received' },
-      { id: 'fixed', label: language === 'pt-BR' ? 'Fixas' : 'Fixed / Recurring' },
-      { id: 'installment', label: language === 'pt-BR' ? 'Parceladas' : 'Installments' },
-    ],
-    [language]
-  );
-
-  const isDropdownFilterActive = useMemo(
-    () => dropdownFilters.some((f) => f.id === activeFilterChip),
-    [dropdownFilters, activeFilterChip]
-  );
-
-  const activeDropdownFilter = useMemo(
-    () => dropdownFilters.find((f) => f.id === activeFilterChip),
-    [dropdownFilters, activeFilterChip]
-  );
-
-  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
-  const dropdownBtnRef = useRef<HTMLButtonElement | null>(null);
-  const dropdownMenuRef = useRef<HTMLDivElement | null>(null);
-
-  const toggleDropdown = () => {
-    if (!isDropdownOpen && dropdownBtnRef.current) {
-      const rect = dropdownBtnRef.current.getBoundingClientRect();
-      const isRightAligned = rect.right > window.innerWidth - 200;
-      setDropdownPos({
-        top: rect.bottom + 6,
-        left: isRightAligned ? undefined : Math.max(12, rect.left),
-        right: isRightAligned ? Math.max(12, window.innerWidth - rect.right) : undefined,
-      });
-      setIsDropdownOpen(true);
-    } else {
-      setIsDropdownOpen(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isDropdownOpen) return;
-
-    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
-      if (
-        dropdownMenuRef.current &&
-        !dropdownMenuRef.current.contains(target) &&
-        dropdownBtnRef.current &&
-        !dropdownBtnRef.current.contains(target)
-      ) {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsDropdownOpen(false);
-      }
-    };
-
-    const handleScroll = () => {
-      setIsDropdownOpen(false);
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('touchstart', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, [isDropdownOpen]);
-
-  const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-
-  // Reset pagination & open swipe row when filters or month change
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-    setOpenSwipeRowId(null);
-    setIsDropdownOpen(false);
-    setIsOrderMenuOpen(false);
-  }, [selectedMonth, scope, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy, feedViewMode]);
-
-  // Close open swipe row when tapping outside of it
-  useEffect(() => {
-    if (!openSwipeRowId) return;
-    const handleOutsidePointerDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
-      const rowEl = target.closest(`[data-swipe-row-id="${openSwipeRowId}"]`);
-      if (!rowEl) {
-        setOpenSwipeRowId(null);
-      }
-    };
-    document.addEventListener('pointerdown', handleOutsidePointerDown, { passive: true });
-    return () => {
-      document.removeEventListener('pointerdown', handleOutsidePointerDown);
-    };
-  }, [openSwipeRowId]);
-
-  // Count active non-default filters
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (activeFilterChip !== 'all') count++;
-    if (scope === 'all') count++;
-    if (typeFilter !== 'all') count++;
-    if (statusFilter !== 'all') count++;
-    if (categoryFilter !== 'all') count++;
-    if (sortBy !== 'date-desc') count++;
-    return count;
-  }, [activeFilterChip, scope, typeFilter, statusFilter, categoryFilter, sortBy]);
-
-  const handleResetFilters = () => {
-    setActiveFilterChip('all');
-    setIsDropdownOpen(false);
-    setScope('month');
-    setTypeFilter('all');
-    setStatusFilter('all');
-    setCategoryFilter('all');
-    setSortBy('date-desc');
-  };
-
-  const filteredTransactions = useMemo(() => {
-    return transactions
-      .filter((tx) => {
-        // 1. Strictly isolate credit card purchases from the main statement:
-        // Individual card purchases belong exclusively to the Cards tab invoice statement.
-        if (tx.cardId) return false;
-
-        if (scope === 'month' && !tx.date.startsWith(selectedMonth)) return false;
-
-        const isUnpaid = tx.status === 'unpaid';
-        if (activeFilterChip === 'pending-expense' && !(tx.type === 'expense' && isUnpaid)) return false;
-        if (activeFilterChip === 'pending-income' && !(tx.type === 'income' && isUnpaid)) return false;
-        if (activeFilterChip === 'paid-expense' && !(tx.type === 'expense' && !isUnpaid)) return false;
-        if (activeFilterChip === 'paid-income' && !(tx.type === 'income' && !isUnpaid)) return false;
-        if (activeFilterChip === 'fixed' && !(tx.recurringId || tx.isRecurring)) return false;
-        if (activeFilterChip === 'installment' && !(tx.installmentTotal && tx.installmentTotal > 1)) return false;
-
-        if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
-        const txStatus = tx.status === 'unpaid' ? 'unpaid' : 'paid';
-        if (statusFilter !== 'all' && txStatus !== statusFilter) return false;
-        if (categoryFilter !== 'all' && tx.categoryId !== categoryFilter) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const cat = categoryMap.get(tx.categoryId);
-          const catName = getCategoryDisplayName(cat, language).toLowerCase();
-          const matchDesc = tx.description.toLowerCase().includes(q);
-          const matchNotes = (tx.notes || '').toLowerCase().includes(q);
-          const matchCat = catName.includes(q);
-          if (!matchDesc && !matchNotes && !matchCat) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        if (sortBy === 'amount-desc') return b.amount - a.amount;
-        if (sortBy === 'amount-asc') return a.amount - b.amount;
-        if (feedViewMode === 'date-asc' || sortBy === 'date-asc') {
-          return a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt);
-        }
-        return b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt);
-      });
-  }, [transactions, scope, selectedMonth, activeFilterChip, typeFilter, statusFilter, categoryFilter, searchQuery, sortBy, feedViewMode, categoryMap, language]);
-
-  const summary = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    let pendingAmount = 0;
-    let pendingCount = 0;
-    for (const tx of filteredTransactions) {
-      if (tx.status === 'unpaid') {
-        pendingCount++;
-        pendingAmount += tx.amount;
-        continue;
-      }
-      if (tx.type === 'income') income += tx.amount;
-      else expense += tx.amount;
-    }
-    return {
-      income,
-      expense,
-      net: income - expense,
-      pendingAmount,
-      pendingCount,
-      count: filteredTransactions.length,
-    };
-  }, [filteredTransactions]);
-
-  const selectedCategoryObj = categoryFilter !== 'all' ? categoryMap.get(categoryFilter) : null;
-  const visibleTransactions = useMemo(
-    () => filteredTransactions.slice(0, visibleCount),
-    [filteredTransactions, visibleCount]
-  );
-
-  const groupedTransactions = useMemo(() => {
-    const groups: DayGroup[] = [];
-    const map = new Map<string, DayGroup>();
-
-    for (const tx of visibleTransactions) {
-      const dateKey = tx.date;
-      let group = map.get(dateKey);
-      if (!group) {
-        group = {
-          date: dateKey,
-          label: getDayGroupLabel(dateKey, language, feedViewMode),
-          transactions: [],
-          dailyNet: 0,
-        };
-        map.set(dateKey, group);
-        groups.push(group);
-      }
-      group.transactions.push(tx);
-      if (tx.status !== 'unpaid') {
-        if (tx.type === 'income') {
-          group.dailyNet += tx.amount;
-        } else {
-          group.dailyNet -= tx.amount;
-        }
-      }
-    }
-
-    return groups;
-  }, [visibleTransactions, language, feedViewMode]);
-
-  const hasMore = visibleCount < filteredTransactions.length;
-
-  // Infinite scroll observer
-  useEffect(() => {
-    const sentinel = loadMoreRef.current;
-    if (!sentinel || !hasMore) return;
-    if (typeof IntersectionObserver === 'undefined') return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredTransactions.length));
-        }
-      },
-      { rootMargin: '220px' }
-    );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasMore, filteredTransactions.length]);
-
-  // Privacy state for balance and figures masking
-  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('prumo_hide_balance') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const toggleBalancePrivacy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsBalanceHidden((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('prumo_hide_balance', String(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  const computedFallbackStats = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    let pendingIncome = 0;
-    let pendingExpense = 0;
-    let allPaidIncome = 0;
-    let allPaidExpense = 0;
-
-    for (const tx of transactions) {
-      // Strictly exclude individual credit card purchases from cash flow & checking stats
-      if (tx.cardId) continue;
-
-      if (tx.status === 'unpaid') {
-        if (tx.date.startsWith(selectedMonth)) {
-          if (tx.type === 'income') pendingIncome += tx.amount;
-          else pendingExpense += tx.amount;
-        }
-        continue;
-      }
-
-      if (tx.type === 'income') allPaidIncome += tx.amount;
-      else allPaidExpense += tx.amount;
-
-      if (tx.date.startsWith(selectedMonth)) {
-        if (tx.type === 'income') income += tx.amount;
-        else expense += tx.amount;
-      }
-    }
-
-    return {
-      stats: { income, expense, pendingIncome, pendingExpense },
-      balance: allPaidIncome - allPaidExpense,
-    };
-  }, [transactions, selectedMonth]);
-
-  const effectiveStats = monthStats ?? computedFallbackStats.stats;
-  const effectiveBankBalance = currentBankBalance ?? computedFallbackStats.balance;
-
-  // Preserve summary reference so TypeScript keeps calculation logic active
-  void summary;
+export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
+  const {
+    selectedMonth,
+    currency,
+    language,
+    categories,
+    creditCards = [],
+    onOpenEditModal,
+    onDeleteTransaction,
+    onToggleTransactionStatus,
+    balanceCard,
+    monthStats,
+    onOpenBalanceModal,
+  } = props;
+
+  const {
+    t,
+    activeFilterChip,
+    setActiveFilterChip,
+    scope,
+    setScope,
+    typeFilter,
+    setTypeFilter,
+    statusFilter,
+    setStatusFilter,
+    categoryFilter,
+    setCategoryFilter,
+    searchQuery,
+    setSearchQuery,
+    sortBy,
+    setSortBy,
+    feedViewMode,
+    setFeedViewMode,
+    isOrderMenuOpen,
+    setIsOrderMenuOpen,
+    orderMenuRef,
+    viewModeOptions,
+    isFilterSheetOpen,
+    setIsFilterSheetOpen,
+    visibleCount,
+    setVisibleCount,
+    openSwipeRowId,
+    setOpenSwipeRowId,
+    loadMoreRef,
+    primaryFilterChips,
+    dropdownFilters,
+    isDropdownFilterActive,
+    activeDropdownFilter,
+    isDropdownOpen,
+    setIsDropdownOpen,
+    dropdownPos,
+    dropdownBtnRef,
+    dropdownMenuRef,
+    toggleDropdown,
+    categoryMap,
+    activeFilterCount,
+    handleResetFilters,
+    filteredTransactions,
+    groupedTransactions,
+    hasMore,
+    isBalanceHidden,
+    toggleBalancePrivacy,
+    effectiveStats,
+    effectiveBankBalance,
+  } = useTransactionsViewData(props);
 
   return (
     <div className="space-y-3.5 sm:space-y-4">
-      {/* 1. UNIFIED 2-COLUMN BALANCE, SEARCH & STATS CARD (PRUMO MOCKUP) */}
-      <div className="oled-main-card rounded-2xl sm:rounded-3xl bg-[#0D1117] text-white p-4 sm:p-5 border border-[#21262D] shadow-xs">
-        <div className="flex items-center justify-between gap-3.5 sm:gap-5">
-          {/* Left Column: Balance, Search, Filter Chips */}
-          <div className="flex-1 min-w-0 flex flex-col justify-between space-y-2.5 sm:space-y-3">
-            {/* Row 1: Balance Amount & Privacy Toggle */}
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <h1
-                role={onOpenBalanceModal ? 'button' : undefined}
-                tabIndex={onOpenBalanceModal ? 0 : undefined}
-                onClick={onOpenBalanceModal}
-                onKeyDown={(e) => {
-                  if (onOpenBalanceModal && (e.key === 'Enter' || e.key === ' ')) {
-                    e.preventDefault();
-                    onOpenBalanceModal();
-                  }
-                }}
-                className={`text-[28px] min-[375px]:text-3xl min-[410px]:text-[34px] sm:text-4xl font-black tracking-tight leading-none truncate ${
-                  onOpenBalanceModal ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
-                } ${effectiveBankBalance < 0 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-900 dark:text-[#F8FAFC]'}`}
-                title={
-                  onOpenBalanceModal
-                    ? language === 'pt-BR'
-                      ? 'Ajustar saldo inicial'
-                      : 'Adjust initial balance'
-                    : undefined
-                }
-              >
-                {isBalanceHidden ? 'R$ ••••••' : formatCurrency(effectiveBankBalance, currency)}
-              </h1>
+      <TransactionsHeroSummary
+        language={language}
+        currency={currency}
+        effectiveBankBalance={effectiveBankBalance}
+        effectiveStats={effectiveStats}
+        isBalanceHidden={isBalanceHidden}
+        onToggleBalancePrivacy={toggleBalancePrivacy}
+        onOpenBalanceModal={onOpenBalanceModal}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        primaryFilterChips={primaryFilterChips}
+        dropdownFilters={dropdownFilters}
+        activeFilterChip={activeFilterChip}
+        onSelectFilterChip={(id) => {
+          setActiveFilterChip(id);
+          setIsDropdownOpen(false);
+        }}
+        isDropdownFilterActive={isDropdownFilterActive}
+        activeDropdownFilter={activeDropdownFilter}
+        isDropdownOpen={isDropdownOpen}
+        onToggleDropdown={toggleDropdown}
+        dropdownPos={dropdownPos}
+        dropdownBtnRef={dropdownBtnRef}
+        dropdownMenuRef={dropdownMenuRef}
+        balanceCard={balanceCard}
+        hasMonthStats={Boolean(monthStats)}
+      />
 
-              <button
-                type="button"
-                onClick={toggleBalancePrivacy}
-                className="p-1 rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white active:scale-90 transition-all shrink-0 focus:outline-none flex items-center justify-center"
-                title={
-                  isBalanceHidden
-                    ? language === 'pt-BR'
-                      ? 'Mostrar saldo'
-                      : 'Show balance'
-                    : language === 'pt-BR'
-                    ? 'Ocultar saldo'
-                    : 'Hide balance'
-                }
-                aria-label={isBalanceHidden ? 'Show balance' : 'Hide balance'}
-              >
-                {isBalanceHidden ? (
-                  <EyeOff size={22} className="stroke-[2.2]" />
-                ) : (
-                  <Eye size={22} className="stroke-[2.2]" />
-                )}
-              </button>
-            </div>
+      <TransactionsFeedHeaderBar
+        language={language}
+        filteredCount={filteredTransactions.length}
+        isOrderMenuOpen={isOrderMenuOpen}
+        setIsOrderMenuOpen={setIsOrderMenuOpen}
+        orderMenuRef={orderMenuRef}
+        viewModeOptions={viewModeOptions}
+        feedViewMode={feedViewMode}
+        onSelectViewMode={(mode) => {
+          setFeedViewMode(mode);
+          try {
+            localStorage.setItem('prumo_feed_view_mode', mode);
+          } catch {
+            /* ignore storage errors */
+          }
+          setIsOrderMenuOpen(false);
+        }}
+      />
 
-            {/* Row 2: Integrated WhatsApp-style Search Input */}
-            <div className="relative w-full">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 z-10 w-4 h-4"
-              />
-              <input
-                type="text"
-                placeholder={language === 'pt-BR' ? 'Pesquisar lançamentos...' : 'Search transactions...'}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="whatsapp-search-input w-full h-9 sm:h-9.5 pl-11 pr-10 rounded-full text-xs sm:text-sm text-slate-900 dark:text-[#F8FAFC] placeholder:text-slate-400 focus:outline-none transition-all shadow-inner-xs"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors z-10"
-                  title={language === 'pt-BR' ? 'Limpar busca' : 'Clear search'}
-                >
-                  <X size={14} className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+      <TransactionDayGroupFeed
+        filteredTransactions={filteredTransactions}
+        groupedTransactions={groupedTransactions}
+        categoryMap={categoryMap}
+        creditCards={creditCards}
+        currency={currency}
+        language={language}
+        activeFilterCount={activeFilterCount}
+        onResetFilters={handleResetFilters}
+        openSwipeRowId={openSwipeRowId}
+        onSetOpenRow={setOpenSwipeRowId}
+        onOpenEditModal={onOpenEditModal}
+        onDeleteTransaction={onDeleteTransaction}
+        onToggleTransactionStatus={onToggleTransactionStatus}
+        hasMore={hasMore}
+        loadMoreRef={loadMoreRef}
+        visibleCount={visibleCount}
+        setVisibleCount={setVisibleCount}
+        t={t}
+      />
 
-            {/* Row 3: Horizontal Primary Filter Chips & Compact Overflow Menu (WhatsApp Desktop Style) */}
-            <div className="w-full flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5 -my-0.5 min-w-0">
-              {primaryFilterChips.map((chip) => {
-                const isSelected = activeFilterChip === chip.id;
-                return (
-                  <button
-                    key={chip.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveFilterChip(chip.id);
-                      setIsDropdownOpen(false);
-                    }}
-                    className={`h-8 rounded-full px-3 text-xs font-medium whitespace-nowrap border shrink-0 transition-all active:scale-95 select-none flex items-center justify-center ${
-                      isSelected ? 'filter-chip-active font-semibold shadow-xs' : 'filter-chip-inactive'
-                    }`}
-                  >
-                    {chip.label}
-                  </button>
-                );
-              })}
-
-              {/* WhatsApp Desktop Style Down-Arrow Overflow Button */}
-              <button
-                ref={dropdownBtnRef}
-                type="button"
-                onClick={toggleDropdown}
-                aria-expanded={isDropdownOpen}
-                aria-haspopup="true"
-                title={
-                  isDropdownFilterActive
-                    ? activeDropdownFilter?.label
-                    : language === 'pt-BR'
-                    ? 'Mais filtros'
-                    : 'More filters'
-                }
-                className={`h-8 rounded-full px-2.5 text-xs font-medium whitespace-nowrap border shrink-0 flex-shrink-0 transition-all active:scale-95 select-none flex items-center justify-center gap-1.5 ${
-                  isDropdownFilterActive
-                    ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/60 font-semibold shadow-xs'
-                    : 'bg-slate-100 text-slate-600 border-slate-200/80 hover:bg-slate-200 dark:bg-[#161B22] dark:text-slate-300 dark:border-[#21262D] dark:hover:bg-[#21262D]'
-                }`}
-              >
-                {isDropdownFilterActive && (
-                  <span className="w-2 h-2 rounded-full bg-[#10B981] shadow-xs shrink-0" />
-                )}
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : 'rotate-0'}`}
-                />
-              </button>
-
-              {/* Popover / Dropdown Menu for Excess Filters */}
-              {isDropdownOpen && (
-                <div
-                  ref={dropdownMenuRef}
-                  style={{
-                    position: 'fixed',
-                    top: dropdownPos.top,
-                    left: dropdownPos.left,
-                    right: dropdownPos.right,
-                    zIndex: 50,
-                  }}
-                  className="min-w-[180px] p-1.5 rounded-xl shadow-xl flex flex-col gap-1 bg-white border border-slate-200 text-slate-700 shadow-slate-200/50 dark:bg-[#161B22] dark:border-[#21262D] dark:text-slate-200 dark:shadow-black/60 animate-fadeIn"
-                >
-                  {dropdownFilters.map((filter) => {
-                    const isSelected = activeFilterChip === filter.id;
-                    return (
-                      <button
-                        key={filter.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveFilterChip(filter.id);
-                          setIsDropdownOpen(false);
-                        }}
-                        className={`px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors flex items-center justify-between text-left ${
-                          isSelected
-                            ? 'bg-emerald-500/10 text-[#10B981] font-semibold dark:bg-emerald-500/15'
-                            : 'hover:bg-slate-100 dark:hover:bg-[#21262D]'
-                        }`}
-                      >
-                        <span>{filter.label}</span>
-                        {isSelected && <Check size={14} className="text-[#10B981] shrink-0 ml-2" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Column: Stacked Income & Expenses Summary (Anchored Right) */}
-          <div className="shrink-0 text-right flex flex-col items-end justify-between space-y-3 sm:space-y-3.5 pl-2 sm:pl-3">
-            {/* Top Group: ENTRADAS */}
-            <div className="flex flex-col items-end text-right">
-              <div className="flex items-center gap-1 text-[#10B981] mb-0.5 justify-end">
-                <ArrowUpRight size={14} strokeWidth={2.5} className="shrink-0" />
-                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  {language === 'pt-BR' ? 'ENTRADAS' : 'INCOME'}
-                </span>
-              </div>
-              <p className="text-base sm:text-lg font-black text-[#10B981] tracking-tight leading-tight">
-                {isBalanceHidden ? '+R$ ••••••' : `+${formatCurrency(effectiveStats.income, currency)}`}
-              </p>
-              <p
-                className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-[#94A3B8] mt-0.5 whitespace-nowrap"
-                title={`${language === 'pt-BR' ? 'A receber:' : 'To receive:'} ${formatCurrency(effectiveStats.pendingIncome, currency)}`}
-              >
-                {language === 'pt-BR' ? 'A receber:' : 'To receive:'}{' '}
-                <span className="text-slate-900 dark:text-white font-bold ml-0.5">
-                  {isBalanceHidden ? 'R$ ••••' : formatCurrency(effectiveStats.pendingIncome, currency)}
-                </span>
-              </p>
-            </div>
-
-            {/* Bottom Group: DESPESAS */}
-            <div className="flex flex-col items-end text-right">
-              <div className="flex items-center gap-1 text-[#EF4444] mb-0.5 justify-end">
-                <ArrowDownRight size={14} strokeWidth={2.5} className="shrink-0" />
-                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  {language === 'pt-BR' ? 'DESPESAS' : 'EXPENSES'}
-                </span>
-              </div>
-              <p className="text-base sm:text-lg font-black text-[#EF4444] tracking-tight leading-tight">
-                {isBalanceHidden ? '-R$ ••••••' : `-${formatCurrency(effectiveStats.expense, currency)}`}
-              </p>
-              <p
-                className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-[#94A3B8] mt-0.5 whitespace-nowrap"
-                title={`${language === 'pt-BR' ? 'A pagar:' : 'To pay:'} ${formatCurrency(effectiveStats.pendingExpense, currency)}`}
-              >
-                {language === 'pt-BR' ? 'A pagar:' : 'To pay:'}{' '}
-                <span className="text-slate-900 dark:text-white font-bold ml-0.5">
-                  {isBalanceHidden ? 'R$ ••••' : formatCurrency(effectiveStats.pendingExpense, currency)}
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Fallback legacy balance card if provided without monthStats */}
-      {balanceCard && !monthStats && balanceCard}
-
-      {/* 2. FEED HEADER BAR: Outside Balance Card (Section Title + Count + Sort Dropdown Popover) */}
-      <div className="flex items-center justify-between px-1 pt-1 pb-0.5">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            {language === 'pt-BR' ? 'Lançamentos' : 'Transactions'}
-          </h2>
-          {filteredTransactions.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 dark:bg-[#161B22] dark:text-slate-400 border border-slate-200/80 dark:border-[#21262D]">
-              {filteredTransactions.length}
-            </span>
-          )}
-        </div>
-
-        {/* Compact "Ordenar" Dropdown Popover */}
-        <div className="relative inline-block text-left" ref={orderMenuRef}>
-          <button
-            type="button"
-            onClick={() => setIsOrderMenuOpen((prev) => !prev)}
-            aria-expanded={isOrderMenuOpen}
-            aria-haspopup="true"
-            className="h-8 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition-colors active:scale-95 bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200 dark:bg-[#161B22] dark:text-slate-200 dark:border-[#21262D] dark:hover:bg-[#21262D] shadow-2xs select-none"
-            title={language === 'pt-BR' ? 'Opções de ordenação e exibição' : 'Sorting and view options'}
-          >
-            <ArrowUpDown size={14} className="shrink-0 text-slate-500 dark:text-slate-400" />
-            <span>{language === 'pt-BR' ? 'Ordenar' : 'Sort'}</span>
-            <ChevronDown
-              size={12}
-              className={`shrink-0 text-slate-400 transition-transform duration-200 ${
-                isOrderMenuOpen ? 'rotate-180' : 'rotate-0'
-              }`}
-            />
-          </button>
-
-          {isOrderMenuOpen && (
-            <div
-              className="absolute right-0 mt-1.5 min-w-[210px] p-1.5 rounded-xl shadow-2xl z-50 flex flex-col gap-1 bg-white border border-slate-200 text-slate-800 shadow-slate-200/60 dark:bg-[#161B22] dark:border-[#21262D] dark:text-slate-100 dark:shadow-black/80 animate-in fade-in"
-              role="menu"
-            >
-              {viewModeOptions.map((opt) => {
-                const isActive = feedViewMode === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setFeedViewMode(opt.id);
-                      try {
-                        localStorage.setItem('prumo_feed_view_mode', opt.id);
-                      } catch {}
-                      setIsOrderMenuOpen(false);
-                    }}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors flex items-center justify-between text-left ${
-                      isActive
-                        ? 'bg-emerald-500/10 text-[#10B981] font-semibold dark:bg-emerald-500/15'
-                        : 'hover:bg-slate-100 dark:hover:bg-[#21262D]'
-                    }`}
-                  >
-                    <span>{opt.label}</span>
-                    {isActive && <Check size={14} className="text-[#10B981] shrink-0 ml-2" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* 3. CLEAN TRANSACTIONS LIST: Grouped by Day */}
-      <div className="bg-white dark:bg-[#0D1117] rounded-2xl border border-slate-200/80 dark:border-[#21262D] shadow-2xs overflow-hidden">
-        {filteredTransactions.length === 0 ? (
-          <div className="py-14 text-center space-y-2 px-4">
-            <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">{t.noMatchingEntries}</p>
-            <p className="text-[11px] sm:text-xs text-slate-400 dark:text-slate-500">{t.noMatchingDesc}</p>
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#21262D] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#161B22] mt-2"
-              >
-                <RotateCcw size={12} />
-                <span>{t.clearFiltersBtn}</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div>
-              {groupedTransactions.map((group, groupIdx) => (
-                <div key={group.date} className="day-group-block">
-                  {/* Clean lightweight sub-header above each daily group */}
-                  <div
-                    className={`flex items-center justify-between py-2 px-3.5 text-xs font-semibold tracking-wide text-slate-500 dark:text-slate-400 bg-slate-50/80 dark:bg-[#161B22]/60 select-none ${
-                      groupIdx > 0 ? 'border-t border-slate-100 dark:border-[#21262D]/60' : ''
-                    } border-b border-slate-100 dark:border-[#21262D]/60`}
-                  >
-                    <span className="capitalize">{group.label}</span>
-                    <div className="flex items-center gap-2 text-[11px] font-normal">
-                      <span className="text-slate-400 dark:text-slate-500">
-                        {group.transactions.length}{' '}
-                        {group.transactions.length === 1
-                          ? language === 'pt-BR'
-                            ? 'lançamento'
-                            : 'entry'
-                          : language === 'pt-BR'
-                          ? 'lançamentos'
-                          : 'entries'}
-                      </span>
-                      {group.dailyNet !== 0 && (
-                        <span
-                          className={`font-semibold ${
-                            group.dailyNet > 0
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-slate-600 dark:text-slate-300'
-                          }`}
-                        >
-                          {group.dailyNet > 0 ? '+' : '-'}
-                          {formatCurrency(Math.abs(group.dailyNet), currency)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Grouped Transactions List */}
-                  <div className="divide-y divide-slate-100 dark:divide-[#21262D]">
-                    {group.transactions.map((tx) => {
-                      const cat = categoryMap.get(tx.categoryId);
-                      const cardObj = tx.cardId
-                        ? creditCards.find((c) => c.id === tx.cardId)
-                        : tx.settledInvoiceKey
-                        ? creditCards.find((c) => tx.settledInvoiceKey?.startsWith(c.id))
-                        : creditCards.find((c) => tx.description.toLowerCase().includes(c.name.toLowerCase())) || null;
-
-                      return (
-                        <SwipeableTransactionRow
-                          key={tx.id}
-                          tx={tx}
-                          cat={cat}
-                          cardObj={cardObj}
-                          currency={currency}
-                          language={language}
-                          isOpen={openSwipeRowId === tx.id}
-                          anyRowOpen={openSwipeRowId !== null}
-                          onSetOpenRow={setOpenSwipeRowId}
-                          onOpenEditModal={onOpenEditModal}
-                          onDeleteTransaction={onDeleteTransaction}
-                          onToggleTransactionStatus={onToggleTransactionStatus}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Infinite scroll sentinel & pagination footer */}
-            {hasMore && (
-              <div
-                ref={loadMoreRef}
-                className="p-3 border-t border-slate-100 dark:border-[#21262D] flex items-center justify-center"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredTransactions.length))
-                  }
-                  className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#161B22] dark:hover:bg-[#21262D] text-slate-600 dark:text-slate-300 text-xs font-semibold transition-colors"
-                >
-                  {language === 'pt-BR'
-                    ? `Carregar mais (${visibleCount} de ${filteredTransactions.length})`
-                    : `Load more (${visibleCount} of ${filteredTransactions.length})`}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* 4. BOTTOM SHEET MODAL (Opções de Período, Categorias, Status e Ordenação) */}
-      {isFilterSheetOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
-          {/* Backdrop Click Dismiss */}
-          <div
-            className="fixed inset-0"
-            onClick={() => setIsFilterSheetOpen(false)}
-            aria-hidden="true"
-          />
-
-          {/* Bottom Sheet Card */}
-          <div className="relative bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl p-4 sm:p-5 space-y-4 max-h-[85vh] overflow-y-auto z-10 animate-in slide-in-from-bottom duration-200">
-            {/* Sheet pull bar (mobile only) */}
-            <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto sm:hidden -mt-1 mb-2" />
-
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal size={16} className="text-slate-700" />
-                <h3 className="text-sm font-bold text-slate-900">{t.filterSheetTitle}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                {activeFilterCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleResetFilters}
-                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
-                  >
-                    {t.clearFiltersBtn}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsFilterSheetOpen(false)}
-                  className="p-1 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Filter Section: Período */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                {language === 'pt-BR' ? 'Período' : 'Period'}
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setScope('month')}
-                  className={`py-2 px-3 rounded-xl border text-xs font-semibold transition-all ${
-                    scope === 'month'
-                      ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  {formatMonthLabel(selectedMonth, language)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScope('all')}
-                  className={`py-2 px-3 rounded-xl border text-xs font-semibold transition-all ${
-                    scope === 'all'
-                      ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  {t.allTime}
-                </button>
-              </div>
-            </div>
-
-            {/* Filter Section: Tipo */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                {language === 'pt-BR' ? 'Tipo de Lançamento' : 'Type'}
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['all', 'income', 'expense'] as const).map((tp) => (
-                  <button
-                    key={tp}
-                    type="button"
-                    onClick={() => setTypeFilter(tp)}
-                    className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
-                      typeFilter === tp
-                        ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {tp === 'all'
-                      ? t.filterAllEntries
-                      : tp === 'income'
-                      ? t.filterInputsOnly
-                      : t.filterExpensesOnly}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Filter Section: Status */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                {language === 'pt-BR' ? 'Status de Pagamento' : 'Payment Status'}
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['all', 'paid', 'unpaid'] as const).map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStatusFilter(st)}
-                    className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
-                      statusFilter === st
-                        ? 'border-slate-900 bg-slate-900 text-white shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {st === 'all'
-                      ? t.filterAllEntries
-                      : st === 'paid'
-                      ? t.filterPaidOnly
-                      : t.filterPendingOnly}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Filter Section: Categoria */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                {language === 'pt-BR' ? 'Categoria' : 'Category'}
-              </label>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
-              >
-                <option value="all">{t.allCategories}</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.type === 'income' ? t.inputPrefix : t.expensePrefix}
-                    {getCategoryDisplayName(cat, language)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filter Section: Ordenação */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                {language === 'pt-BR' ? 'Ordenar por' : 'Sort by'}
-              </label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
-              >
-                <option value="date-desc">{t.sortNewest}</option>
-                <option value="date-asc">{t.sortOldest}</option>
-                <option value="amount-desc">{t.sortHighest}</option>
-                <option value="amount-asc">{t.sortLowest}</option>
-              </select>
-            </div>
-
-            {/* Exportar CSV (utilitário discreto) */}
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() =>
-                  exportTransactionsToCSV(
-                    filteredTransactions,
-                    categories,
-                    `prumo-${scope === 'month' ? selectedMonth : 'all-time'}.csv`,
-                    language
-                  )
-                }
-                className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                <Download size={13} />
-                <span>
-                  {t.exportCsv} ({filteredTransactions.length})
-                </span>
-              </button>
-            </div>
-
-            {/* Primary Dismiss Button */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setIsFilterSheetOpen(false)}
-                className="w-full py-2.5 rounded-xl bg-slate-900 text-white text-xs sm:text-sm font-bold hover:bg-slate-800 transition-colors shadow-xs"
-              >
-                {t.viewFilteredCount(filteredTransactions.length)}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TransactionsFilterSheetModal
+        isOpen={isFilterSheetOpen}
+        onClose={() => setIsFilterSheetOpen(false)}
+        language={language}
+        selectedMonth={selectedMonth}
+        categories={categories}
+        filteredTransactions={filteredTransactions}
+        activeFilterCount={activeFilterCount}
+        onResetFilters={handleResetFilters}
+        scope={scope}
+        setScope={setScope}
+        typeFilter={typeFilter}
+        setTypeFilter={setTypeFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        categoryFilter={categoryFilter}
+        setCategoryFilter={setCategoryFilter}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        t={t}
+      />
     </div>
   );
 };
