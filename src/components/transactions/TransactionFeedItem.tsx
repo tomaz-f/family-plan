@@ -6,7 +6,7 @@ import { getCategoryDisplayName, TRANSLATIONS } from '../../utils/i18n';
 import { CategoryIcon } from '../CategoryIcon';
 import { BankIcon } from '../icons';
 import {
-  formatNumericDate, SWIPE_MAX_DRAG, SWIPE_REVEAL_WIDTH, SWIPE_SNAP_THRESHOLD,
+  SWIPE_MAX_DRAG, SWIPE_REVEAL_WIDTH, SWIPE_SNAP_THRESHOLD,
 } from './transactionsViewMath';
 
 export interface SwipeableTransactionRowProps {
@@ -158,7 +158,7 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
   const translateX = dragOffset !== null ? dragOffset : isOpen ? -SWIPE_REVEAL_WIDTH : 0;
 
   return (
-    <div data-swipe-row-id={tx.id} className="relative overflow-hidden select-none">
+    <div data-swipe-row-id={tx.id} className="group relative overflow-hidden select-none">
       {/* Background Action Layer */}
       <div
         className="swipe-actions-layer absolute inset-y-0 right-0 flex items-center justify-end gap-2 pr-3 pl-2 z-0"
@@ -225,47 +225,38 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
           transition: isDragging ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           willChange: isDragging || isOpen ? 'transform' : 'auto',
         }}
-        className="swipe-foreground-layer relative z-10 flex items-center justify-between p-3 sm:p-3.5 transition-colors gap-2 sm:gap-3 select-none cursor-pointer"
+        className="swipe-foreground-layer relative z-10 flex items-center justify-between py-2.5 first:pt-1 last:pb-0 group-first:pt-1 group-last:pb-0 gap-3 transition-colors select-none cursor-pointer"
       >
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-          {isInvoice ? (
-            <BankIcon card={cardObj} name={tx.description} size={20} badgeSize="lg" />
-          ) : (
-            <CategoryIcon icon={cat?.icon || 'Tag'} color={cat?.color || '#64748b'} size={20} badgeSize="lg" />
-          )}
+        {/* Left Column: Icon Badge + Description & Status Badges */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0">
+            {isInvoice ? (
+              <BankIcon card={cardObj} name={tx.description} size={18} badgeSize="md" />
+            ) : (
+              <CategoryIcon icon={cat?.icon || 'Tag'} color={cat?.color || '#64748b'} size={18} badgeSize="md" />
+            )}
+          </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-                {tx.description}
-              </span>
-              <span className="text-slate-400 dark:text-slate-600 text-xs shrink-0 select-none">•</span>
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate shrink-0 max-w-[40%] sm:max-w-none">
-                {getCategoryDisplayName(cat, language)}
-              </span>
-            </div>
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+              {tx.description}
+            </span>
 
-            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+            <div className="flex items-center gap-1.5 mt-1 min-w-0">
               {isInvoice ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[11px] font-medium">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[10px] sm:text-[11px] font-medium shrink-0">
                   <span>{language === 'pt-BR' ? 'Fatura Cartão' : 'Card Invoice'}</span>
                 </span>
               ) : (
                 <>
-                  {tx.installmentTotal && tx.installmentTotal > 1 && (
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-300 dark:border dark:border-[#21262D] text-[11px] font-medium">
-                      {tx.installmentCurrent || 1}/{tx.installmentTotal}
-                    </span>
-                  )}
-
                   {isUnpaid ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-medium">
-                      <Clock size={11} className="shrink-0" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] sm:text-[11px] font-medium shrink-0">
+                      <Clock size={10} className="shrink-0" />
                       <span>{t.pendingBadge}</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-medium">
-                      <Check size={11} className="shrink-0" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] sm:text-[11px] font-medium shrink-0">
+                      <Check size={10} className="shrink-0" />
                       <span>
                         {tx.type === 'income'
                           ? language === 'pt-BR' ? 'Recebido' : 'Received'
@@ -274,9 +265,15 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
                     </span>
                   )}
 
+                  {tx.installmentTotal && tx.installmentTotal > 1 && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-300 dark:border dark:border-[#21262D] text-[10px] sm:text-[11px] font-medium shrink-0">
+                      {tx.installmentCurrent || 1}/{tx.installmentTotal}
+                    </span>
+                  )}
+
                   {tx.recurringId && !tx.installmentTotal && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-500 dark:text-slate-400 dark:border dark:border-[#21262D] text-[11px] font-medium">
-                      <Repeat size={11} className="shrink-0" />
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-500 dark:text-slate-400 dark:border dark:border-[#21262D] text-[10px] sm:text-[11px] font-medium shrink-0">
+                      <Repeat size={10} className="shrink-0" />
                       <span>{language === 'pt-BR' ? 'Fixa' : 'Fixed'}</span>
                     </span>
                   )}
@@ -286,17 +283,20 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
           </div>
         </div>
 
-        <div className="flex flex-col items-end justify-center text-right shrink-0 pl-2">
+        {/* Right Column: Amount + Category Name */}
+        <div className="flex flex-col items-end shrink-0 text-right">
           <span
-            className={`text-sm sm:text-base font-bold whitespace-nowrap leading-tight ${
-              tx.type === 'income' ? 'text-[#10B981]' : 'text-[#EF4444]'
+            className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
+              tx.type === 'income'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-red-500 dark:text-red-400'
             }`}
           >
             {tx.type === 'income' ? '+' : '-'}
             {formatCurrency(tx.amount, currency)}
           </span>
-          <span className="text-xs font-medium text-slate-400 dark:text-slate-500 mt-0.5 whitespace-nowrap leading-none text-right">
-            {formatNumericDate(tx.date)}
+          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 max-w-[120px] truncate text-right mt-0.5">
+            {getCategoryDisplayName(cat, language)}
           </span>
         </div>
       </div>

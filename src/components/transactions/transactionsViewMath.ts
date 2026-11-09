@@ -54,6 +54,36 @@ export interface TransactionsViewProps {
   onOpenBalanceModal?: () => void;
 }
 
+const toLocalIsoDateKey = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+export const getTimelineDateKeys = (now: Date = new Date()) => {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  return {
+    todayStr: toLocalIsoDateKey(today),
+    yesterdayStr: toLocalIsoDateKey(yesterday),
+    tomorrowStr: toLocalIsoDateKey(tomorrow),
+  };
+};
+
+export const getTimelinePriority = (
+  dateStr: string,
+  todayStr: string,
+  yesterdayStr: string,
+  tomorrowStr: string
+): number => {
+  if (dateStr === todayStr) return 0;
+  if (dateStr === yesterdayStr) return 1;
+  if (dateStr === tomorrowStr) return 2;
+  return 3;
+};
+
 export const formatNumericDate = (dateStr: string): string => {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
@@ -90,19 +120,10 @@ export const getDayGroupLabel = (
   if (!targetDate) return dateStr;
 
   if (mode === 'timeline') {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const target = new Date(
-      targetDate.getFullYear(),
-      targetDate.getMonth(),
-      targetDate.getDate()
-    );
-    const diffTime = today.getTime() - target.getTime();
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return language === 'pt-BR' ? 'Hoje' : 'Today';
-    if (diffDays === 1) return language === 'pt-BR' ? 'Ontem' : 'Yesterday';
-    if (diffDays === -1) return language === 'pt-BR' ? 'Amanhã' : 'Tomorrow';
+    const { todayStr, yesterdayStr, tomorrowStr } = getTimelineDateKeys();
+    if (dateStr === todayStr) return language === 'pt-BR' ? 'Hoje' : 'Today';
+    if (dateStr === yesterdayStr) return language === 'pt-BR' ? 'Ontem' : 'Yesterday';
+    if (dateStr === tomorrowStr) return language === 'pt-BR' ? 'Amanhã' : 'Tomorrow';
   }
 
   if (language === 'pt-BR') {
@@ -151,6 +172,8 @@ export const computeFilteredTransactions = (params: {
     language,
   } = params;
 
+  const { todayStr, yesterdayStr, tomorrowStr } = getTimelineDateKeys();
+
   return transactions
     .filter((tx) => {
       if (tx.cardId) return false;
@@ -184,6 +207,11 @@ export const computeFilteredTransactions = (params: {
       if (sortBy === 'amount-asc') return a.amount - b.amount;
       if (feedViewMode === 'date-asc' || sortBy === 'date-asc') {
         return a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt);
+      }
+      if (feedViewMode === 'timeline') {
+        const priorityA = getTimelinePriority(a.date, todayStr, yesterdayStr, tomorrowStr);
+        const priorityB = getTimelinePriority(b.date, todayStr, yesterdayStr, tomorrowStr);
+        if (priorityA !== priorityB) return priorityA - priorityB;
       }
       return b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt);
     });
@@ -239,6 +267,18 @@ export const computeGroupedTransactions = (
       if (tx.type === 'income') group.dailyNet += tx.amount;
       else group.dailyNet -= tx.amount;
     }
+  }
+
+  if (feedViewMode === 'timeline') {
+    const { todayStr, yesterdayStr, tomorrowStr } = getTimelineDateKeys();
+    groups.sort((groupA, groupB) => {
+      const priorityA = getTimelinePriority(groupA.date, todayStr, yesterdayStr, tomorrowStr);
+      const priorityB = getTimelinePriority(groupB.date, todayStr, yesterdayStr, tomorrowStr);
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      const timeA = parseTxDate(groupA.date)?.getTime() ?? 0;
+      const timeB = parseTxDate(groupB.date)?.getTime() ?? 0;
+      return timeB - timeA;
+    });
   }
 
   return groups;

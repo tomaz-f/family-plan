@@ -21,13 +21,11 @@ export const TransactionsFeedHeaderBar: React.FC<TransactionsFeedHeaderBarProps>
   orderMenuRef, viewModeOptions, feedViewMode, onSelectViewMode,
 }) => {
   return (
-    <div className="flex items-center justify-between px-1 pt-1 pb-0.5">
-      <div className="flex items-center gap-2">
-        <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          {language === 'pt-BR' ? 'Lançamentos' : 'Transactions'}
-        </h2>
+    <div className="flex items-center justify-between w-full pt-3 pb-1">
+      <div className="text-xs font-bold tracking-wider uppercase text-slate-600 dark:text-slate-400 flex items-center gap-2">
+        <h2>{language === 'pt-BR' ? 'Lançamentos' : 'Transactions'}</h2>
         {filteredCount > 0 && (
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 dark:bg-[#161B22] dark:text-slate-400 border border-slate-200/80 dark:border-[#21262D]">
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-[#21262D]">
             {filteredCount}
           </span>
         )}
@@ -39,18 +37,19 @@ export const TransactionsFeedHeaderBar: React.FC<TransactionsFeedHeaderBarProps>
           onClick={() => setIsOrderMenuOpen((prev) => !prev)}
           aria-expanded={isOrderMenuOpen}
           aria-haspopup="true"
-          className="h-8 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition-colors active:scale-95 bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200 dark:bg-[#161B22] dark:text-slate-200 dark:border-[#21262D] dark:hover:bg-[#21262D] shadow-2xs select-none"
+          style={{ touchAction: 'manipulation' }}
+          className="h-9 sm:h-10 px-3 rounded-xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] hover:bg-slate-50 dark:hover:bg-[#161B22] shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer select-none text-xs font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap"
           title={
             language === 'pt-BR'
               ? 'Opções de ordenação e exibição'
               : 'Sorting and view options'
           }
         >
-          <ArrowUpDown size={14} className="shrink-0 text-slate-500 dark:text-slate-400" />
+          <ArrowUpDown size={14} className="text-slate-400 dark:text-slate-400 shrink-0" />
           <span>{language === 'pt-BR' ? 'Ordenar' : 'Sort'}</span>
           <ChevronDown
-            size={12}
-            className={`shrink-0 text-slate-400 transition-transform duration-200 ${
+            size={14}
+            className={`text-slate-400 dark:text-slate-400 shrink-0 transition-transform duration-200 ${
               isOrderMenuOpen ? 'rotate-180' : 'rotate-0'
             }`}
           />

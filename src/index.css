@@ -365,7 +365,9 @@ html[data-theme="oled"] .text-emerald-400 {
 
 html[data-theme="oled"] .text-rose-500,
 html[data-theme="oled"] .text-rose-600,
-html[data-theme="oled"] .text-rose-400 {
+html[data-theme="oled"] .text-rose-400,
+html[data-theme="oled"] .text-red-500,
+html[data-theme="oled"] .text-red-400 {
   color: #EF4444 !important;
 }
 
@@ -391,28 +393,31 @@ html[data-theme="oled"] .bg-indigo-500\/20 {
   color: #D0B595 !important;
 }
 
+html[data-theme="oled"] .bg-emerald-500\/5,
 html[data-theme="oled"] .bg-emerald-500\/10 {
-  background-color: rgba(16, 185, 129, 0.14) !important;
+  background-color: rgba(16, 185, 129, 0.1) !important;
 }
 
 html[data-theme="oled"] .bg-amber-500\/10 {
   background-color: rgba(245, 158, 11, 0.14) !important;
 }
 
-html[data-theme="oled"] .bg-rose-500\/10 {
-  background-color: rgba(239, 68, 68, 0.14) !important;
+html[data-theme="oled"] .bg-rose-500\/10,
+html[data-theme="oled"] .bg-red-500\/5,
+html[data-theme="oled"] .bg-red-500\/10 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
 }
 
 /* =========================================================
    WhatsApp-Style Search Bar & Horizontal Filter Chips
    ========================================================= */
 .whatsapp-search-input {
-  min-height: 36px !important;
-  height: 38px !important;
-  padding-left: 2.75rem !important;
-  padding-right: 2.5rem !important;
-  background-color: #1C222B !important;
-  border: 1px solid #2B3441 !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  padding-left: 2.25rem !important;
+  padding-right: 2rem !important;
+  background-color: #0D1117 !important;
+  border: 1px solid #21262D !important;
   color: #F8FAFC !important;
 }
 .whatsapp-search-input::placeholder {
@@ -425,11 +430,11 @@ html[data-theme="oled"] .bg-rose-500\/10 {
 }
 
 html[data-theme="light"] .whatsapp-search-input {
-  min-height: 36px !important;
-  height: 38px !important;
-  padding-left: 2.75rem !important;
-  padding-right: 2.5rem !important;
-  background-color: #F1F5F9 !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  padding-left: 2.25rem !important;
+  padding-right: 2rem !important;
+  background-color: #FFFFFF !important;
   border: 1px solid #E2E8F0 !important;
   color: #0F172A !important;
 }

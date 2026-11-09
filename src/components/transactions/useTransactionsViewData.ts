@@ -68,7 +68,7 @@ export const useTransactionsViewData = ({
     };
 
     document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, { passive: true });
     document.addEventListener('keydown', handleKeyDown);
 
     return () => {
@@ -93,7 +93,7 @@ export const useTransactionsViewData = ({
 
   const dropdownFilters: { id: FilterChipId; label: string }[] = useMemo(
     () => [
-      { id: 'pending-income', label: language === 'pt-BR' ? 'Entradas a pagar' : 'Pending income' },
+      { id: 'pending-income', label: language === 'pt-BR' ? 'Entradas a receber' : 'Pending income' },
       { id: 'paid-expense', label: language === 'pt-BR' ? 'Pagas / Concluídas' : 'Paid / Completed' },
       { id: 'paid-income', label: language === 'pt-BR' ? 'Recebidas' : 'Received' },
       { id: 'fixed', label: language === 'pt-BR' ? 'Fixas' : 'Fixed / Recurring' },
@@ -102,9 +102,19 @@ export const useTransactionsViewData = ({
     [language]
   );
 
+  const allFilterOptions: { id: FilterChipId; label: string }[] = useMemo(
+    () => [...primaryFilterChips, ...dropdownFilters],
+    [primaryFilterChips, dropdownFilters]
+  );
+
+  const activeFilterOption = useMemo(
+    () => allFilterOptions.find((f) => f.id === activeFilterChip) ?? allFilterOptions[0],
+    [allFilterOptions, activeFilterChip]
+  );
+
   const isDropdownFilterActive = useMemo(
-    () => dropdownFilters.some((f) => f.id === activeFilterChip),
-    [dropdownFilters, activeFilterChip]
+    () => activeFilterChip !== 'all',
+    [activeFilterChip]
   );
 
   const activeDropdownFilter = useMemo(
@@ -113,23 +123,13 @@ export const useTransactionsViewData = ({
   );
 
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
+  const [dropdownPos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
+  const dropdownContainerRef = useRef<HTMLDivElement | null>(null);
   const dropdownBtnRef = useRef<HTMLButtonElement | null>(null);
   const dropdownMenuRef = useRef<HTMLDivElement | null>(null);
 
   const toggleDropdown = () => {
-    if (!isDropdownOpen && dropdownBtnRef.current) {
-      const rect = dropdownBtnRef.current.getBoundingClientRect();
-      const isRightAligned = rect.right > window.innerWidth - 200;
-      setDropdownPos({
-        top: rect.bottom + 6,
-        left: isRightAligned ? undefined : Math.max(12, rect.left),
-        right: isRightAligned ? Math.max(12, window.innerWidth - rect.right) : undefined,
-      });
-      setIsDropdownOpen(true);
-    } else {
-      setIsDropdownOpen(false);
-    }
+    setIsDropdownOpen((prev) => !prev);
   };
 
   useEffect(() => {
@@ -137,12 +137,7 @@ export const useTransactionsViewData = ({
 
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
-      if (
-        dropdownMenuRef.current &&
-        !dropdownMenuRef.current.contains(target) &&
-        dropdownBtnRef.current &&
-        !dropdownBtnRef.current.contains(target)
-      ) {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(target)) {
         setIsDropdownOpen(false);
       }
     };
@@ -151,18 +146,14 @@ export const useTransactionsViewData = ({
       if (e.key === 'Escape') setIsDropdownOpen(false);
     };
 
-    const handleScroll = () => setIsDropdownOpen(false);
-
     document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown, { passive: true });
     document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('touchstart', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('scroll', handleScroll);
     };
   }, [isDropdownOpen]);
 
@@ -286,8 +277,9 @@ export const useTransactionsViewData = ({
     sortBy, setSortBy, feedViewMode, setFeedViewMode, isOrderMenuOpen, setIsOrderMenuOpen,
     orderMenuRef, viewModeOptions, isFilterSheetOpen, setIsFilterSheetOpen, visibleCount,
     setVisibleCount, openSwipeRowId, setOpenSwipeRowId, loadMoreRef, primaryFilterChips,
-    dropdownFilters, isDropdownFilterActive, activeDropdownFilter, isDropdownOpen,
-    setIsDropdownOpen, dropdownPos, dropdownBtnRef, dropdownMenuRef, toggleDropdown,
+    dropdownFilters, allFilterOptions, activeFilterOption, isDropdownFilterActive,
+    activeDropdownFilter, isDropdownOpen, setIsDropdownOpen, dropdownPos,
+    dropdownContainerRef, dropdownBtnRef, dropdownMenuRef, toggleDropdown,
     categoryMap, activeFilterCount, handleResetFilters, filteredTransactions,
     groupedTransactions, hasMore, isBalanceHidden, toggleBalancePrivacy, effectiveStats,
     effectiveBankBalance,

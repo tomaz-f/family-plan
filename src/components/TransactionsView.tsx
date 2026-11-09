@@ -70,11 +70,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
     loadMoreRef,
     primaryFilterChips,
     dropdownFilters,
+    allFilterOptions,
+    activeFilterOption,
     isDropdownFilterActive,
     activeDropdownFilter,
     isDropdownOpen,
     setIsDropdownOpen,
     dropdownPos,
+    dropdownContainerRef,
     dropdownBtnRef,
     dropdownMenuRef,
     toggleDropdown,
@@ -93,6 +96,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
   return (
     <div className="space-y-3.5 sm:space-y-4">
       <TransactionsHeroSummary
+        selectedMonth={selectedMonth}
         language={language}
         currency={currency}
         effectiveBankBalance={effectiveBankBalance}
@@ -104,6 +108,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
         onSearchQueryChange={setSearchQuery}
         primaryFilterChips={primaryFilterChips}
         dropdownFilters={dropdownFilters}
+        allFilterOptions={allFilterOptions}
+        activeFilterOption={activeFilterOption}
         activeFilterChip={activeFilterChip}
         onSelectFilterChip={(id) => {
           setActiveFilterChip(id);
@@ -114,6 +120,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
         isDropdownOpen={isDropdownOpen}
         onToggleDropdown={toggleDropdown}
         dropdownPos={dropdownPos}
+        dropdownContainerRef={dropdownContainerRef}
         dropdownBtnRef={dropdownBtnRef}
         dropdownMenuRef={dropdownMenuRef}
         balanceCard={balanceCard}
