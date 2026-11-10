@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Check, Clock, Pencil, Repeat, ThumbsUp, Trash2 } from 'lucide-react';
 import { AppLanguage, Category, CreditCard, Transaction } from '../../types';
 import { formatCurrency } from '../../utils/format';
+import { getAdaptiveFeedFontSize } from '../../utils/currencyUtils';
 import { getCategoryDisplayName, TRANSLATIONS } from '../../utils/i18n';
 import { CategoryIcon } from '../CategoryIcon';
 import { BankIcon } from '../icons';
@@ -156,6 +157,7 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
   };
 
   const translateX = dragOffset !== null ? dragOffset : isOpen ? -SWIPE_REVEAL_WIDTH : 0;
+  const formattedAmount = `${tx.type === 'income' ? '+' : '-'}${formatCurrency(tx.amount, currency)}`;
 
   return (
     <div data-swipe-row-id={tx.id} className="group relative overflow-hidden select-none">
@@ -238,24 +240,24 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
           </div>
 
           <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+            <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
               {tx.description}
             </span>
 
             <div className="flex items-center gap-1.5 mt-1 min-w-0">
               {isInvoice ? (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[10px] sm:text-[11px] font-medium shrink-0">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#6E5440]/10 text-[#6E5440] dark:bg-[#161B22] dark:border dark:border-[#21262D] dark:text-[#D0B595] text-[11px] font-semibold shrink-0">
                   <span>{language === 'pt-BR' ? 'Fatura Cartão' : 'Card Invoice'}</span>
                 </span>
               ) : (
                 <>
                   {isUnpaid ? (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] sm:text-[11px] font-medium shrink-0">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-semibold shrink-0">
                       <Clock size={10} className="shrink-0" />
                       <span>{t.pendingBadge}</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] sm:text-[11px] font-medium shrink-0">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold shrink-0">
                       <Check size={10} className="shrink-0" />
                       <span>
                         {tx.type === 'income'
@@ -266,13 +268,13 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
                   )}
 
                   {tx.installmentTotal && tx.installmentTotal > 1 && (
-                    <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-300 dark:border dark:border-[#21262D] text-[10px] sm:text-[11px] font-medium shrink-0">
+                    <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-600 dark:text-slate-300 dark:border dark:border-[#21262D] text-[11px] font-semibold shrink-0">
                       {tx.installmentCurrent || 1}/{tx.installmentTotal}
                     </span>
                   )}
 
                   {tx.recurringId && !tx.installmentTotal && (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-500 dark:text-slate-400 dark:border dark:border-[#21262D] text-[10px] sm:text-[11px] font-medium shrink-0">
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-[#161B22] text-slate-500 dark:text-slate-400 dark:border dark:border-[#21262D] text-[11px] font-semibold shrink-0">
                       <Repeat size={10} className="shrink-0" />
                       <span>{language === 'pt-BR' ? 'Fixa' : 'Fixed'}</span>
                     </span>
@@ -286,16 +288,15 @@ export const SwipeableTransactionRow: React.FC<SwipeableTransactionRowProps> = (
         {/* Right Column: Amount + Category Name */}
         <div className="flex flex-col items-end shrink-0 text-right">
           <span
-            className={`text-xs sm:text-sm font-bold whitespace-nowrap ${
+            className={`${getAdaptiveFeedFontSize(formattedAmount)} leading-tight tracking-tight whitespace-nowrap text-right ${
               tx.type === 'income'
                 ? 'text-emerald-600 dark:text-emerald-400'
                 : 'text-red-500 dark:text-red-400'
             }`}
           >
-            {tx.type === 'income' ? '+' : '-'}
-            {formatCurrency(tx.amount, currency)}
+            {formattedAmount}
           </span>
-          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 max-w-[120px] truncate text-right mt-0.5">
+          <span className="text-xs font-medium text-slate-400 dark:text-slate-500 max-w-[130px] truncate text-right mt-0.5">
             {getCategoryDisplayName(cat, language)}
           </span>
         </div>

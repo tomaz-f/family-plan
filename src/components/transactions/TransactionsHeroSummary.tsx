@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { AppLanguage } from '../../types';
 import { formatCurrency } from '../../utils/format';
+import { getAdaptiveMiniCardFontSize } from '../../utils/currencyUtils';
 import { FilterChipId } from './transactionsViewMath';
 
 export interface TransactionsHeroSummaryProps {
@@ -85,12 +86,17 @@ export const TransactionsHeroSummary: React.FC<TransactionsHeroSummaryProps> = (
 
   const formatUnsigned = (val: number): string => formatCurrency(Math.abs(val), currency);
 
+  const saldoDisplay = isBalanceHidden ? 'R$ ••••••' : formatUnsigned(effectiveBankBalance);
+  const balancoDisplay = isBalanceHidden ? 'R$ ••••••' : formatUnsigned(projectedFinal);
+  const receitasDisplay = isBalanceHidden ? 'R$ ••••••' : formatUnsigned(effectiveStats.income);
+  const despesasDisplay = isBalanceHidden ? 'R$ ••••••' : formatUnsigned(effectiveStats.expense);
+
   return (
     <>
       <div className="w-full flex flex-col gap-2.5 px-0 py-1">
         {/* Independent 2x2 Mini-Cards Grid */}
         <div className="grid grid-cols-2 gap-2.5 w-full">
-          {/* Mini-Bloco 1 (Row 1, Left) — Saldo (Vertically Centered 2-Line Card) */}
+          {/* Mini-Bloco 1 (Row 1, Left) — Saldo */}
           <div
             role={onOpenBalanceModal ? 'button' : undefined}
             tabIndex={onOpenBalanceModal ? 0 : undefined}
@@ -108,7 +114,7 @@ export const TransactionsHeroSummary: React.FC<TransactionsHeroSummaryProps> = (
                   : 'Adjust initial balance'
                 : undefined
             }
-            className={`p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-center gap-2.5 min-h-[82px] transition-colors shadow-sm min-w-0 ${
+            className={`p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-center gap-2.5 min-h-[82px] shadow-sm transition-colors min-w-0 ${
               onOpenBalanceModal ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-[#161B22]' : ''
             }`}
           >
@@ -116,65 +122,73 @@ export const TransactionsHeroSummary: React.FC<TransactionsHeroSummaryProps> = (
               <Wallet size={16} className="text-blue-600 dark:text-blue-400" />
             </span>
             <div className="flex flex-col justify-center min-w-0 flex-1">
-              <span className="text-xs sm:text-[13px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate leading-none mb-1">
                 {language === 'pt-BR' ? 'Saldo' : 'Balance'}
               </span>
-              <span className="text-base sm:text-lg font-black tracking-tight leading-tight truncate text-slate-900 dark:text-slate-50 mt-0.5">
-                {isBalanceHidden ? 'R$ ••••••' : formatUnsigned(effectiveBankBalance)}
+              <span
+                className={`${getAdaptiveMiniCardFontSize(saldoDisplay)} leading-none tracking-tight truncate text-slate-900 dark:text-slate-50`}
+              >
+                {saldoDisplay}
               </span>
             </div>
           </div>
 
-          {/* Mini-Bloco 2 (Row 1, Right) — Balanço Mensal (Vertically Centered 2-Line Card) */}
-          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-center gap-2.5 min-h-[82px] transition-colors shadow-sm min-w-0">
+          {/* Mini-Bloco 2 (Row 1, Right) — Balanço Mensal */}
+          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-center gap-2.5 min-h-[82px] shadow-sm transition-colors min-w-0">
             <span className="w-8 h-8 rounded-full bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
               <Scale size={16} />
             </span>
             <div className="flex flex-col justify-center min-w-0 flex-1">
-              <span className="text-xs sm:text-[13px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate leading-none mb-1">
                 {language === 'pt-BR' ? 'Balanço Mensal' : 'Monthly Balance'}
               </span>
               <span
-                className={`text-base sm:text-lg font-black tracking-tight leading-tight truncate mt-0.5 ${
-                  projectedFinal >= 0 ? 'text-[#10B981]' : 'text-[#EF4444]'
+                className={`${getAdaptiveMiniCardFontSize(balancoDisplay)} leading-none tracking-tight truncate ${
+                  projectedFinal >= 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-500 dark:text-red-400'
                 }`}
               >
-                {isBalanceHidden ? 'R$ ••••••' : formatUnsigned(projectedFinal)}
+                {balancoDisplay}
               </span>
             </div>
           </div>
 
           {/* Mini-Bloco 3 (Row 2, Left) — Receitas */}
-          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-start gap-2.5 min-h-[82px] transition-colors shadow-sm min-w-0">
-            <span className="w-8 h-8 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 flex items-center justify-center shrink-0 mt-0.5">
+          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-center gap-2.5 min-h-[82px] shadow-sm transition-colors min-w-0">
+            <span className="w-8 h-8 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 flex items-center justify-center shrink-0">
               <TrendingUp size={16} className="text-[#10B981]" />
             </span>
-            <div className="flex flex-col justify-start min-w-0 flex-1">
-              <span className="text-xs sm:text-[13px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">
+            <div className="flex flex-col justify-center min-w-0 flex-1">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate leading-none mb-1">
                 {language === 'pt-BR' ? 'Receitas' : 'Income'}
               </span>
-              <span className="text-base sm:text-lg font-black tracking-tight leading-tight truncate text-[#10B981] mt-1">
-                {isBalanceHidden ? 'R$ ••••••' : formatUnsigned(effectiveStats.income)}
+              <span
+                className={`${getAdaptiveMiniCardFontSize(receitasDisplay)} leading-none tracking-tight truncate text-emerald-600 dark:text-emerald-400`}
+              >
+                {receitasDisplay}
               </span>
-              <span className="text-[11px] font-bold tracking-tight truncate mt-1 text-emerald-600/90 dark:text-emerald-400/90">
+              <span className="text-xs font-extrabold tracking-tight truncate mt-1 leading-none text-emerald-600/90 dark:text-emerald-400/90">
                 {isBalanceHidden ? '+R$ ••••' : `+${formatUnsigned(effectiveStats.pendingIncome)}`}
               </span>
             </div>
           </div>
 
           {/* Mini-Bloco 4 (Row 2, Right) — Despesas */}
-          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-start gap-2.5 min-h-[82px] transition-colors shadow-sm min-w-0">
-            <span className="w-8 h-8 rounded-full bg-red-500/10 dark:bg-red-500/15 flex items-center justify-center shrink-0 mt-0.5">
+          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] flex items-center gap-2.5 min-h-[82px] shadow-sm transition-colors min-w-0">
+            <span className="w-8 h-8 rounded-full bg-red-500/10 dark:bg-red-500/15 flex items-center justify-center shrink-0">
               <TrendingDown size={16} className="text-[#EF4444]" />
             </span>
-            <div className="flex flex-col justify-start min-w-0 flex-1">
-              <span className="text-xs sm:text-[13px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">
+            <div className="flex flex-col justify-center min-w-0 flex-1">
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate leading-none mb-1">
                 {language === 'pt-BR' ? 'Despesas' : 'Expenses'}
               </span>
-              <span className="text-base sm:text-lg font-black tracking-tight leading-tight truncate text-[#EF4444] mt-1">
-                {isBalanceHidden ? 'R$ ••••••' : formatUnsigned(effectiveStats.expense)}
+              <span
+                className={`${getAdaptiveMiniCardFontSize(despesasDisplay)} leading-none tracking-tight truncate text-red-500 dark:text-red-400`}
+              >
+                {despesasDisplay}
               </span>
-              <span className="text-[11px] font-bold tracking-tight truncate mt-1 text-red-500/90 dark:text-red-400/90">
+              <span className="text-xs font-extrabold tracking-tight truncate mt-1 leading-none text-red-500/90 dark:text-red-400/90">
                 {isBalanceHidden ? '-R$ ••••' : `-${formatUnsigned(effectiveStats.pendingExpense)}`}
               </span>
             </div>
