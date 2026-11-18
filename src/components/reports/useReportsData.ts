@@ -15,7 +15,9 @@ import {
 } from './reportsTypes';
 import {
   computeDonutArcs,
+  filterActiveCardCategoryTransactions,
   filterActiveCategoryTransactions,
+  getMonthlyCardInvoiceExpenses,
   getTxInvoiceMonth,
   isInvoiceTransaction,
 } from './reportsCalculations';
@@ -171,55 +173,34 @@ export function useReportsData(params: {
   }, [transactions, selectedType, selectedMonth, categoryMap, creditCards, language]);
 
   // 2. SECOND CHART: Dedicated Credit Card Category Breakdown
+  const monthlyCardExpenses = useMemo(
+    () =>
+      getMonthlyCardInvoiceExpenses(
+        transactions,
+        creditCards,
+        selectedCardFilter,
+        selectedMonth
+      ),
+    [creditCards, transactions, selectedCardFilter, selectedMonth]
+  );
+
   const { cardCategorySlices, cardTotalAmount, cardTotalCount } = useMemo(() => {
     const groups = new Map<string, { amount: number; count: number }>();
     let sumTotal = 0;
     let countTotal = 0;
 
-    if (!creditCards || creditCards.length === 0) {
-      return {
-        cardCategorySlices: [],
-        cardTotalAmount: 0,
-        cardTotalCount: 0,
-      };
-    }
+    for (const tx of monthlyCardExpenses) {
+      const amt = Number(tx.amount || 0);
+      if (amt <= 0) continue;
 
-    for (const card of creditCards) {
-      if (selectedCardFilter !== 'all' && selectedCardFilter !== card.id) {
-        continue;
-      }
-
-      const cardTxs = transactions.filter((tx) => tx.cardId === card.id && tx.type === 'expense');
-      if (cardTxs.length === 0) continue;
-
-      const cycles = new Set<string>();
-      for (const tx of cardTxs) {
-        cycles.add(getTxInvoiceMonth(tx, card));
-      }
-
-      for (const invMonth of cycles) {
-        const settlementKey = `${card.id}__${invMonth}`;
-        const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === settlementKey);
-        const dueDate = computeInvoiceDueDate(invMonth, card.closingDay, card.dueDay);
-        const dueMonth = settlementTx?.date ? settlementTx.date.slice(0, 7) : dueDate.slice(0, 7);
-
-        if (dueMonth === selectedMonth) {
-          const cycleTxs = cardTxs.filter((tx) => getTxInvoiceMonth(tx, card) === invMonth);
-          for (const tx of cycleTxs) {
-            const amt = Number(tx.amount || 0);
-            if (amt <= 0) continue;
-
-            const catKey = tx.categoryId || 'uncategorized';
-            const existing = groups.get(catKey) || { amount: 0, count: 0 };
-            groups.set(catKey, {
-              amount: existing.amount + amt,
-              count: existing.count + 1,
-            });
-            sumTotal += amt;
-            countTotal += 1;
-          }
-        }
-      }
+      const catKey = tx.categoryId || 'uncategorized';
+      const existing = groups.get(catKey) || { amount: 0, count: 0 };
+      groups.set(catKey, {
+        amount: existing.amount + amt,
+        count: existing.count + 1,
+      });
+      sumTotal += amt;
+      countTotal += 1;
     }
 
     const totalRounded = Number(sumTotal.toFixed(2));
@@ -249,7 +230,7 @@ export function useReportsData(params: {
       cardTotalAmount: totalRounded,
       cardTotalCount: countTotal,
     };
-  }, [creditCards, transactions, selectedMonth, selectedCardFilter, categoryMap, language]);
+  }, [monthlyCardExpenses, categoryMap, language]);
 
   const activeSlice = useMemo(
     () => categorySlices.find((s) => s.id === activeCategoryId) || null,
@@ -272,6 +253,11 @@ export function useReportsData(params: {
     [cardCategorySlices, activeCardCategoryId]
   );
 
+  const activeCardCategoryTransactions = useMemo(
+    () => filterActiveCardCategoryTransactions(monthlyCardExpenses, activeCardCategoryId),
+    [monthlyCardExpenses, activeCardCategoryId]
+  );
+
   const computedArcs = useMemo(
     () => computeDonutArcs(categorySlices, totalAmount),
     [categorySlices, totalAmount]
@@ -292,6 +278,7 @@ export function useReportsData(params: {
     activeSlice,
     activeCategoryTransactions,
     activeCardSlice,
+    activeCardCategoryTransactions,
     computedArcs,
     computedCardArcs,
   };

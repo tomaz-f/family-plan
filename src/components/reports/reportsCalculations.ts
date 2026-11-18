@@ -5,6 +5,7 @@ import {
 } from '../../types';
 import {
   computeCardFirstInvoiceMonth,
+  computeInvoiceDueDate,
   shiftMonth,
 } from '../../utils/format';
 import {
@@ -125,4 +126,73 @@ export function filterActiveCategoryTransactions(
       (a, b) =>
         b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || '')
     );
+}
+
+/**
+ * Collects positive credit card expenses belonging to invoice cycles whose due
+ * month matches `selectedMonth`, optionally narrowed to a single card.
+ */
+export function getMonthlyCardInvoiceExpenses(
+  transactions: Transaction[],
+  creditCards: CreditCard[],
+  selectedCardFilter: string,
+  selectedMonth: string
+): Transaction[] {
+  if (!creditCards || creditCards.length === 0) return [];
+
+  const result: Transaction[] = [];
+
+  for (const card of creditCards) {
+    if (selectedCardFilter !== 'all' && selectedCardFilter !== card.id) {
+      continue;
+    }
+
+    const cardTxs = transactions.filter((tx) => tx.cardId === card.id && tx.type === 'expense');
+    if (cardTxs.length === 0) continue;
+
+    const cycles = new Set<string>();
+    for (const tx of cardTxs) {
+      cycles.add(getTxInvoiceMonth(tx, card));
+    }
+
+    for (const invMonth of cycles) {
+      const settlementKey = `${card.id}__${invMonth}`;
+      const settlementTx = transactions.find((tx) => tx.settledInvoiceKey === settlementKey);
+      const dueDate = computeInvoiceDueDate(invMonth, card.closingDay, card.dueDay);
+      const dueMonth = settlementTx?.date ? settlementTx.date.slice(0, 7) : dueDate.slice(0, 7);
+
+      if (dueMonth !== selectedMonth) continue;
+
+      for (const tx of cardTxs) {
+        if (getTxInvoiceMonth(tx, card) === invMonth && Number(tx.amount || 0) > 0) {
+          result.push(tx);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Filters monthly card invoice expenses by `activeCardCategoryId` and sorts
+ * newest-first by purchase date (falling back to transaction date).
+ */
+export function filterActiveCardCategoryTransactions(
+  monthlyCardExpenses: Transaction[],
+  activeCardCategoryId: string | null
+): Transaction[] {
+  if (!activeCardCategoryId) return [];
+
+  return monthlyCardExpenses
+    .filter((tx) =>
+      activeCardCategoryId === 'uncategorized'
+        ? !tx.categoryId
+        : tx.categoryId === activeCardCategoryId
+    )
+    .sort((a, b) => {
+      const dateA = a.purchaseDate || a.date;
+      const dateB = b.purchaseDate || b.date;
+      return dateB.localeCompare(dateA) || (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
 }

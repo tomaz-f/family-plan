@@ -57,6 +57,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     scope: string;
     id: string | null;
   }>({ scope: cardScopeKey, id: null });
+  const [prevSelectedMonth, setPrevSelectedMonth] = useState(selectedMonth);
+  if (prevSelectedMonth !== selectedMonth) {
+    setPrevSelectedMonth(selectedMonth);
+    setCardCategorySelection({ scope: cardScopeKey, id: null });
+  }
   const activeCardCategoryId =
     cardCategorySelection.scope === cardScopeKey ? cardCategorySelection.id : null;
 
@@ -155,11 +160,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             cardTotalCount={data.cardTotalCount}
             activeCardCategoryId={activeCardCategoryId}
             activeCardSlice={data.activeCardSlice}
+            activeCardCategoryTransactions={data.activeCardCategoryTransactions}
             donutAnimPhase={donutAnimPhase2}
             currency={currency}
             language={language}
             isOled={isOled}
-            onSelectCardFilter={setSelectedCardFilter}
+            onSelectCardFilter={(cardId) => {
+              setSelectedCardFilter(cardId);
+              setCardCategorySelection({
+                scope: `${selectedMonth}__${cardId}`,
+                id: null,
+              });
+            }}
             onToggleCardCategory={(id) => {
               setDonutAnimPhase2('done');
               setCardCategorySelection((prev) => ({

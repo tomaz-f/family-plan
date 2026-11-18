@@ -1,7 +1,6 @@
 import React from 'react';
-import { AppLanguage, CreditCard } from '../../types';
+import { AppLanguage, CreditCard, Transaction } from '../../types';
 import { formatCurrency } from '../../utils/format';
-import { CategoryIcon } from '../CategoryIcon';
 import { AppIcon } from '../icons';
 import {
   CategorySliceItem,
@@ -12,6 +11,7 @@ import {
   DONUT_SVG_SIZE,
 } from './reportsTypes';
 import { ReportsDonutChart } from './ReportsDonutChart';
+import { ReportsCardsAccordionList } from './ReportsCardsAccordionList';
 
 interface ReportsCardsSectionProps {
   creditCards: CreditCard[];
@@ -22,6 +22,7 @@ interface ReportsCardsSectionProps {
   cardTotalCount: number;
   activeCardCategoryId: string | null;
   activeCardSlice: CategorySliceItem | null;
+  activeCardCategoryTransactions: Transaction[];
   donutAnimPhase: 'init' | 'drawing' | 'done';
   currency: string;
   language: AppLanguage;
@@ -40,6 +41,7 @@ export const ReportsCardsSection: React.FC<ReportsCardsSectionProps> = ({
   cardTotalCount,
   activeCardCategoryId,
   activeCardSlice,
+  activeCardCategoryTransactions,
   donutAnimPhase,
   currency,
   language,
@@ -219,67 +221,18 @@ export const ReportsCardsSection: React.FC<ReportsCardsSectionProps> = ({
             onResetSlice={onResetCardCategory}
           />
 
-          {/* Category Breakdown Legend Below the Chart */}
-          <div
-            className={`mt-5 pt-4 border-t ${
-              isOled ? 'border-[#21262D]/80' : 'border-slate-200'
-            }`}
-          >
-            {cardCategorySlices.map((item) => {
-              const isSelected = activeCardCategoryId === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onToggleCardCategory(item.id)}
-                  className={`w-full min-h-[48px] rounded-xl p-3 mb-2 last:mb-0 flex items-center justify-between gap-3 border text-left transition-all ${
-                    isSelected
-                      ? isOled
-                        ? 'bg-[#161B22] border-[#6E5440] ring-1 ring-[#D0B595]/30'
-                        : 'bg-slate-100 border-[#6E5440]'
-                      : isOled
-                      ? 'bg-[#161B22]/40 border-[#21262D] hover:bg-[#161B22]/70'
-                      : 'bg-slate-50/70 border-slate-200/60 hover:bg-slate-100'
-                  } dark:bg-[#161B22]/40 dark:border-[#21262D]`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <CategoryIcon
-                      icon={item.icon}
-                      color={item.color}
-                      badgeSize="sm"
-                      size={15}
-                    />
-                    <span
-                      className={`text-xs font-bold truncate ${
-                        isOled ? 'text-white' : 'text-slate-900'
-                      } dark:text-white`}
-                    >
-                      {item.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <span
-                      className={`text-xs font-bold ${
-                        isOled ? 'text-white' : 'text-slate-900'
-                      } dark:text-white`}
-                    >
-                      {formatCurrency(item.amount, currency)}
-                    </span>
-                    <span
-                      className={`min-w-[48px] text-right px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
-                        isOled
-                          ? 'bg-[#0D1117] text-slate-300 border-[#21262D]'
-                          : 'bg-white text-slate-700 border-slate-200/80'
-                      } dark:bg-[#0D1117] dark:text-slate-300 dark:border-[#21262D]`}
-                    >
-                      {item.share.toFixed(1)}%
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          {/* Interactive Category Accordion List Below the Chart */}
+          <ReportsCardsAccordionList
+            cardCategorySlices={cardCategorySlices}
+            activeCardCategoryId={activeCardCategoryId}
+            activeCardCategoryTransactions={activeCardCategoryTransactions}
+            creditCards={creditCards}
+            selectedCardFilter={selectedCardFilter}
+            currency={currency}
+            language={language}
+            isOled={isOled}
+            onToggleCardCategory={onToggleCardCategory}
+          />
         </>
       )}
     </section>
