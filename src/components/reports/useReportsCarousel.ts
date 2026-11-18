@@ -2,7 +2,10 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { VIRTUAL_SLIDE_MAP } from './reportsTypes';
 
 export function useReportsCarousel() {
-  // vIndex starts at 1 (logical Card 0: "Distribuição por Categoria - Fluxo de Caixa")
+  const maxVIndex = VIRTUAL_SLIDE_MAP.length - 1;
+  const lastRealVIndex = VIRTUAL_SLIDE_MAP.length - 2;
+
+  // vIndex starts at 1 (logical Card 0: "Categorias Gerais")
   const [vIndex, setVIndex] = useState<number>(1);
   const vIndexRef = useRef<number>(1);
   const [dragOffset, setDragOffset] = useState<number>(0);
@@ -31,9 +34,9 @@ export function useReportsCarousel() {
   const startGesture = useCallback((clientX: number, clientY: number) => {
     const curV = vIndexRef.current;
     if (curV === 0) {
-      vIndexRef.current = 4;
-      setVIndex(4);
-    } else if (curV === 5) {
+      vIndexRef.current = lastRealVIndex;
+      setVIndex(lastRealVIndex);
+    } else if (curV === maxVIndex) {
       vIndexRef.current = 1;
       setVIndex(1);
     }
@@ -50,7 +53,7 @@ export function useReportsCarousel() {
       lock: 'none',
     };
     wasDraggedRef.current = false;
-  }, []);
+  }, [lastRealVIndex, maxVIndex]);
 
   const moveGesture = useCallback(
     (clientX: number, clientY: number, preventDefault?: () => void) => {
@@ -171,14 +174,14 @@ export function useReportsCarousel() {
   const handleTrackTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
 
-    if (vIndexRef.current === 5) {
+    if (vIndexRef.current === maxVIndex) {
       vIndexRef.current = 1;
       setIsAnimating(false);
       setVIndex(1);
     } else if (vIndexRef.current === 0) {
-      vIndexRef.current = 4;
+      vIndexRef.current = lastRealVIndex;
       setIsAnimating(false);
-      setVIndex(4);
+      setVIndex(lastRealVIndex);
     } else {
       setIsAnimating(false);
     }
@@ -187,20 +190,20 @@ export function useReportsCarousel() {
   useEffect(() => {
     if (!isAnimating) return;
     const timer = setTimeout(() => {
-      if (vIndexRef.current === 5) {
+      if (vIndexRef.current === maxVIndex) {
         vIndexRef.current = 1;
         setIsAnimating(false);
         setVIndex(1);
       } else if (vIndexRef.current === 0) {
-        vIndexRef.current = 4;
+        vIndexRef.current = lastRealVIndex;
         setIsAnimating(false);
-        setVIndex(4);
+        setVIndex(lastRealVIndex);
       } else {
         setIsAnimating(false);
       }
     }, 365);
     return () => clearTimeout(timer);
-  }, [isAnimating, vIndex]);
+  }, [isAnimating, vIndex, lastRealVIndex, maxVIndex]);
 
   const activeSlideIndex = VIRTUAL_SLIDE_MAP[vIndex] ?? 0;
 

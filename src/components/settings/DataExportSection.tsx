@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar } from 'lucide-react';
 import { AppLanguage, AppState } from '../../types';
 import {
   computeExportData,
   exportFilteredHistoryToCSV,
+  exportFilteredHistoryToODS,
   exportFilteredHistoryToPDF,
   ExportPeriodMode,
   ExportTypeFilter,
@@ -63,6 +63,8 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
       initialBalance: state.settings.initialBalance,
       categories: state.categories,
       transactions: state.transactions,
+      creditCards: state.creditCards || [],
+      recurringTemplates: state.recurringTemplates || [],
       fuelLogs: state.fuelLogs || [],
     }),
     [
@@ -75,6 +77,8 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
       state.settings.initialBalance,
       state.categories,
       state.transactions,
+      state.creditCards,
+      state.recurringTemplates,
       state.fuelLogs,
       language,
     ]
@@ -96,8 +100,8 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
         type: 'success',
         message:
           language === 'pt-BR'
-            ? 'Relatório PDF baixado com sucesso!'
-            : 'PDF Report downloaded successfully!',
+            ? 'Relatório PDF preparado com sucesso!'
+            : 'PDF Report prepared successfully!',
       });
       setTimeout(() => setPdfToast(null), 4000);
     } catch (err) {
@@ -116,20 +120,11 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
   };
 
   return (
-    <div className="px-4 pt-5 pb-8 space-y-4 animate-fadeIn">
-      {/* Header Box */}
-      <div className="settings-group-card p-4 rounded-2xl bg-white border border-slate-200 space-y-1">
-        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-          <Calendar size={16} className="text-indigo-500" />
-          {t.exportHistoryTitle}
-        </h3>
-        <p className="text-xs text-slate-500 leading-relaxed">{t.exportHistoryDesc}</p>
-      </div>
-
-      {/* Filter Mode & Year/Month Selectors */}
-      <div className="settings-group-card p-4 rounded-2xl bg-white border border-slate-200 space-y-4">
+    <div className="px-4 pt-4 pb-8 space-y-3.5 animate-fadeIn">
+      {/* Period Filter Card */}
+      <div className="rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] p-3.5 sm:p-4 shadow-sm space-y-3.5">
         <div>
-          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
             {t.exportPeriodFilterLabel}
           </label>
           <div className="grid grid-cols-3 gap-2">
@@ -139,34 +134,37 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
                 { id: 'annual', label: t.exportModeAnnual },
                 { id: 'all', label: t.exportModeAllTime },
               ] as const
-            ).map((modeOpt) => (
-              <button
-                key={modeOpt.id}
-                type="button"
-                onClick={() => setExportPeriodMode(modeOpt.id)}
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                  exportPeriodMode === modeOpt.id
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                {modeOpt.label}
-              </button>
-            ))}
+            ).map((modeOpt) => {
+              const isSelected = exportPeriodMode === modeOpt.id;
+              return (
+                <button
+                  key={modeOpt.id}
+                  type="button"
+                  onClick={() => setExportPeriodMode(modeOpt.id)}
+                  className={`h-10 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none ${
+                    isSelected
+                      ? 'bg-[#6E5440] border-[#6E5440] text-white shadow-xs'
+                      : 'bg-slate-50 dark:bg-[#161B22] text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-[#21262D] hover:bg-slate-100 dark:hover:bg-[#21262D]'
+                  }`}
+                >
+                  {modeOpt.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Year & Entry Type Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Year & Transaction Type Dropdowns */}
+        <div className="grid grid-cols-2 gap-2.5">
           {exportPeriodMode !== 'all' && (
             <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                 {t.exportYearLabel}
               </label>
               <select
                 value={exportYear}
                 onChange={(e) => setExportYear(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50"
+                className="w-full h-10 px-3 rounded-xl border border-slate-200/80 dark:border-[#21262D] bg-slate-50 dark:bg-[#161B22] text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
               >
                 {availableYears.map((yr) => (
                   <option key={yr} value={yr}>
@@ -177,14 +175,14 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
             </div>
           )}
 
-          <div className={exportPeriodMode === 'all' ? 'sm:col-span-2' : ''}>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+          <div className={exportPeriodMode === 'all' ? 'col-span-2' : ''}>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
               {t.exportEntryTypeLabel}
             </label>
             <select
               value={exportTypeFilter}
               onChange={(e) => setExportTypeFilter(e.target.value as ExportTypeFilter)}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50"
+              className="w-full h-10 px-3 rounded-xl border border-slate-200/80 dark:border-[#21262D] bg-slate-50 dark:bg-[#161B22] text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
             >
               <option value="all">{t.filterAllEntries}</option>
               <option value="income">{t.filterInputsOnly}</option>
@@ -193,10 +191,10 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
           </div>
         </div>
 
-        {/* Interactive 12-Month Grid Selector (for Monthly mode) */}
+        {/* Compact 12-Month Pill Grid (Monthly mode) */}
         {exportPeriodMode === 'monthly' && (
           <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
               {t.exportMonthLabel} ({exportYear})
             </label>
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
@@ -216,19 +214,17 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
                     key={mNum}
                     type="button"
                     onClick={() => setExportMonth(mNum)}
-                    className={`relative py-2 px-2 rounded-xl border text-xs font-bold capitalize transition-all ${
+                    className={`relative h-9 px-2 rounded-xl border text-xs font-bold capitalize transition-all cursor-pointer select-none ${
                       isSelected
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : hasData
-                        ? 'bg-white text-slate-800 border-slate-300 hover:border-indigo-400'
-                        : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                        ? 'bg-[#6E5440] text-white border-[#6E5440] shadow-xs'
+                        : 'bg-slate-50 dark:bg-[#161B22] text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-[#21262D] hover:bg-slate-100 dark:hover:bg-[#21262D]'
                     }`}
                   >
                     {shortLabel}
                     {hasData && (
                       <span
                         className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
-                          isSelected ? 'bg-white' : 'bg-emerald-500'
+                          isSelected ? 'bg-white' : 'bg-[#10B981]'
                         }`}
                       />
                     )}
@@ -246,6 +242,7 @@ export const DataExportSection: React.FC<DataExportSectionProps> = ({ state, lan
         exportPreview={exportPreview}
         isGeneratingPdf={isGeneratingPdf}
         pdfToast={pdfToast}
+        onDownloadODS={() => exportFilteredHistoryToODS(exportFilterOptions)}
         onDownloadCSV={() => exportFilteredHistoryToCSV(exportFilterOptions)}
         onDownloadPDF={handleDownloadPDF}
       />

@@ -127,6 +127,8 @@ export const App: React.FC = () => {
       initialBalance: state.settings.initialBalance,
       categories: state.categories,
       transactions: state.transactions,
+      creditCards: state.creditCards || [],
+      recurringTemplates: state.recurringTemplates || [],
       fuelLogs: state.fuelLogs || [],
     }),
     [
@@ -136,6 +138,8 @@ export const App: React.FC = () => {
       state.settings.initialBalance,
       state.categories,
       state.transactions,
+      state.creditCards,
+      state.recurringTemplates,
       state.fuelLogs,
       language,
     ]

@@ -1,5 +1,4 @@
-import { jsPDF } from 'jspdf';
-import { exportFilteredHistoryToCSV } from './export/csvReportExporter';
+import { exportFilteredHistoryToCSV } from './export/csvExporter';
 import { cleanPdfText } from './export/exportFormatHelpers';
 import {
   ComputedExportData,
@@ -7,16 +6,11 @@ import {
   ExportPeriodMode,
   ExportTypeFilter,
 } from './export/exportTypes';
+import { exportFilteredHistoryToODS } from './export/odsWorkbookBuilder';
 import {
-  generateCashFlowSvg,
-  generateCategoryDonutSvg,
-  generateCommitmentsComparisonSvg,
-  generatePaymentChannelsSvg,
-  generatePrumoLogoSvg,
-} from './export/htmlReportCharts';
-import { generateReportHtml } from './export/htmlReportTemplate';
-import { renderPdfPageOne } from './export/pdfPageOneBuilder';
-import { renderPdfRemainingSectionsAndFooters } from './export/pdfPageTwoAndLedger';
+  exportFilteredHistoryToPDF,
+  generateReportHtml,
+} from './export/pdfReportBuilder';
 import { computeExportData } from './export/reportDataAggregator';
 
 export type {
@@ -30,31 +24,7 @@ export {
   cleanPdfText,
   computeExportData,
   exportFilteredHistoryToCSV,
-  generateCashFlowSvg,
-  generateCategoryDonutSvg,
-  generateCommitmentsComparisonSvg,
-  generatePaymentChannelsSvg,
-  generatePrumoLogoSvg,
+  exportFilteredHistoryToODS,
+  exportFilteredHistoryToPDF,
   generateReportHtml,
 };
-
-/**
- * Generates and downloads a detailed multi-page PDF Financial Report with charts,
- * category breakdowns, commitments comparison, and full transaction ledger silently
- * in memory using direct jsPDF and offscreen canvas drawing.
- */
-export function exportFilteredHistoryToPDF(opts: ExportFilterOptions): Promise<void> {
-  const data = computeExportData(opts);
-
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const yAfterPageOne = renderPdfPageOne(doc, opts, data);
-  renderPdfRemainingSectionsAndFooters(doc, opts, data, yAfterPageOne);
-
-  doc.save(`prumo-relatorio-${data.filenameSlug}.pdf`);
-  return Promise.resolve();
-}

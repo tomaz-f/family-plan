@@ -1,4 +1,11 @@
-import { AppLanguage, Category, FuelLog, Transaction } from '../../types';
+import {
+  AppLanguage,
+  Category,
+  CreditCard,
+  FuelLog,
+  RecurringTemplate,
+  Transaction,
+} from '../../types';
 
 export type ExportPeriodMode = 'monthly' | 'annual' | 'all';
 export type ExportTypeFilter = 'all' | 'income' | 'expense';
@@ -14,6 +21,8 @@ export interface ExportFilterOptions {
   initialBalance: number;
   categories: Category[];
   transactions: Transaction[];
+  creditCards?: CreditCard[];
+  recurringTemplates?: RecurringTemplate[];
   fuelLogs?: FuelLog[];
 }
 

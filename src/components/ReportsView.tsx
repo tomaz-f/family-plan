@@ -1,17 +1,29 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { TransactionType } from '../types';
 import { formatMonthLabel } from '../utils/format';
 import {
-  REPORT_SLIDES,
+  aggregateBalanceCurve,
+  aggregateBudgetRigidity,
+  aggregateCashflowEvolution,
+  aggregateFuelEfficiency,
+  aggregateInstallmentProjections,
+  aggregateMonthlyBurnRate,
+} from '../utils/reportAggregators';
+import {
   ReportsViewProps,
   VIRTUAL_SLIDE_MAP,
 } from './reports/reportsTypes';
 import { useReportsCarousel } from './reports/useReportsCarousel';
 import { useReportsData } from './reports/useReportsData';
+import { ReportsQuickSelectorBar } from './reports/ReportsQuickSelectorBar';
 import { ReportsCategorySection } from './reports/ReportsCategorySection';
 import { ReportsCardsSection } from './reports/ReportsCardsSection';
-import { FutureCommitmentsForecast } from './reports/ReportsCashFlowSection';
-import { InstallmentExpenseTracker } from './reports/InstallmentExpenseTracker';
+import { CashflowEvolutionChart } from './reports/CashflowEvolutionChart';
+import { BalanceCurveChart } from './reports/BalanceCurveChart';
+import { InstallmentProjectionChart } from './reports/InstallmentProjectionChart';
+import { BurnRateChart } from './reports/BurnRateChart';
+import { BudgetRigidityChart } from './reports/BudgetRigidityChart';
+import { FuelEfficiencyChart } from './reports/FuelEfficiencyChart';
 
 export type {
   ReportsViewProps,
@@ -27,19 +39,20 @@ export { InstallmentExpenseTracker } from './reports/InstallmentExpenseTracker';
 export { FutureCommitmentsForecast } from './reports/ReportsCashFlowSection';
 
 /**
- * Reports View with two distinct Donut Charts, 6-Month Commitments Forecast,
- * and Account Installment Tracker integrated into a 100% gesture-driven
- * infinite circular carousel with spring physics transitions.
+ * Reports View hosting 8 financial reports inside a 60fps gesture-driven
+ * infinite circular carousel synchronized with a right-aligned Quick Selector Dropdown.
  */
 export const ReportsView: React.FC<ReportsViewProps> = ({
   selectedMonth,
   currency,
   language,
   theme = 'oled',
+  initialBalance,
   categories,
   creditCards = [],
   transactions,
   recurringTemplates = [],
+  fuelLogs = [],
 }) => {
   const [selectedType, setSelectedType] = useState<TransactionType>('expense');
   const [selectedCardFilter, setSelectedCardFilter] = useState<string>('all');
@@ -119,6 +132,56 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     language,
   });
 
+  const cashflowSummary = useMemo(
+    () => aggregateCashflowEvolution(transactions, creditCards, selectedMonth, language),
+    [transactions, creditCards, selectedMonth, language]
+  );
+
+  const balanceCurveSummary = useMemo(
+    () =>
+      aggregateBalanceCurve(
+        transactions,
+        creditCards,
+        initialBalance,
+        selectedMonth,
+        language
+      ),
+    [transactions, creditCards, initialBalance, selectedMonth, language]
+  );
+
+  const installmentSummary = useMemo(
+    () =>
+      aggregateInstallmentProjections(
+        transactions,
+        creditCards,
+        recurringTemplates,
+        selectedMonth,
+        language
+      ),
+    [transactions, creditCards, recurringTemplates, selectedMonth, language]
+  );
+
+  const burnRateSummary = useMemo(
+    () => aggregateMonthlyBurnRate(transactions, creditCards, selectedMonth),
+    [transactions, creditCards, selectedMonth]
+  );
+
+  const budgetRigiditySummary = useMemo(
+    () =>
+      aggregateBudgetRigidity(
+        transactions,
+        creditCards,
+        recurringTemplates,
+        selectedMonth
+      ),
+    [transactions, creditCards, recurringTemplates, selectedMonth]
+  );
+
+  const fuelEfficiencySummary = useMemo(
+    () => aggregateFuelEfficiency(fuelLogs),
+    [fuelLogs]
+  );
+
   const monthTitle = formatMonthLabel(selectedMonth, language);
 
   const renderReportCard = (logicalIdx: number) => {
@@ -165,27 +228,62 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
       case 2:
         return (
-          <FutureCommitmentsForecast
-            selectedMonth={selectedMonth}
+          <CashflowEvolutionChart
+            summary={cashflowSummary}
             currency={currency}
             language={language}
-            theme={theme}
-            creditCards={creditCards}
-            transactions={transactions}
-            recurringTemplates={recurringTemplates}
+            isOled={isOled}
           />
         );
 
       case 3:
-      default:
         return (
-          <InstallmentExpenseTracker
-            transactions={transactions}
-            categories={categories}
+          <BalanceCurveChart
+            summary={balanceCurveSummary}
             currency={currency}
             language={language}
-            selectedMonth={selectedMonth}
-            theme={theme}
+            isOled={isOled}
+          />
+        );
+
+      case 4:
+        return (
+          <InstallmentProjectionChart
+            summary={installmentSummary}
+            currency={currency}
+            language={language}
+            isOled={isOled}
+          />
+        );
+
+      case 5:
+        return (
+          <BurnRateChart
+            summary={burnRateSummary}
+            currency={currency}
+            language={language}
+            isOled={isOled}
+          />
+        );
+
+      case 6:
+        return (
+          <BudgetRigidityChart
+            summary={budgetRigiditySummary}
+            currency={currency}
+            language={language}
+            isOled={isOled}
+          />
+        );
+
+      case 7:
+      default:
+        return (
+          <FuelEfficiencyChart
+            summary={fuelEfficiencySummary}
+            currency={currency}
+            language={language}
+            isOled={isOled}
           />
         );
     }
@@ -193,33 +291,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   return (
     <div className="pb-6 animate-fadeIn max-w-lg mx-auto w-full">
-      {/* Minimalist Pagination Dots Indicator (Positioned Above the Report Card) */}
-      <div
-        className="flex items-center justify-center gap-2 pt-1 pb-3"
-        role="tablist"
-        aria-label={language === 'pt-BR' ? 'Navegação de relatórios' : 'Reports navigation'}
-      >
-        {REPORT_SLIDES.map((slide) => {
-          const isActive = carousel.activeSlideIndex === slide.index;
-          return (
-            <button
-              key={slide.index}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              aria-label={language === 'pt-BR' ? slide.labelPt : slide.labelEn}
-              onClick={() => carousel.handleSelectSlide(slide.index)}
-              className={`rounded-full transition-all duration-300 ease-out focus:outline-none ${
-                isActive
-                  ? 'w-2.5 h-2.5 bg-[#6E5440]'
-                  : isOled
-                  ? 'w-1.5 h-1.5 bg-[#21262D] hover:bg-slate-700'
-                  : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
-              }`}
-            />
-          );
-        })}
-      </div>
+      {/* Top Navigation Bar: Pagination Dots + 1/8 Counter + Right-Aligned Quick Selector Dropdown */}
+      <ReportsQuickSelectorBar
+        activeSlideIndex={carousel.activeSlideIndex}
+        language={language}
+        isOled={isOled}
+        onSelectSlide={carousel.handleSelectSlide}
+      />
 
       {/* Gesture-Driven Infinite Circular Carousel with Spring Physics */}
       <div

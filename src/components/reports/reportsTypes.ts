@@ -3,6 +3,7 @@ import {
   AppTheme,
   Category,
   CreditCard,
+  FuelLog,
   RecurringTemplate,
   Transaction,
 } from '../../types';
@@ -18,6 +19,7 @@ export interface ReportsViewProps {
   creditCards?: CreditCard[];
   transactions: Transaction[];
   recurringTemplates?: RecurringTemplate[];
+  fuelLogs?: FuelLog[];
   onSelectMonth?: (month: string) => void;
 }
 
@@ -111,15 +113,19 @@ export const FALLBACK_SLICE_COLORS = [
 
 export const INVOICE_SLICE_ID = 'credit-card-invoices';
 
-// 4 logical cards wrapped with adjacent virtual buffers [Card 3, Card 0, Card 1, Card 2, Card 3, Card 0]
+// 8 logical cards wrapped with adjacent virtual buffers [Card 7, Card 0..7, Card 0]
 // for seamless infinite circular wrap-around in both directions
-export const VIRTUAL_SLIDE_MAP = [3, 0, 1, 2, 3, 0] as const;
+export const VIRTUAL_SLIDE_MAP = [7, 0, 1, 2, 3, 4, 5, 6, 7, 0] as const;
 
 export const REPORT_SLIDES = [
-  { index: 0, labelPt: 'Geral', labelEn: 'General' },
-  { index: 1, labelPt: 'Cartões', labelEn: 'Cards' },
-  { index: 2, labelPt: 'Futuro', labelEn: 'Future' },
-  { index: 3, labelPt: 'Parcelas', labelEn: 'Installments' },
+  { index: 0, labelPt: 'Categorias Gerais', labelEn: 'General Categories' },
+  { index: 1, labelPt: 'Gastos no Cartão', labelEn: 'Card Spending' },
+  { index: 2, labelPt: 'Evolução Mensal', labelEn: 'Monthly Evolution' },
+  { index: 3, labelPt: 'Curva do Saldo', labelEn: 'Balance Curve' },
+  { index: 4, labelPt: 'Parcelamentos Futuros', labelEn: 'Future Installments' },
+  { index: 5, labelPt: 'Ritmo de Gastos', labelEn: 'Spending Pace' },
+  { index: 6, labelPt: 'Fixos vs. Variáveis', labelEn: 'Fixed vs. Variable' },
+  { index: 7, labelPt: 'Eficiência de Combustível', labelEn: 'Fuel Efficiency' },
 ] as const;
 
 export const DONUT_SVG_SIZE = 220;

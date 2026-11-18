@@ -175,6 +175,7 @@ export const AppMainContent: React.FC<AppMainContentProps> = ({
           creditCards={state.creditCards || []}
           transactions={state.transactions}
           recurringTemplates={state.recurringTemplates}
+          fuelLogs={state.fuelLogs || []}
           onSelectMonth={setSelectedMonth}
         />
       )}
