@@ -1,4 +1,4 @@
-import { enrichFuelLogs } from '../../components/fuel/fuelMetrics';
+import { calculateFuelMetrics } from '../fuelCalculator';
 import { formatCurrency } from '../format';
 import { getCategoryDisplayName } from '../i18n';
 import { aggregateInstallmentProjections } from '../reportAggregators';
@@ -251,18 +251,29 @@ export function exportFilteredHistoryToODS(opts: ExportFilterOptions): void {
   ];
 
   // Sheet 4: Combustível
-  const enrichedFuel = enrichFuelLogs(opts.fuelLogs || []);
+  const enrichedFuel = calculateFuelMetrics(opts.fuelLogs || []).entriesDesc;
   const sheet4Rows: string[] = [
     rowXml([strCell('Data', 'ceHeader'), strCell('Posto', 'ceHeader'), strCell('Odômetro (km)', 'ceHeader'), strCell('Litros', 'ceHeader'), strCell('Preço/L', 'ceHeader'), strCell('Km/L', 'ceHeader'), strCell('Custo Total', 'ceHeader')], 'roHeader'),
     ...enrichedFuel.map((log, idx) => {
       const st = idx % 2 ? 'ceZebra' : 'ceData';
+      const effCell =
+        log.consumptionKmPerL !== null
+          ? numCell(log.consumptionKmPerL, cur, 'ceCurrPos', true)
+          : strCell(
+              log.isFullTank
+                ? '— km/L'
+                : isPt
+                ? 'Aguardando tanque cheio'
+                : 'Awaiting full tank',
+              st
+            );
       return rowXml([
         strCell(log.date, st),
         strCell(log.stationName || 'Posto', st),
         numCell(log.odometer, cur, 'ceNum', true),
         numCell(log.liters, cur, 'ceNum', true),
         numCell(log.pricePerLiter, cur, 'ceNum'),
-        numCell(log.kmPerLiter || 0, cur, 'ceCurrPos', true),
+        effCell,
         numCell(-Math.abs(log.totalCost), cur, 'ceCurrNeg'),
       ]);
     }),

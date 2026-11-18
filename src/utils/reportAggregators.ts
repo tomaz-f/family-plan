@@ -4,7 +4,8 @@ import {
   getCurrentMonthStr, getInstallmentNumberForMonth, shiftMonth,
 } from './format';
 import { getTxInvoiceMonth } from '../components/reports/reportsCalculations';
-import { enrichFuelLogs, formatShortNumericDate } from '../components/fuel/fuelMetrics';
+import { formatShortNumericDate } from '../components/fuel/fuelMetrics';
+import { calculateFuelMetrics, calculateWeightedAverageKmPerL } from './fuelCalculator';
 
 export interface CashflowMonthPoint {
   month: string; label: string; fullLabel: string; income: number; expense: number; net: number;
@@ -37,8 +38,8 @@ export interface BudgetRigiditySummary {
   fixedCount: number; variableCount: number; monthIncome: number; monthExpense: number;
 }
 export interface FuelChartPoint {
-  id: string; label: string; fullDate: string; stationName: string; kmPerLiter: number;
-  totalCost: number; liters: number; pricePerLiter: number;
+  id: string; label: string; fullDate: string; stationName: string; kmPerLiter: number | null;
+  totalCost: number; liters: number; pricePerLiter: number; isFullTank: boolean;
 }
 export interface FuelEfficiencySummary {
   points: FuelChartPoint[]; avgKmPerLiter: number | null; totalSpend: number; totalLiters: number; hasData: boolean;
@@ -317,16 +318,17 @@ export function aggregateFuelEfficiency(fuelLogs: FuelLog[]): FuelEfficiencySumm
   if (!fuelLogs?.length) {
     return { points: [], avgKmPerLiter: null, totalSpend: 0, totalLiters: 0, hasData: false };
   }
-  const recentLogs = [...enrichFuelLogs(fuelLogs)].reverse().slice(-10);
+  const calc = calculateFuelMetrics(fuelLogs);
+  const recentLogs = calc.entriesAsc.slice(-10);
   const points: FuelChartPoint[] = recentLogs.map((log, idx) => ({
     id: log.id || `fuel-${idx}`, label: formatShortNumericDate(log.date).slice(0, 5),
     fullDate: formatShortNumericDate(log.date), stationName: log.stationName || 'Posto',
-    kmPerLiter: log.kmPerLiter && log.kmPerLiter > 0 && log.kmPerLiter < 60 ? r2(log.kmPerLiter) : 0,
+    kmPerLiter: log.consumptionKmPerL !== null ? r2(log.consumptionKmPerL) : null,
     totalCost: r2(Number(log.totalCost || 0)), liters: r2(Number(log.liters || 0)),
-    pricePerLiter: r2(Number(log.pricePerLiter || 0)),
+    pricePerLiter: r2(Number(log.pricePerLiter || 0)), isFullTank: log.isFullTank,
   }));
-  const validEff = points.filter((p) => p.kmPerLiter > 0);
-  const avgKmPerLiter = validEff.length > 0 ? r2(validEff.reduce((s, p) => s + p.kmPerLiter, 0) / validEff.length) : null;
+  const rawAvg = calculateWeightedAverageKmPerL(recentLogs) ?? calc.latestCompletedKmPerL;
+  const avgKmPerLiter = rawAvg !== null ? r2(rawAvg) : null;
   return {
     points, avgKmPerLiter,
     totalSpend: r2(points.reduce((s, p) => s + p.totalCost, 0)),

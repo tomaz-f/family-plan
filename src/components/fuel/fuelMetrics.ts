@@ -1,11 +1,12 @@
 import { FuelLog } from '../../types';
 import { getCurrentMonthStr } from '../../utils/format';
+import {
+  CalculatedFuelEntry,
+  calculateFuelMetrics,
+  calculateWeightedAverageKmPerL,
+} from '../../utils/fuelCalculator';
 
-export interface EnrichedFuelLog extends FuelLog {
-  distanceSinceLast: number | null;
-  kmPerLiter: number | null;
-  costPerKm: number | null;
-}
+export type EnrichedFuelLog = CalculatedFuelEntry;
 
 export interface FuelMetricsSummary {
   monthLogs: EnrichedFuelLog[];
@@ -33,68 +34,7 @@ export const formatShortNumericDate = (dateStr: string): string => {
 };
 
 export function enrichFuelLogs(fuelLogs: FuelLog[]): EnrichedFuelLog[] {
-  const sortedAsc = [...fuelLogs].sort(
-    (a, b) =>
-      a.odometer - b.odometer ||
-      a.date.localeCompare(b.date) ||
-      a.createdAt.localeCompare(b.createdAt)
-  );
-
-  const enrichedAsc: EnrichedFuelLog[] = [];
-  let lastFullTankIndex = -1;
-
-  for (let i = 0; i < sortedAsc.length; i++) {
-    const current = sortedAsc[i];
-    if (i === 0) {
-      enrichedAsc.push({
-        ...current,
-        distanceSinceLast: null,
-        kmPerLiter: null,
-        costPerKm: null,
-      });
-      if (current.isFullTank) lastFullTankIndex = 0;
-      continue;
-    }
-
-    const prev = sortedAsc[i - 1];
-    const deltaKm = current.odometer - prev.odometer;
-    const distanceSinceLast = deltaKm > 0 ? deltaKm : null;
-
-    let kmPerLiter: number | null = null;
-    let costPerKm: number | null = null;
-
-    if (distanceSinceLast && current.liters > 0) {
-      if (current.isFullTank && lastFullTankIndex >= 0) {
-        const totalDistSinceFull = current.odometer - sortedAsc[lastFullTankIndex].odometer;
-        let accumulatedLiters = 0;
-        let accumulatedCost = 0;
-        for (let j = lastFullTankIndex + 1; j <= i; j++) {
-          accumulatedLiters += sortedAsc[j].liters;
-          accumulatedCost += sortedAsc[j].totalCost;
-        }
-        if (totalDistSinceFull > 0 && accumulatedLiters > 0) {
-          kmPerLiter = totalDistSinceFull / accumulatedLiters;
-          costPerKm = accumulatedCost / totalDistSinceFull;
-        }
-      } else {
-        kmPerLiter = distanceSinceLast / current.liters;
-        costPerKm = current.totalCost / distanceSinceLast;
-      }
-    }
-
-    if (current.isFullTank) {
-      lastFullTankIndex = i;
-    }
-
-    enrichedAsc.push({
-      ...current,
-      distanceSinceLast,
-      kmPerLiter,
-      costPerKm,
-    });
-  }
-
-  return enrichedAsc.reverse();
+  return calculateFuelMetrics(fuelLogs).entriesDesc;
 }
 
 export function getHighestOdometer(fuelLogs: FuelLog[]): number | null {
@@ -126,24 +66,31 @@ export function computeFuelMetrics(
     }
   }
 
-  const logsWithEfficiency = enrichedLogsDesc.filter(
-    (l) => l.kmPerLiter !== null && l.kmPerLiter > 0 && l.kmPerLiter < 60
+  const monthCompletedCycles = monthLogs.filter(
+    (l) =>
+      l.consumptionKmPerL !== null &&
+      l.cycleDistance !== null &&
+      l.cycleLiters !== null
   );
 
-  const monthLogsWithEfficiency = monthLogs.filter(
-    (l) => l.kmPerLiter !== null && l.kmPerLiter > 0 && l.kmPerLiter < 60
-  );
+  const monthWeightedAvg = calculateWeightedAverageKmPerL(monthCompletedCycles);
 
-  const activeEffList =
-    monthLogsWithEfficiency.length > 0 ? monthLogsWithEfficiency : logsWithEfficiency;
+  const latestPriorCompleted = enrichedLogsDesc.find(
+    (l) => l.consumptionKmPerL !== null && l.date.slice(0, 7) <= selectedMonth
+  );
+  const latestOverallCompleted = enrichedLogsDesc.find(
+    (l) => l.consumptionKmPerL !== null
+  );
 
   const avgKmPerLiter =
-    activeEffList.length > 0
-      ? activeEffList.reduce((acc, l) => acc + (l.kmPerLiter || 0), 0) / activeEffList.length
-      : null;
+    monthWeightedAvg ??
+    latestPriorCompleted?.consumptionKmPerL ??
+    latestOverallCompleted?.consumptionKmPerL ??
+    null;
 
   const effectiveTankSize = tankCapacity > 0 ? tankCapacity : 54;
-  const estimatedFullTankRange = avgKmPerLiter ? avgKmPerLiter * effectiveTankSize : null;
+  const estimatedFullTankRange =
+    avgKmPerLiter !== null ? avgKmPerLiter * effectiveTankSize : null;
 
   const currentMonthStr = getCurrentMonthStr();
   const [selYear, selMon] = selectedMonth.split('-').map(Number);

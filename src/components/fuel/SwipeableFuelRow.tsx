@@ -166,9 +166,18 @@ export const SwipeableFuelRow: React.FC<SwipeableFuelRowProps> = ({
                   • +{log.distanceSinceLast.toLocaleString(language === 'pt-BR' ? 'pt-BR' : 'en-US')} km
                 </span>
               )}
-              {log.kmPerLiter !== null && (
+              {log.kmPerLiter !== null ? (
                 <span className="font-bold text-emerald-500 flex items-center gap-0.5">
                   • <Zap size={11} className="inline shrink-0" /> {log.kmPerLiter.toFixed(2)} km/L
+                </span>
+              ) : (
+                <span className="font-medium text-slate-400 dark:text-slate-500">
+                  •{' '}
+                  {!log.isFullTank
+                    ? language === 'pt-BR'
+                      ? 'Aguardando tanque cheio'
+                      : 'Awaiting full tank'
+                    : '— km/L'}
                 </span>
               )}
             </div>

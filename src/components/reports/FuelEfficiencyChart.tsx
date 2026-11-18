@@ -35,9 +35,19 @@ const FuelTooltip: React.FC<FuelTooltipProps> = ({ active, payload, currency, la
       <div className="space-y-0.5">
         <div className="flex items-center justify-between gap-4">
           <span className="text-slate-500 dark:text-slate-400">{isPt ? 'Consumo' : 'Efficiency'}</span>
-          <span className="font-extrabold text-[#10B981] tabular-nums">
-            {point.kmPerLiter > 0 ? `${point.kmPerLiter.toFixed(1)} km/L` : '—'}
-          </span>
+          {point.kmPerLiter !== null && point.kmPerLiter > 0 ? (
+            <span className="font-extrabold text-[#10B981] tabular-nums">
+              {point.kmPerLiter.toFixed(1)} km/L
+            </span>
+          ) : (
+            <span className="font-semibold text-slate-400 dark:text-slate-500">
+              {!point.isFullTank
+                ? isPt
+                  ? 'Aguardando tanque cheio'
+                  : 'Awaiting full tank'
+                : '— km/L'}
+            </span>
+          )}
         </div>
         <div className="flex items-center justify-between gap-4">
           <span className="text-slate-500 dark:text-slate-400">{isPt ? 'Custo' : 'Cost'}</span>
@@ -56,8 +66,10 @@ export const FuelEfficiencyChart: React.FC<FuelEfficiencyChartProps> = React.mem
 
     const derived = useMemo(() => {
       const currencySymbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? 'R$';
-      const avgLabel = summary.avgKmPerLiter ? `${summary.avgKmPerLiter.toFixed(1)} km/L` : '—';
-      const pillLabel = summary.avgKmPerLiter ? avgLabel : isPt ? 'Sem média' : 'No avg';
+      const avgLabel =
+        summary.avgKmPerLiter !== null ? `${summary.avgKmPerLiter.toFixed(1)} km/L` : '— km/L';
+      const pillLabel =
+        summary.avgKmPerLiter !== null ? avgLabel : isPt ? 'Sem média' : 'No avg';
       return {
         currencySymbol,
         pillLabel,
@@ -147,6 +159,7 @@ export const FuelEfficiencyChart: React.FC<FuelEfficiencyChartProps> = React.mem
                     yAxisId="eff"
                     type="monotone"
                     dataKey="kmPerLiter"
+                    connectNulls
                     stroke="#10B981"
                     strokeWidth={2.5}
                     dot={{ r: 3.5, fill: '#10B981' }}

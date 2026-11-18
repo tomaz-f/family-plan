@@ -158,7 +158,10 @@ export function generateFuelEfficiencySvg(
   }
 
   const pts = summary.points;
-  const maxEff = Math.max(...pts.map((p) => p.kmPerLiter), 15);
+  const validEffPts = pts
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.kmPerLiter !== null && p.kmPerLiter > 0);
+  const maxEff = Math.max(...validEffPts.map(({ p }) => p.kmPerLiter as number), 15);
   const maxCost = Math.max(...pts.map((p) => p.totalCost), 100);
   const chartLeft = 36;
   const chartRight = 304;
@@ -167,11 +170,18 @@ export function generateFuelEfficiencySvg(
   const chartW = chartRight - chartLeft;
   const chartH = chartBottom - chartTop;
 
-  const effCoords = pts.map((p, i) => {
+  const effPoints = validEffPts.map(({ p, i }) => {
     const x = chartLeft + (pts.length > 1 ? (i / (pts.length - 1)) * chartW : chartW / 2);
-    const y = chartBottom - (p.kmPerLiter / maxEff) * chartH;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
+    const y = chartBottom - ((p.kmPerLiter as number) / maxEff) * chartH;
+    return { x: x.toFixed(1), y: y.toFixed(1) };
   });
+  const effPolyline =
+    effPoints.length >= 2
+      ? `<polyline fill="none" stroke="#10B981" stroke-width="2.4" points="${effPoints.map((pt) => `${pt.x},${pt.y}`).join(' ')}"/>`
+      : '';
+  const effDots = effPoints
+    .map((pt) => `<circle cx="${pt.x}" cy="${pt.y}" r="2.5" fill="#10B981"/>`)
+    .join('');
 
   const costCoords = pts.map((p, i) => {
     const x = chartLeft + (pts.length > 1 ? (i / (pts.length - 1)) * chartW : chartW / 2);
@@ -182,8 +192,9 @@ export function generateFuelEfficiencySvg(
   return `<svg viewBox="0 0 340 144" width="100%" height="140">
     <line x1="${chartLeft}" y1="${chartBottom}" x2="${chartRight}" y2="${chartBottom}" stroke="#CBD5E1"/>
     <polyline fill="none" stroke="#EF4444" stroke-width="2" points="${costCoords.join(' ')}"/>
-    <polyline fill="none" stroke="#10B981" stroke-width="2.4" points="${effCoords.join(' ')}"/>
-    <text x="${chartLeft}" y="13" font-size="8.5" font-weight="800" fill="#10B981">${summary.avgKmPerLiter ? `${summary.avgKmPerLiter.toFixed(1)} km/L méd.` : 'km/L'}</text>
+    ${effPolyline}
+    ${effDots}
+    <text x="${chartLeft}" y="13" font-size="8.5" font-weight="800" fill="#10B981">${summary.avgKmPerLiter !== null ? `${summary.avgKmPerLiter.toFixed(1)} km/L méd.` : '— km/L'}</text>
     <text x="${chartRight}" y="13" text-anchor="end" font-size="8.5" font-weight="800" fill="#EF4444">Total: -${escHtml(formatCurrency(summary.totalSpend, currency))}</text>
   </svg>`;
 }

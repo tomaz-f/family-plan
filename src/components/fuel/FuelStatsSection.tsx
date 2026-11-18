@@ -106,9 +106,21 @@ export const FuelStatsSection: React.FC<FuelStatsSectionProps> = ({
           <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
             {language === 'pt-BR' ? 'Consumo Médio' : 'Avg Efficiency'}
           </span>
-          <p className="text-base sm:text-lg font-extrabold text-emerald-500 mt-1 truncate flex items-center gap-1">
-            <Zap size={14} className="shrink-0 text-emerald-500" />
-            <span>{metrics.avgKmPerLiter ? `${metrics.avgKmPerLiter.toFixed(2)} km/L` : '—'}</span>
+          <p
+            className={`text-base sm:text-lg font-extrabold mt-1 truncate flex items-center gap-1 ${
+              metrics.avgKmPerLiter !== null
+                ? 'text-emerald-500'
+                : 'text-slate-400 dark:text-slate-500'
+            }`}
+          >
+            {metrics.avgKmPerLiter !== null && (
+              <Zap size={14} className="shrink-0 text-emerald-500" />
+            )}
+            <span>
+              {metrics.avgKmPerLiter !== null
+                ? `${metrics.avgKmPerLiter.toFixed(2)} km/L`
+                : '— km/L'}
+            </span>
           </p>
         </div>
 
