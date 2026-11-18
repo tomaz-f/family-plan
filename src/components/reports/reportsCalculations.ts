@@ -8,13 +8,7 @@ import {
   computeInvoiceDueDate,
   shiftMonth,
 } from '../../utils/format';
-import {
-  CategorySliceItem,
-  ComputedDonutArc,
-  DONUT_ANIM_TOTAL,
-  DONUT_CIRCUMFERENCE,
-  INVOICE_SLICE_ID,
-} from './reportsTypes';
+import { INVOICE_SLICE_ID } from './reportsTypes';
 
 export const formatNumericDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -57,36 +51,6 @@ export function isInvoiceTransaction(tx: Transaction): boolean {
           tx.description.toLowerCase().startsWith('pagamento de fatura'))
     )
   );
-}
-
-export function computeDonutArcs(
-  slices: CategorySliceItem[],
-  totalAmount: number
-): ComputedDonutArc[] {
-  if (slices.length === 0 || totalAmount <= 0) return [];
-  const gapPx = slices.length > 1 ? 3.5 : 0;
-  let accumulatedFraction = 0;
-
-  return slices.map((slice) => {
-    const fraction = slice.amount / totalAmount;
-    const rawLength = fraction * DONUT_CIRCUMFERENCE;
-    const visibleLength = Math.max(2, rawLength - gapPx);
-    const dashOffset = DONUT_CIRCUMFERENCE * (1 - accumulatedFraction);
-    const startOffset = dashOffset + visibleLength;
-    const animDelay = Math.round(accumulatedFraction * DONUT_ANIM_TOTAL);
-    const animDuration = Math.max(120, Math.round(fraction * DONUT_ANIM_TOTAL));
-    accumulatedFraction += fraction;
-
-    return {
-      ...slice,
-      strokeDasharray: `${visibleLength} ${Math.max(0, DONUT_CIRCUMFERENCE - visibleLength)}`,
-      strokeDashoffset: dashOffset,
-      dashOffset,
-      startOffset,
-      animDelay,
-      animDuration,
-    };
-  });
 }
 
 export function filterActiveCategoryTransactions(

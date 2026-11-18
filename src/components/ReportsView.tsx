@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { TransactionType } from '../types';
 import { formatMonthLabel } from '../utils/format';
 import {
@@ -68,39 +68,44 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const isOled = theme === 'oled';
   const carousel = useReportsCarousel();
 
-  // Sequential Clockwise Assembly Animation States
-  const [donutAnimPhase1, setDonutAnimPhase1] = useState<'init' | 'drawing' | 'done'>('done');
-  const [donutAnimPhase2, setDonutAnimPhase2] = useState<'init' | 'drawing' | 'done'>('done');
+  const handleToggleCategory = useCallback(
+    (id: string) => {
+      setCategorySelection((prev) => ({
+        scope: categoryScopeKey,
+        id: prev.scope === categoryScopeKey && prev.id === id ? null : id,
+      }));
+    },
+    [categoryScopeKey]
+  );
 
-  useEffect(() => {
-    if (carousel.activeSlideIndex !== 0) return;
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      setDonutAnimPhase1('init');
-      raf2 = requestAnimationFrame(() => setDonutAnimPhase1('drawing'));
-    });
-    const timer = setTimeout(() => setDonutAnimPhase1('done'), 780);
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      clearTimeout(timer);
-    };
-  }, [carousel.activeSlideIndex, selectedType, selectedMonth]);
+  const handleResetCategory = useCallback(() => {
+    setCategorySelection({ scope: categoryScopeKey, id: null });
+  }, [categoryScopeKey]);
 
-  useEffect(() => {
-    if (carousel.activeSlideIndex !== 1) return;
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      setDonutAnimPhase2('init');
-      raf2 = requestAnimationFrame(() => setDonutAnimPhase2('drawing'));
-    });
-    const timer = setTimeout(() => setDonutAnimPhase2('done'), 780);
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      clearTimeout(timer);
-    };
-  }, [carousel.activeSlideIndex, selectedCardFilter, selectedMonth]);
+  const handleSelectCardFilter = useCallback(
+    (cardId: string) => {
+      setSelectedCardFilter(cardId);
+      setCardCategorySelection({
+        scope: `${selectedMonth}__${cardId}`,
+        id: null,
+      });
+    },
+    [selectedMonth]
+  );
+
+  const handleToggleCardCategory = useCallback(
+    (id: string) => {
+      setCardCategorySelection((prev) => ({
+        scope: cardScopeKey,
+        id: prev.scope === cardScopeKey && prev.id === id ? null : id,
+      }));
+    },
+    [cardScopeKey]
+  );
+
+  const handleResetCardCategory = useCallback(() => {
+    setCardCategorySelection({ scope: cardScopeKey, id: null });
+  }, [cardScopeKey]);
 
   const data = useReportsData({
     transactions,
@@ -126,26 +131,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             totalAmount={data.totalAmount}
             selectedType={selectedType}
             categorySlices={data.categorySlices}
-            computedArcs={data.computedArcs}
             activeCategoryId={activeCategoryId}
             activeSlice={data.activeSlice}
             activeCategoryTransactions={data.activeCategoryTransactions}
-            donutAnimPhase={donutAnimPhase1}
             currency={currency}
             language={language}
             isOled={isOled}
             onSelectType={setSelectedType}
-            onToggleCategory={(id) => {
-              setDonutAnimPhase1('done');
-              setCategorySelection((prev) => ({
-                scope: categoryScopeKey,
-                id: prev.scope === categoryScopeKey && prev.id === id ? null : id,
-              }));
-            }}
-            onResetCategory={() => {
-              setDonutAnimPhase1('done');
-              setCategorySelection({ scope: categoryScopeKey, id: null });
-            }}
+            onToggleCategory={handleToggleCategory}
+            onResetCategory={handleResetCategory}
           />
         );
 
@@ -155,34 +149,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             creditCards={creditCards}
             selectedCardFilter={selectedCardFilter}
             cardCategorySlices={data.cardCategorySlices}
-            computedCardArcs={data.computedCardArcs}
             cardTotalAmount={data.cardTotalAmount}
             cardTotalCount={data.cardTotalCount}
             activeCardCategoryId={activeCardCategoryId}
             activeCardSlice={data.activeCardSlice}
             activeCardCategoryTransactions={data.activeCardCategoryTransactions}
-            donutAnimPhase={donutAnimPhase2}
             currency={currency}
             language={language}
             isOled={isOled}
-            onSelectCardFilter={(cardId) => {
-              setSelectedCardFilter(cardId);
-              setCardCategorySelection({
-                scope: `${selectedMonth}__${cardId}`,
-                id: null,
-              });
-            }}
-            onToggleCardCategory={(id) => {
-              setDonutAnimPhase2('done');
-              setCardCategorySelection((prev) => ({
-                scope: cardScopeKey,
-                id: prev.scope === cardScopeKey && prev.id === id ? null : id,
-              }));
-            }}
-            onResetCardCategory={() => {
-              setDonutAnimPhase2('done');
-              setCardCategorySelection({ scope: cardScopeKey, id: null });
-            }}
+            onSelectCardFilter={handleSelectCardFilter}
+            onToggleCardCategory={handleToggleCardCategory}
+            onResetCardCategory={handleResetCardCategory}
           />
         );
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import {
   PieChart as PieChartIcon,
   ArrowDownRight,
@@ -8,7 +8,6 @@ import { AppLanguage, Transaction, TransactionType } from '../../types';
 import { formatCurrency } from '../../utils/format';
 import {
   CategorySliceItem,
-  ComputedDonutArc,
   DONUT_CENTER,
   DONUT_RADIUS,
   DONUT_STROKE_WIDTH,
@@ -23,11 +22,9 @@ interface ReportsCategorySectionProps {
   totalAmount: number;
   selectedType: TransactionType;
   categorySlices: CategorySliceItem[];
-  computedArcs: ComputedDonutArc[];
   activeCategoryId: string | null;
   activeSlice: CategorySliceItem | null;
   activeCategoryTransactions: Transaction[];
-  donutAnimPhase: 'init' | 'drawing' | 'done';
   currency: string;
   language: AppLanguage;
   isOled: boolean;
@@ -36,17 +33,15 @@ interface ReportsCategorySectionProps {
   onResetCategory: () => void;
 }
 
-export const ReportsCategorySection: React.FC<ReportsCategorySectionProps> = ({
+export const ReportsCategorySection = memo<ReportsCategorySectionProps>(({
   monthTitle,
   totalCount,
   totalAmount,
   selectedType,
   categorySlices,
-  computedArcs,
   activeCategoryId,
   activeSlice,
   activeCategoryTransactions,
-  donutAnimPhase,
   currency,
   language,
   isOled,
@@ -209,11 +204,9 @@ export const ReportsCategorySection: React.FC<ReportsCategorySectionProps> = ({
             centerLabel={centerLabel}
             amountColorClass={selectedType === 'expense' ? 'text-[#EF4444]' : 'text-[#10B981]'}
             totalAmount={totalAmount}
-            sliceCount={categorySlices.length}
-            computedArcs={computedArcs}
+            slices={categorySlices}
             activeSliceId={activeCategoryId}
             activeSlice={activeSlice}
-            donutAnimPhase={donutAnimPhase}
             currency={currency}
             language={language}
             isOled={isOled}
@@ -234,4 +227,6 @@ export const ReportsCategorySection: React.FC<ReportsCategorySectionProps> = ({
       )}
     </section>
   );
-};
+});
+
+ReportsCategorySection.displayName = 'ReportsCategorySection';

@@ -1,10 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { AppLanguage, CreditCard, Transaction } from '../../types';
 import { formatCurrency } from '../../utils/format';
 import { AppIcon } from '../icons';
 import {
   CategorySliceItem,
-  ComputedDonutArc,
   DONUT_CENTER,
   DONUT_RADIUS,
   DONUT_STROKE_WIDTH,
@@ -17,13 +16,11 @@ interface ReportsCardsSectionProps {
   creditCards: CreditCard[];
   selectedCardFilter: string;
   cardCategorySlices: CategorySliceItem[];
-  computedCardArcs: ComputedDonutArc[];
   cardTotalAmount: number;
   cardTotalCount: number;
   activeCardCategoryId: string | null;
   activeCardSlice: CategorySliceItem | null;
   activeCardCategoryTransactions: Transaction[];
-  donutAnimPhase: 'init' | 'drawing' | 'done';
   currency: string;
   language: AppLanguage;
   isOled: boolean;
@@ -32,17 +29,15 @@ interface ReportsCardsSectionProps {
   onResetCardCategory: () => void;
 }
 
-export const ReportsCardsSection: React.FC<ReportsCardsSectionProps> = ({
+export const ReportsCardsSection = memo<ReportsCardsSectionProps>(({
   creditCards,
   selectedCardFilter,
   cardCategorySlices,
-  computedCardArcs,
   cardTotalAmount,
   cardTotalCount,
   activeCardCategoryId,
   activeCardSlice,
   activeCardCategoryTransactions,
-  donutAnimPhase,
   currency,
   language,
   isOled,
@@ -209,11 +204,9 @@ export const ReportsCardsSection: React.FC<ReportsCardsSectionProps> = ({
             centerLabel={centerLabel}
             amountColorClass="text-[#6366F1]"
             totalAmount={cardTotalAmount}
-            sliceCount={cardCategorySlices.length}
-            computedArcs={computedCardArcs}
+            slices={cardCategorySlices}
             activeSliceId={activeCardCategoryId}
             activeSlice={activeCardSlice}
-            donutAnimPhase={donutAnimPhase}
             currency={currency}
             language={language}
             isOled={isOled}
@@ -237,4 +230,6 @@ export const ReportsCardsSection: React.FC<ReportsCardsSectionProps> = ({
       )}
     </section>
   );
-};
+});
+
+ReportsCardsSection.displayName = 'ReportsCardsSection';

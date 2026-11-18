@@ -31,15 +31,6 @@ export interface CategorySliceItem {
   share: number;
 }
 
-export interface ComputedDonutArc extends CategorySliceItem {
-  strokeDasharray: string;
-  strokeDashoffset: number;
-  dashOffset: number;
-  startOffset: number;
-  animDelay: number;
-  animDuration: number;
-}
-
 export interface NonCardInstallmentPlan {
   key: string;
   description: string;
@@ -131,9 +122,7 @@ export const REPORT_SLIDES = [
   { index: 3, labelPt: 'Parcelas', labelEn: 'Installments' },
 ] as const;
 
-export const DONUT_SVG_SIZE = 240;
+export const DONUT_SVG_SIZE = 220;
 export const DONUT_CENTER = DONUT_SVG_SIZE / 2;
 export const DONUT_RADIUS = 84;
 export const DONUT_STROKE_WIDTH = 28;
-export const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
-export const DONUT_ANIM_TOTAL = 650;

@@ -14,7 +14,6 @@ import {
   INVOICE_SLICE_ID,
 } from './reportsTypes';
 import {
-  computeDonutArcs,
   filterActiveCardCategoryTransactions,
   filterActiveCategoryTransactions,
   getMonthlyCardInvoiceExpenses,
@@ -258,16 +257,6 @@ export function useReportsData(params: {
     [monthlyCardExpenses, activeCardCategoryId]
   );
 
-  const computedArcs = useMemo(
-    () => computeDonutArcs(categorySlices, totalAmount),
-    [categorySlices, totalAmount]
-  );
-
-  const computedCardArcs = useMemo(
-    () => computeDonutArcs(cardCategorySlices, cardTotalAmount),
-    [cardCategorySlices, cardTotalAmount]
-  );
-
   return {
     categorySlices,
     totalAmount,
@@ -279,7 +268,5 @@ export function useReportsData(params: {
     activeCategoryTransactions,
     activeCardSlice,
     activeCardCategoryTransactions,
-    computedArcs,
-    computedCardArcs,
   };
 }
