@@ -74,28 +74,7 @@ export const ExportPreviewCard: React.FC<ExportPreviewCardProps> = ({
             </div>
           </div>
 
-          {/* 2. Saldo Final */}
-          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-slate-50/60 dark:bg-[#161B22]/60 flex items-center gap-2.5 min-w-0">
-            <span className="w-8 h-8 rounded-full bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0">
-              <Scale size={15} className="text-amber-600 dark:text-amber-400" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate leading-tight">
-                {t.exportClosingBalance}
-              </p>
-              <p
-                className={`text-xs sm:text-sm font-black truncate mt-0.5 tabular-nums ${
-                  exportPreview.closingBalance >= 0
-                    ? 'text-[#10B981]'
-                    : 'text-[#EF4444]'
-                }`}
-              >
-                {formatCurrency(exportPreview.closingBalance, currency)}
-              </p>
-            </div>
-          </div>
-
-          {/* 3. Entradas */}
+          {/* 2. Entradas (Consolidado + Pendente) */}
           <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-slate-50/60 dark:bg-[#161B22]/60 flex items-center gap-2.5 min-w-0">
             <span className="w-8 h-8 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 flex items-center justify-center shrink-0">
               <TrendingUp size={15} className="text-[#10B981]" />
@@ -107,10 +86,13 @@ export const ExportPreviewCard: React.FC<ExportPreviewCardProps> = ({
               <p className="text-xs sm:text-sm font-black text-[#10B981] truncate mt-0.5 tabular-nums">
                 +{formatCurrency(exportPreview.totalIncome, currency)}
               </p>
+              <p className="text-xs font-semibold text-emerald-600/90 dark:text-emerald-400/90 truncate mt-0.5 tabular-nums">
+                {isPt ? 'Pendente' : 'Pending'}: +{formatCurrency(exportPreview.pendingIncome, currency)}
+              </p>
             </div>
           </div>
 
-          {/* 4. Despesas */}
+          {/* 3. Despesas (Consolidado + Pendente) */}
           <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-slate-50/60 dark:bg-[#161B22]/60 flex items-center gap-2.5 min-w-0">
             <span className="w-8 h-8 rounded-full bg-red-500/10 dark:bg-red-500/15 flex items-center justify-center shrink-0">
               <TrendingDown size={15} className="text-[#EF4444]" />
@@ -121,6 +103,33 @@ export const ExportPreviewCard: React.FC<ExportPreviewCardProps> = ({
               </p>
               <p className="text-xs sm:text-sm font-black text-[#EF4444] truncate mt-0.5 tabular-nums">
                 -{formatCurrency(exportPreview.totalExpense, currency)}
+              </p>
+              <p className="text-xs font-semibold text-red-500/90 dark:text-red-400/90 truncate mt-0.5 tabular-nums">
+                {isPt ? 'Pendente' : 'Pending'}: -{formatCurrency(exportPreview.pendingExpense, currency)}
+              </p>
+            </div>
+          </div>
+
+          {/* 4. Saldo Projetado (Projetado + Consolidado) */}
+          <div className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-slate-50/60 dark:bg-[#161B22]/60 flex items-center gap-2.5 min-w-0">
+            <span className="w-8 h-8 rounded-full bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0">
+              <Scale size={15} className="text-amber-600 dark:text-amber-400" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate leading-tight">
+                {isPt ? 'Saldo Projetado' : 'Projected Balance'}
+              </p>
+              <p
+                className={`text-xs sm:text-sm font-black truncate mt-0.5 tabular-nums ${
+                  exportPreview.projectedBalance >= 0
+                    ? 'text-[#10B981]'
+                    : 'text-[#EF4444]'
+                }`}
+              >
+                {formatCurrency(exportPreview.projectedBalance, currency)}
+              </p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5 tabular-nums">
+                {isPt ? 'Consolidado' : 'Consolidated'}: {formatCurrency(exportPreview.closingBalance, currency)}
               </p>
             </div>
           </div>

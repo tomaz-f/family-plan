@@ -40,6 +40,7 @@ const PDF_PRINT_STYLES = `
   .kpi-card { border: 1px solid #E2E8F0; border-radius: 10px; padding: 8px 10px; background: #FFFFFF; break-inside: avoid; }
   .kpi-title { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: #64748B; }
   .kpi-val { font-size: 13px; font-weight: 900; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .kpi-sub { font-size: 8px; font-weight: 600; color: #64748B; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
   .chart-card { border: 1px solid #E2E8F0; border-radius: 12px; padding: 8px 10px; background: #FFFFFF; break-inside: avoid; page-break-inside: avoid; }
   .chart-hdr { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #F1F5F9; padding-bottom: 4px; margin-bottom: 4px; }
@@ -212,18 +213,22 @@ export function generateReportHtml(opts: ExportFilterOptions): string {
     <div class="kpi-card">
       <div class="kpi-title">${isPt ? 'Saldo Inicial' : 'Opening Balance'}</div>
       <div class="kpi-val">${escHtml(formatCurrency(data.openingBalance, cur))}</div>
+      <div class="kpi-sub">${isPt ? 'Saldo inicial do período' : 'Period starting balance'}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-title">${isPt ? 'Entradas (+)' : 'Income (+)'}</div>
       <div class="kpi-val pos">+${escHtml(formatCurrency(data.totalIncome, cur))}</div>
+      <div class="kpi-sub pos">${isPt ? 'Pendente' : 'Pending'}: +${escHtml(formatCurrency(data.pendingIncome, cur))}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-title">${isPt ? 'Despesas (-)' : 'Expenses (-)'}</div>
       <div class="kpi-val neg">-${escHtml(formatCurrency(data.totalExpense, cur))}</div>
+      <div class="kpi-sub neg">${isPt ? 'Pendente' : 'Pending'}: -${escHtml(formatCurrency(data.pendingExpense, cur))}</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-title">${isPt ? 'Saldo Final' : 'Closing Balance'}</div>
-      <div class="kpi-val" style="color:${data.closingBalance >= 0 ? '#10B981' : '#EF4444'};">${escHtml(formatCurrency(data.closingBalance, cur))}</div>
+      <div class="kpi-title">${isPt ? 'Saldo Projetado' : 'Projected Balance'}</div>
+      <div class="kpi-val" style="color:${data.projectedBalance >= 0 ? '#10B981' : '#EF4444'};">${escHtml(formatCurrency(data.projectedBalance, cur))}</div>
+      <div class="kpi-sub">${isPt ? 'Consolidado' : 'Consolidated'}: ${escHtml(formatCurrency(data.closingBalance, cur))}</div>
     </div>
   </section>
 

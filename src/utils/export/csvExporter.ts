@@ -26,19 +26,23 @@ export function exportFilteredHistoryToCSV(opts: ExportFilterOptions): void {
     ? [
         ['DEMONSTRATIVO FINANCEIRO - PRUMO', data.periodTitle],
         ['Saldo Inicial', formatCommaDecimal(data.openingBalance)],
-        ['Entradas Realizadas', formatCommaDecimal(data.totalIncome)],
-        ['Despesas Realizadas', formatCommaDecimal(-Math.abs(data.totalExpense))],
-        ['Resultado Líquido', formatCommaDecimal(data.netCashFlow)],
-        ['Saldo Final', formatCommaDecimal(data.closingBalance)],
+        ['Entradas Consolidadas (+)', formatCommaDecimal(data.totalIncome)],
+        ['Entradas Pendentes (+)', formatCommaDecimal(data.pendingIncome)],
+        ['Despesas Consolidadas (-)', formatCommaDecimal(-Math.abs(data.totalExpense))],
+        ['Despesas Pendentes (-)', formatCommaDecimal(-Math.abs(data.pendingExpense))],
+        ['Saldo Consolidado', formatCommaDecimal(data.closingBalance)],
+        ['Saldo Projetado Final', formatCommaDecimal(data.projectedBalance)],
         [],
       ]
     : [
         ['FINANCIAL STATEMENT - PRUMO', data.periodTitle],
         ['Opening Balance', formatCommaDecimal(data.openingBalance)],
-        ['Realized Income', formatCommaDecimal(data.totalIncome)],
-        ['Realized Expenses', formatCommaDecimal(-Math.abs(data.totalExpense))],
-        ['Net Cash Flow', formatCommaDecimal(data.netCashFlow)],
-        ['Closing Balance', formatCommaDecimal(data.closingBalance)],
+        ['Consolidated Income (+)', formatCommaDecimal(data.totalIncome)],
+        ['Pending Income (+)', formatCommaDecimal(data.pendingIncome)],
+        ['Consolidated Expenses (-)', formatCommaDecimal(-Math.abs(data.totalExpense))],
+        ['Pending Expenses (-)', formatCommaDecimal(-Math.abs(data.pendingExpense))],
+        ['Consolidated Balance', formatCommaDecimal(data.closingBalance)],
+        ['Projected Final Balance', formatCommaDecimal(data.projectedBalance)],
         [],
       ];
 

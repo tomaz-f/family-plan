@@ -117,24 +117,65 @@ export function exportFilteredHistoryToODS(opts: ExportFilterOptions): void {
     opts.language
   );
 
-  // Sheet 1: Resumo Executivo
+  // Sheet 1: Resumo Executivo (Consolidado + Pendente + Total Projetado via =SUM formulas)
   const txCount = data.filteredTransactionsAsc.length;
   const sumFormula = txCount > 0 ? `=SUM([.G2:.G${txCount + 1}])` : '=0';
+  const totalIncomeProj = Number((data.totalIncome + data.pendingIncome).toFixed(2));
+  const totalExpenseProj = -Math.abs(Number((data.totalExpense + data.pendingExpense).toFixed(2)));
+  const pendingNet = Number((data.pendingIncome - data.pendingExpense).toFixed(2));
+  const projectedNet = Number((data.netCashFlow + pendingNet).toFixed(2));
+
   const sheet1Rows: string[] = [
-    rowXml([strCell(`PRUMO — ${data.periodTitle}`, 'ceTitle'), strCell('', 'ceTitle'), strCell('', 'ceTitle')], 'roHeader'),
-    rowXml([strCell(isPt ? 'Indicador Executivo' : 'Executive Metric', 'ceHeader'), strCell(isPt ? 'Valor' : 'Amount', 'ceHeader'), strCell(isPt ? 'Detalhes' : 'Details', 'ceHeader')], 'roHeader'),
-    rowXml([strCell(isPt ? 'Saldo Inicial' : 'Opening Balance'), numCell(data.openingBalance, cur), strCell(isPt ? 'Acumulado anterior' : 'Carried forward')]),
-    rowXml([strCell(isPt ? 'Total de Entradas (+)' : 'Total Income (+)', 'ceZebra'), numCell(data.totalIncome, cur, 'ceCurrPos'), strCell(`${data.incomeCount} itens`, 'ceZebra')]),
-    rowXml([strCell(isPt ? 'Total de Despesas (-)' : 'Total Expenses (-)'), numCell(-Math.abs(data.totalExpense), cur, 'ceCurrNeg'), strCell(`${data.expenseCount} itens`)]),
-    rowXml([strCell(isPt ? 'Resultado Líquido' : 'Net Result', 'ceZebra'), numCell(data.netCashFlow, cur), strCell(`${data.savingsRate.toFixed(1)}% poupado`, 'ceZebra')]),
-    rowXml([strCell(isPt ? 'Saldo Final' : 'Closing Balance'), numCell(data.closingBalance, cur), strCell(`Projetado: ${formatCurrency(data.projectedBalance, cur)}`)]),
-    rowXml([strCell('', 'ceData'), strCell('', 'ceData'), strCell('', 'ceData')]),
-    rowXml([strCell(isPt ? 'Categoria de Despesa' : 'Expense Category', 'ceHeader'), strCell(isPt ? 'Total (R$)' : 'Total', 'ceHeader'), strCell(isPt ? 'Participação (%)' : 'Share (%)', 'ceHeader')], 'roHeader'),
+    rowXml([strCell(`PRUMO — ${data.periodTitle}`, 'ceTitle'), strCell('', 'ceTitle'), strCell('', 'ceTitle'), strCell('', 'ceTitle')], 'roHeader'),
+    rowXml([
+      strCell(isPt ? 'Indicador Executivo' : 'Executive Metric', 'ceHeader'),
+      strCell(isPt ? 'Consolidado (Pago / Recebido)' : 'Consolidated (Paid / Received)', 'ceHeader'),
+      strCell(isPt ? 'Pendente (A Receber / A Pagar)' : 'Pending (Receivable / Payable)', 'ceHeader'),
+      strCell(isPt ? 'Total Projetado no Período' : 'Projected Period Total', 'ceHeader'),
+    ], 'roHeader'),
+    rowXml([
+      strCell(isPt ? 'Saldo Inicial' : 'Opening Balance'),
+      numCell(data.openingBalance, cur),
+      numCell(0, cur, 'ceData'),
+      formulaCell('=SUM([.B3:.C3])', data.openingBalance, cur),
+    ]),
+    rowXml([
+      strCell(isPt ? 'Entradas (+)' : 'Income (+)', 'ceZebra'),
+      numCell(data.totalIncome, cur, 'ceCurrPos'),
+      numCell(data.pendingIncome, cur, 'ceCurrPos'),
+      formulaCell('=SUM([.B4:.C4])', totalIncomeProj, cur),
+    ]),
+    rowXml([
+      strCell(isPt ? 'Despesas (-)' : 'Expenses (-)'),
+      numCell(-Math.abs(data.totalExpense), cur, 'ceCurrNeg'),
+      numCell(-Math.abs(data.pendingExpense), cur, 'ceCurrNeg'),
+      formulaCell('=SUM([.B5:.C5])', totalExpenseProj, cur),
+    ]),
+    rowXml([
+      strCell(isPt ? 'Resultado Líquido do Período' : 'Net Period Result', 'ceZebra'),
+      formulaCell('=SUM([.B4:.B5])', data.netCashFlow, cur),
+      formulaCell('=SUM([.C4:.C5])', pendingNet, cur),
+      formulaCell('=SUM([.D4:.D5])', projectedNet, cur),
+    ]),
+    rowXml([
+      strCell(isPt ? 'Saldo Final / Projetado' : 'Closing / Projected Balance'),
+      formulaCell('=SUM([.B3:.B5])', data.closingBalance, cur),
+      formulaCell('=SUM([.C3:.C5])', pendingNet, cur),
+      formulaCell('=SUM([.B7:.C7])', data.projectedBalance, cur),
+    ]),
+    rowXml([strCell('', 'ceData'), strCell('', 'ceData'), strCell('', 'ceData'), strCell('', 'ceData')]),
+    rowXml([
+      strCell(isPt ? 'Categoria de Despesa' : 'Expense Category', 'ceHeader'),
+      strCell(isPt ? 'Total (R$)' : 'Total', 'ceHeader'),
+      strCell(isPt ? 'Participação (%)' : 'Share (%)', 'ceHeader'),
+      strCell(isPt ? 'Lançamentos' : 'Entries', 'ceHeader'),
+    ], 'roHeader'),
     ...data.expenseByCategory.map((cat, idx) =>
       rowXml([
         strCell(cat.name, idx % 2 ? 'ceZebra' : 'ceData'),
         numCell(-Math.abs(cat.amount), cur, 'ceCurrNeg'),
-        strCell(`${cat.share.toFixed(1)}% (${cat.count})`, idx % 2 ? 'ceZebra' : 'ceData'),
+        strCell(`${cat.share.toFixed(1)}%`, idx % 2 ? 'ceZebra' : 'ceData'),
+        numCell(cat.count, cur, 'ceNum', true),
       ])
     ),
   ];
@@ -233,7 +274,7 @@ export function exportFilteredHistoryToODS(opts: ExportFilterOptions): void {
   <office:body>
     <office:spreadsheet>
       <table:table table:name="Resumo Executivo">
-        <table:table-column table:style-name="coWide"/><table:table-column table:style-name="coMed"/><table:table-column table:style-name="coWide"/>
+        <table:table-column table:style-name="coWide"/><table:table-column table:style-name="coMed"/><table:table-column table:style-name="coMed"/><table:table-column table:style-name="coMed"/>
         ${sheet1Rows.join('')}
       </table:table>
       <table:table table:name="Lançamentos">
