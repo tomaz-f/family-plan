@@ -151,55 +151,59 @@ export const CreditCardsView: React.FC<CreditCardsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-12 animate-fadeIn max-w-lg mx-auto w-full">
-      <CreditCardCarousel
-        creditCards={creditCards}
-        cardsMetrics={cardsMetrics}
-        consolidated={consolidated}
-        activeIndex={activeIndex}
-        setActiveIndex={setActiveIndex}
-        currency={currency}
-        language={language}
-        isOled={isOled}
-        t={t}
-        onOpenAddCard={openAddCardModal}
-        onOpenManageCards={() => setIsManageModalOpen(true)}
-      />
-
-      {activeCard && (
-        <div
-          className={`rounded-2xl p-4 border space-y-3.5 transition-colors ${
-            isOled
-              ? 'bg-[#0D1117] border-[#21262D] shadow-xl text-[#F8FAFC]'
-              : 'bg-white border-slate-200 shadow-sm text-slate-900'
-          }`}
-        >
-          <CardInvoiceHeaderAndActions
-            isOled={isOled}
-            language={language}
-            activeCard={activeCard}
-            statementMonth={statementMonth}
-            statementData={statementData}
-            invoiceCycleStatus={invoiceCycleStatus}
-            onOpenAddExpense={onOpenAddExpense}
-            onPayInvoiceClick={(cardId, invoiceMonth) =>
-              setPayingInvoiceCycle({ cardId, invoiceMonth })
-            }
-          />
-
-          <CardInvoiceItemsList
-            txs={statementData.txs}
-            categories={categories}
+    <div className="pb-12 lg:pb-6 animate-fadeIn max-w-lg lg:max-w-none mx-auto w-full">
+      <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start">
+        <div className="lg:col-span-6 xl:col-span-5 lg:sticky lg:top-6 min-w-0">
+          <CreditCardCarousel
+            creditCards={creditCards}
+            cardsMetrics={cardsMetrics}
+            consolidated={consolidated}
+            activeIndex={activeIndex}
+            setActiveIndex={setActiveIndex}
             currency={currency}
             language={language}
             isOled={isOled}
-            openRowId={openRowId}
-            onSetOpenRow={setOpenRowId}
-            onEditTransaction={onEditTransaction}
-            onDeleteTransaction={onDeleteTransaction}
+            t={t}
+            onOpenAddCard={openAddCardModal}
+            onOpenManageCards={() => setIsManageModalOpen(true)}
           />
         </div>
-      )}
+
+        {activeCard && (
+          <div
+            className={`lg:col-span-6 xl:col-span-7 min-w-0 rounded-2xl p-4 border space-y-3.5 transition-colors ${
+              isOled
+                ? 'bg-[#0D1117] border-[#21262D] shadow-xl text-[#F8FAFC]'
+                : 'bg-white border-slate-200 shadow-sm text-slate-900'
+            }`}
+          >
+            <CardInvoiceHeaderAndActions
+              isOled={isOled}
+              language={language}
+              activeCard={activeCard}
+              statementMonth={statementMonth}
+              statementData={statementData}
+              invoiceCycleStatus={invoiceCycleStatus}
+              onOpenAddExpense={onOpenAddExpense}
+              onPayInvoiceClick={(cardId, invoiceMonth) =>
+                setPayingInvoiceCycle({ cardId, invoiceMonth })
+              }
+            />
+
+            <CardInvoiceItemsList
+              txs={statementData.txs}
+              categories={categories}
+              currency={currency}
+              language={language}
+              isOled={isOled}
+              openRowId={openRowId}
+              onSetOpenRow={setOpenRowId}
+              onEditTransaction={onEditTransaction}
+              onDeleteTransaction={onDeleteTransaction}
+            />
+          </div>
+        )}
+      </div>
 
       <CreditCardModal
         isOpen={cardModalOpen}

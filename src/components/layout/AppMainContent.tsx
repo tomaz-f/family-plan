@@ -14,6 +14,9 @@ import { CreditCardsView } from '../CreditCardsView';
 import { FuelView } from '../FuelView';
 import { ReportsView } from '../ReportsView';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { DataExportSection } from '../settings/DataExportSection';
+import { SettingsView } from '../settings/SettingsView';
+import { MobileSyncModalProps } from '../settings/settingsTypes';
 import { AppActiveTab } from './AppHeaderBar';
 
 interface AppMainContentProps {
@@ -23,6 +26,11 @@ interface AppMainContentProps {
   language: AppLanguage;
   theme: AppTheme;
   openRefuelTrigger: number;
+  isOnlineWithServer: boolean;
+  pendingOfflineCount: number;
+  currentBankBalance: number;
+  familyId: string | null;
+  masterKey: string | null;
   setActiveTab: React.Dispatch<React.SetStateAction<AppActiveTab>>;
   setSelectedMonth: React.Dispatch<React.SetStateAction<string>>;
   setBalanceModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -59,36 +67,60 @@ interface AppMainContentProps {
   }) => Promise<void>;
   onDeleteFuelLog: (id: string) => Promise<void>;
   onUpdateTankCapacity: (capacity: number) => Promise<void>;
+  onLeaveFamily: () => void;
+  onUpdateSettings: MobileSyncModalProps['onUpdateSettings'];
+  onAddCategory: MobileSyncModalProps['onAddCategory'];
+  onUpdateCategory: MobileSyncModalProps['onUpdateCategory'];
+  onDeleteCategory: MobileSyncModalProps['onDeleteCategory'];
+  onImportBackup: MobileSyncModalProps['onImportBackup'];
+  onExportBackup: MobileSyncModalProps['onExportBackup'];
+  onResetAccount: MobileSyncModalProps['onResetAccount'];
 }
 
-export const AppMainContent: React.FC<AppMainContentProps> = ({
-  activeTab,
-  selectedMonth,
-  state,
-  language,
-  theme,
-  openRefuelTrigger,
-  setActiveTab,
-  setSelectedMonth,
-  setBalanceModalOpen,
-  setActiveCardId,
-  setCardModalOpen,
-  setFuelModalOpen,
-  onOpenAddModal,
-  onOpenEditModal,
-  onOpenCardExpenseModal,
-  onOpenEditCardExpenseModal,
-  onDeleteTransaction,
-  onToggleTransactionStatus,
-  onSaveCard,
-  onDeleteCard,
-  onPayCardInvoice,
-  onSaveFuelLog,
-  onDeleteFuelLog,
-  onUpdateTankCapacity,
-}) => {
+export const AppMainContent: React.FC<AppMainContentProps> = (props) => {
+  const {
+    activeTab,
+    selectedMonth,
+    state,
+    language,
+    theme,
+    openRefuelTrigger,
+    isOnlineWithServer,
+    pendingOfflineCount,
+    currentBankBalance,
+    familyId,
+    masterKey,
+    setActiveTab,
+    setSelectedMonth,
+    setBalanceModalOpen,
+    setActiveCardId,
+    setCardModalOpen,
+    setFuelModalOpen,
+    onOpenAddModal,
+    onOpenEditModal,
+    onOpenCardExpenseModal,
+    onOpenEditCardExpenseModal,
+    onDeleteTransaction,
+    onToggleTransactionStatus,
+    onSaveCard,
+    onDeleteCard,
+    onPayCardInvoice,
+    onSaveFuelLog,
+    onDeleteFuelLog,
+    onUpdateTankCapacity,
+    onLeaveFamily,
+    onUpdateSettings,
+    onAddCategory,
+    onUpdateCategory,
+    onDeleteCategory,
+    onImportBackup,
+    onExportBackup,
+    onResetAccount,
+  } = props;
+
   return (
-    <main className="flex-1 max-w-lg w-full mx-auto px-4 pt-4 pb-28">
+    <main className="flex-1 max-w-lg w-full mx-auto px-4 pt-4 pb-28 lg:max-w-none lg:mx-0 lg:p-0 lg:pl-64">
+      <div className="w-full lg:max-w-7xl lg:mx-auto lg:px-6 lg:py-6">
       {activeTab === 'dashboard' && (
         <ErrorBoundary fallbackTitle="Erro ao carregar o Painel Principal">
           <DashboardView
@@ -100,6 +132,7 @@ export const AppMainContent: React.FC<AppMainContentProps> = ({
             categories={state.categories}
             creditCards={state.creditCards || []}
             transactions={state.transactions}
+            recurringTemplates={state.recurringTemplates}
             onOpenAddModal={onOpenAddModal}
             onOpenEditModal={onOpenEditModal}
             onDeleteTransaction={onDeleteTransaction}
@@ -179,6 +212,41 @@ export const AppMainContent: React.FC<AppMainContentProps> = ({
           onSelectMonth={setSelectedMonth}
         />
       )}
+
+      {activeTab === 'export' && (
+        <DataExportSection
+          state={state}
+          language={language}
+          embedded
+          onNavigateSettings={() => setActiveTab('settings')}
+          onBackMobile={() => setActiveTab('dashboard')}
+        />
+      )}
+
+      {activeTab === 'settings' && (
+        <ErrorBoundary fallbackTitle="Erro ao carregar Configurações">
+          <SettingsView
+            state={state}
+            language={language}
+            theme={theme}
+            isOnlineWithServer={isOnlineWithServer}
+            pendingOfflineCount={pendingOfflineCount}
+            currentBankBalance={currentBankBalance}
+            familyId={familyId}
+            masterKey={masterKey}
+            onLeaveFamily={onLeaveFamily}
+            onUpdateSettings={onUpdateSettings}
+            onAddCategory={onAddCategory}
+            onUpdateCategory={onUpdateCategory}
+            onDeleteCategory={onDeleteCategory}
+            onImportBackup={onImportBackup}
+            onExportBackup={onExportBackup}
+            onResetAccount={onResetAccount}
+            onNavigateTab={setActiveTab}
+          />
+        </ErrorBoundary>
+      )}
+      </div>
     </main>
   );
 };

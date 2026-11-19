@@ -9,6 +9,7 @@ interface BackupAndResetSectionProps {
   language: AppLanguage;
   isOnlineWithServer: boolean;
   pendingOfflineCount: number;
+  embedded?: boolean;
   onImportBackup: MobileSyncModalProps['onImportBackup'];
   onExportBackup: MobileSyncModalProps['onExportBackup'];
   onResetAccount: MobileSyncModalProps['onResetAccount'];
@@ -19,6 +20,7 @@ export const BackupAndResetSection: React.FC<BackupAndResetSectionProps> = ({
   language,
   isOnlineWithServer,
   pendingOfflineCount,
+  embedded = false,
   onImportBackup,
   onExportBackup,
   onResetAccount,
@@ -82,7 +84,7 @@ export const BackupAndResetSection: React.FC<BackupAndResetSectionProps> = ({
   };
 
   return (
-    <div className="px-4 pt-5 pb-8 space-y-4 animate-fadeIn">
+    <div className={embedded ? 'space-y-4 animate-fadeIn' : 'px-4 pt-5 pb-8 space-y-4 animate-fadeIn'}>
       {/* Server / SQLite Status Banner */}
       <div
         className={`p-4 rounded-2xl border flex items-center justify-between ${
@@ -127,44 +129,44 @@ export const BackupAndResetSection: React.FC<BackupAndResetSectionProps> = ({
             ? 'Dados Atuais no Espaço Familiar'
             : 'Current Family Space Data'}
         </span>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+        <div className={embedded ? 'grid grid-cols-2 xl:grid-cols-3 gap-2 text-center' : 'grid grid-cols-2 sm:grid-cols-5 gap-2 text-center'}>
+          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 min-w-0">
             <span className="block text-base font-extrabold text-slate-900">
               {state.transactions.length}
             </span>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">
+            <span className="block truncate text-[10px] text-slate-500 font-semibold uppercase">
               {language === 'pt-BR' ? 'Transações' : 'Transactions'}
             </span>
           </div>
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 min-w-0">
             <span className="block text-base font-extrabold text-indigo-400">
               {(state.creditCards || []).length}
             </span>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">
+            <span className="block truncate text-[10px] text-slate-500 font-semibold uppercase">
               {language === 'pt-BR' ? 'Cartões' : 'Cards'}
             </span>
           </div>
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 min-w-0">
             <span className="block text-base font-extrabold text-emerald-400">
               {(state.fuelLogs || []).length}
             </span>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">
+            <span className="block truncate text-[10px] text-slate-500 font-semibold uppercase">
               {language === 'pt-BR' ? 'Abastecimentos' : 'Fuel Logs'}
             </span>
           </div>
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 min-w-0">
             <span className="block text-base font-extrabold text-amber-400">
               {state.recurringTemplates.length}
             </span>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">
+            <span className="block truncate text-[10px] text-slate-500 font-semibold uppercase">
               {language === 'pt-BR' ? 'Recorrências' : 'Recurring'}
             </span>
           </div>
-          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 col-span-2 sm:col-span-1">
+          <div className={`bg-slate-50 p-2.5 rounded-xl border border-slate-200 min-w-0 ${embedded ? 'col-span-2' : 'col-span-2 sm:col-span-1'}`}>
             <span className="block text-base font-extrabold text-slate-700">
               {state.categories.length}
             </span>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase">
+            <span className="block truncate text-[10px] text-slate-500 font-semibold uppercase">
               {language === 'pt-BR' ? 'Categorias' : 'Categories'}
             </span>
           </div>

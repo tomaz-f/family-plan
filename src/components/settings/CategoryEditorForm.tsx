@@ -108,7 +108,7 @@ export const CategoryEditorForm: React.FC<CategoryEditorFormProps> = ({
           {t.chooseIconLabel}
         </span>
         <div
-          className={`grid grid-cols-6 sm:grid-cols-8 gap-2.5 max-h-52 overflow-y-auto scroll-smooth p-3 rounded-xl border transition-colors scrollbar-thin ${
+          className={`grid grid-cols-[repeat(auto-fill,minmax(40px,1fr))] gap-2.5 max-h-52 overflow-y-auto scroll-smooth p-3 rounded-xl border transition-colors scrollbar-thin ${
             isOled
               ? 'bg-[#161B22] border-[#21262D] text-slate-300 scrollbar-thumb-slate-700'
               : 'bg-slate-50 border-slate-200/80 text-slate-700 scrollbar-thumb-slate-300'

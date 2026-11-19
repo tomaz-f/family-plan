@@ -7,6 +7,8 @@ export interface MonthSelectorProps {
   selectedMonth: string;
   language: AppLanguage;
   onSelectMonth: React.Dispatch<React.SetStateAction<string>>;
+  popoverAlign?: 'center' | 'left';
+  fullWidth?: boolean;
 }
 
 const MONTHS_PT = [
@@ -35,6 +37,8 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
   selectedMonth,
   language,
   onSelectMonth,
+  popoverAlign = 'center',
+  fullWidth = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const activeYear = Number(selectedMonth.slice(0, 4)) || new Date().getFullYear();
@@ -164,8 +168,11 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
 
   const monthLabels = language === 'pt-BR' ? MONTHS_PT : MONTHS_EN;
 
+  const popoverPositionClass =
+    popoverAlign === 'left' ? 'left-0' : '-translate-x-1/2 left-1/2';
+
   return (
-    <div className="relative flex items-center justify-center">
+    <div className={`relative flex items-center justify-center ${fullWidth ? 'w-full' : ''}`}>
       <button
         type="button"
         onTouchStart={handleTouchStart}
@@ -177,7 +184,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         style={{ touchAction: 'pan-y' }}
-        className="h-10 px-5 rounded-xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] shadow-sm flex items-center justify-center cursor-pointer cursor-grab active:cursor-grabbing select-none transition-all active:scale-95"
+        className={`${fullWidth ? 'w-full ' : ''}h-10 px-5 rounded-xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] shadow-sm flex items-center justify-center cursor-pointer cursor-grab active:cursor-grabbing select-none transition-all active:scale-95`}
         title={
           language === 'pt-BR'
             ? 'Toque para escolher mês/ano ou deslize para navegar'
@@ -202,7 +209,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
           <div
             role="dialog"
             aria-label={language === 'pt-BR' ? 'Selecionar mês e ano' : 'Select month and year'}
-            className="absolute top-full mt-2 z-50 w-72 -translate-x-1/2 left-1/2 p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] shadow-xl backdrop-blur-md"
+            className={`absolute top-full mt-2 z-50 w-72 ${popoverPositionClass} p-3 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] shadow-xl backdrop-blur-md`}
           >
             {/* Popover Header: Year Navigator */}
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-[#21262D]/60">

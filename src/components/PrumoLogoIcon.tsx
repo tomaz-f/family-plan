@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 interface PrumoLogoIconProps {
   className?: string;
@@ -13,6 +13,11 @@ export const PrumoLogoIcon: React.FC<PrumoLogoIconProps> = ({
   animate = true,
   size,
 }) => {
+  const uid = useId().replace(/:/g, '');
+  const ironLightId = `headerPrumoIronLight-${uid}`;
+  const ironDarkId = `headerPrumoIronDark-${uid}`;
+  const ropeId = `headerPrumoRope-${uid}`;
+
   const dynamicStyle: React.CSSProperties = {
     overflow: 'visible',
     ...(size ? { height: `${size}px`, width: 'auto' } : {}),
@@ -30,7 +35,7 @@ export const PrumoLogoIcon: React.FC<PrumoLogoIconProps> = ({
     >
       <defs>
         {/* Rustic oxidized iron gradient - illuminated left facet */}
-        <linearGradient id="headerPrumoIronLight" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id={ironLightId} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#7E624B" />
           <stop offset="45%" stopColor="#9C7F6A" />
           <stop offset="85%" stopColor="#6E5440" />
@@ -38,14 +43,14 @@ export const PrumoLogoIcon: React.FC<PrumoLogoIconProps> = ({
         </linearGradient>
 
         {/* Rustic deep cast iron gradient - shaded right facet */}
-        <linearGradient id="headerPrumoIronDark" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id={ironDarkId} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#3D2B1E" />
           <stop offset="50%" stopColor="#24170E" />
           <stop offset="100%" stopColor="#0F0A06" />
         </linearGradient>
 
         {/* Warm jute / linen rope cord gradient */}
-        <linearGradient id="headerPrumoRope" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id={ropeId} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#D0B595" />
           <stop offset="50%" stopColor="#E7CDAC" />
           <stop offset="100%" stopColor="#A68969" />
@@ -76,7 +81,7 @@ export const PrumoLogoIcon: React.FC<PrumoLogoIconProps> = ({
           y1="-14"
           x2="16"
           y2="8"
-          stroke="url(#headerPrumoRope)"
+          stroke={`url(#${ropeId})`}
           strokeWidth="2.2"
           strokeLinecap="round"
         />
@@ -96,7 +101,7 @@ export const PrumoLogoIcon: React.FC<PrumoLogoIconProps> = ({
           cy="12"
           r="3.4"
           fill="none"
-          stroke="url(#headerPrumoIronLight)"
+          stroke={`url(#${ironLightId})`}
           strokeWidth="1.9"
         />
         <circle
@@ -104,22 +109,22 @@ export const PrumoLogoIcon: React.FC<PrumoLogoIconProps> = ({
           cy="12"
           r="3.4"
           fill="none"
-          stroke="url(#headerPrumoIronDark)"
+          stroke={`url(#${ironDarkId})`}
           strokeWidth="1.9"
           strokeDasharray="0, 11"
         />
 
         {/* Neck / Collar Collar Ring */}
-        <ellipse cx="16" cy="15.6" rx="3.2" ry="1.1" fill="url(#headerPrumoIronLight)" />
-        <ellipse cx="16" cy="16.4" rx="2.4" ry="0.8" fill="url(#headerPrumoIronDark)" />
+        <ellipse cx="16" cy="15.6" rx="3.2" ry="1.1" fill={`url(#${ironLightId})`} />
+        <ellipse cx="16" cy="16.4" rx="2.4" ry="0.8" fill={`url(#${ironDarkId})`} />
 
         {/* Upper Conical Shoulders */}
-        <path d="M 16 16.4 L 8 19.2 L 16 19.2 Z" fill="url(#headerPrumoIronLight)" />
-        <path d="M 16 16.4 L 16 19.2 L 24 19.2 Z" fill="url(#headerPrumoIronDark)" />
+        <path d="M 16 16.4 L 8 19.2 L 16 19.2 Z" fill={`url(#${ironLightId})`} />
+        <path d="M 16 16.4 L 16 19.2 L 24 19.2 Z" fill={`url(#${ironDarkId})`} />
 
         {/* Main Lower Conical Body (Weight) */}
-        <path d="M 8 19.2 L 16 33.2 L 16 19.2 Z" fill="url(#headerPrumoIronLight)" />
-        <path d="M 16 19.2 L 16 33.2 L 24 19.2 Z" fill="url(#headerPrumoIronDark)" />
+        <path d="M 8 19.2 L 16 33.2 L 16 19.2 Z" fill={`url(#${ironLightId})`} />
+        <path d="M 16 19.2 L 16 33.2 L 24 19.2 Z" fill={`url(#${ironDarkId})`} />
 
         {/* Bottom Precision Tip Highlight */}
         <circle cx="16" cy="33.2" r="0.75" fill="#FFFDF5" opacity="0.9" />

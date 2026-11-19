@@ -14,6 +14,7 @@ import { useTransactionCrud } from './hooks/useTransactionCrud';
 import { useSettingsCategoriesCrud } from './hooks/useSettingsCategoriesCrud';
 import { useCardFuelRecurringCrud } from './hooks/useCardFuelRecurringCrud';
 import { AppHeaderBar } from './components/layout/AppHeaderBar';
+import { DesktopSidebar } from './components/layout/DesktopSidebar';
 import { AppMainContent } from './components/layout/AppMainContent';
 import { AppBottomNavigation } from './components/layout/AppBottomNavigation';
 import { AppModalsHost } from './components/layout/AppModalsHost';
@@ -173,7 +174,21 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="app-shell min-h-[100dvh] w-full flex flex-col bg-[#F8FAFC] text-slate-900 pb-28 transition-colors">
+    <div className="app-shell min-h-[100dvh] w-full flex flex-col bg-[#F8FAFC] text-slate-900 pb-28 lg:pb-0 transition-colors">
+      <DesktopSidebar
+        familyName={state.settings.familyName}
+        activeTab={ui.activeTab}
+        syncModalOpen={ui.syncModalOpen}
+        selectedMonth={ui.selectedMonth}
+        language={language}
+        theme={theme}
+        setActiveTab={ui.setActiveTab}
+        setSelectedMonth={ui.setSelectedMonth}
+        setSyncModalOpen={ui.setSyncModalOpen}
+        onUpdateTheme={(nextTheme) => handleUpdateSettings({ theme: nextTheme })}
+        onOpenNewTransaction={() => ui.handleOpenAddModal('expense')}
+      />
+
       <AppHeaderBar
         familyName={state.settings.familyName}
         selectedMonth={ui.selectedMonth}
@@ -195,6 +210,11 @@ export const App: React.FC = () => {
         language={language}
         theme={theme}
         openRefuelTrigger={ui.openRefuelTrigger}
+        isOnlineWithServer={isOnlineWithServer}
+        pendingOfflineCount={pendingOfflineTx.length}
+        currentBankBalance={currentBankBalance}
+        familyId={familyId}
+        masterKey={masterKey}
         setActiveTab={ui.setActiveTab}
         setSelectedMonth={ui.setSelectedMonth}
         setBalanceModalOpen={ui.setBalanceModalOpen}
@@ -213,6 +233,14 @@ export const App: React.FC = () => {
         onSaveFuelLog={handleSaveFuelLog}
         onDeleteFuelLog={handleDeleteFuelLog}
         onUpdateTankCapacity={(cap) => handleUpdateSettings({ tankCapacity: cap })}
+        onLeaveFamily={handleLeaveFamily}
+        onUpdateSettings={handleUpdateSettings}
+        onAddCategory={handleAddCategory}
+        onUpdateCategory={handleUpdateCategory}
+        onDeleteCategory={handleDeleteCategory}
+        onImportBackup={handleImportBackup}
+        onExportBackup={handleExportBackup}
+        onResetAccount={handleResetAccount}
       />
 
       <AppBottomNavigation

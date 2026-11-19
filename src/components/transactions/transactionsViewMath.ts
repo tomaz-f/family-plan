@@ -52,6 +52,7 @@ export interface TransactionsViewProps {
     pendingExpense: number;
   };
   onOpenBalanceModal?: () => void;
+  desktopSidePanel?: React.ReactNode;
 }
 
 const toLocalIsoDateKey = (d: Date): string => {

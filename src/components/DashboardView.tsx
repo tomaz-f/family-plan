@@ -1,6 +1,15 @@
 import React from 'react';
-import { AppLanguage, AppTheme, Category, CreditCard, Transaction, TransactionType } from '../types';
+import {
+  AppLanguage,
+  AppTheme,
+  Category,
+  CreditCard,
+  RecurringTemplate,
+  Transaction,
+  TransactionType,
+} from '../types';
 import { TransactionsView } from './TransactionsView';
+import { DashboardDesktopSidePanel } from './dashboard/DashboardDesktopSidePanel';
 import { useDashboardAnalytics } from './dashboard/useDashboardAnalytics';
 
 export type { UseDashboardAnalyticsParams } from './dashboard/useDashboardAnalytics';
@@ -14,6 +23,7 @@ export interface DashboardViewProps {
   categories: Category[];
   creditCards?: CreditCard[];
   transactions: Transaction[];
+  recurringTemplates?: RecurringTemplate[];
   onOpenAddModal: (type: TransactionType) => void;
   onOpenEditModal: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => Promise<void>;
@@ -31,6 +41,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   categories,
   creditCards = [],
   transactions,
+  recurringTemplates = [],
   onOpenAddModal,
   onOpenEditModal,
   onDeleteTransaction,
@@ -48,8 +59,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     transactions,
   });
 
-  void onNavigateTab;
-
   return (
     <TransactionsView
       selectedMonth={selectedMonth}
@@ -65,6 +74,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       currentBankBalance={analytics.currentBankBalance}
       monthStats={analytics.monthStats}
       onOpenBalanceModal={onOpenBalanceModal}
+      desktopSidePanel={
+        <DashboardDesktopSidePanel
+          selectedMonth={selectedMonth}
+          currency={currency}
+          language={language}
+          theme={theme}
+          creditCards={creditCards}
+          transactions={transactions}
+          recurringTemplates={recurringTemplates}
+          onNavigateTab={onNavigateTab}
+        />
+      }
     />
   );
 };

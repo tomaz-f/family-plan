@@ -8,6 +8,7 @@ import {
 } from './transactions/transactionsViewMath';
 import { useTransactionsViewData } from './transactions/useTransactionsViewData';
 import { TransactionsHeroSummary } from './transactions/TransactionsHeroSummary';
+import { TransactionsSearchFilterBar } from './transactions/TransactionsSearchFilterBar';
 import {
   TransactionsFeedHeaderBar,
   TransactionsFilterSheetModal,
@@ -37,6 +38,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
     balanceCard,
     monthStats,
     onOpenBalanceModal,
+    desktopSidePanel,
   } = props;
 
   const {
@@ -72,11 +74,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
     dropdownFilters,
     allFilterOptions,
     activeFilterOption,
-    isDropdownFilterActive,
-    activeDropdownFilter,
     isDropdownOpen,
     setIsDropdownOpen,
-    dropdownPos,
     dropdownContainerRef,
     dropdownBtnRef,
     dropdownMenuRef,
@@ -93,17 +92,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
     effectiveBankBalance,
   } = useTransactionsViewData(props);
 
-  return (
-    <div className="space-y-3.5 sm:space-y-4">
-      <TransactionsHeroSummary
-        selectedMonth={selectedMonth}
+  const feedContent = (
+    <>
+      <TransactionsSearchFilterBar
         language={language}
-        currency={currency}
-        effectiveBankBalance={effectiveBankBalance}
-        effectiveStats={effectiveStats}
         isBalanceHidden={isBalanceHidden}
         onToggleBalancePrivacy={toggleBalancePrivacy}
-        onOpenBalanceModal={onOpenBalanceModal}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         primaryFilterChips={primaryFilterChips}
@@ -115,16 +109,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
           setActiveFilterChip(id);
           setIsDropdownOpen(false);
         }}
-        isDropdownFilterActive={isDropdownFilterActive}
-        activeDropdownFilter={activeDropdownFilter}
         isDropdownOpen={isDropdownOpen}
         onToggleDropdown={toggleDropdown}
-        dropdownPos={dropdownPos}
         dropdownContainerRef={dropdownContainerRef}
         dropdownBtnRef={dropdownBtnRef}
         dropdownMenuRef={dropdownMenuRef}
-        balanceCard={balanceCard}
-        hasMonthStats={Boolean(monthStats)}
       />
 
       <TransactionsFeedHeaderBar
@@ -166,6 +155,34 @@ export const TransactionsView: React.FC<TransactionsViewProps> = (props) => {
         setVisibleCount={setVisibleCount}
         t={t}
       />
+    </>
+  );
+
+  return (
+    <div className="space-y-3.5 sm:space-y-4">
+      <TransactionsHeroSummary
+        language={language}
+        currency={currency}
+        effectiveBankBalance={effectiveBankBalance}
+        effectiveStats={effectiveStats}
+        isBalanceHidden={isBalanceHidden}
+        onOpenBalanceModal={onOpenBalanceModal}
+        balanceCard={balanceCard}
+        hasMonthStats={Boolean(monthStats)}
+      />
+
+      {desktopSidePanel ? (
+        <div className="space-y-3.5 sm:space-y-4 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start">
+          <div className="space-y-3.5 sm:space-y-4 lg:col-span-7 xl:col-span-8 min-w-0">
+            {feedContent}
+          </div>
+          <aside className="hidden lg:block lg:col-span-5 xl:col-span-4 lg:sticky lg:top-6 min-w-0">
+            {desktopSidePanel}
+          </aside>
+        </div>
+      ) : (
+        feedContent
+      )}
 
       <TransactionsFilterSheetModal
         isOpen={isFilterSheetOpen}

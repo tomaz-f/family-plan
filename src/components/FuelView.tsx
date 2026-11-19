@@ -109,27 +109,33 @@ export const FuelView: React.FC<FuelViewProps> = ({
   );
 
   return (
-    <div className="space-y-4">
-      {/* 1. SINGLE UNIFIED FUEL METRICS CARD (Clean 2x3 / 3-column Responsive Grid) */}
-      <FuelStatsSection
-        selectedMonth={selectedMonth}
-        currency={currency}
-        language={language}
-        metrics={metrics}
-        onOpenNew={handleOpenNew}
-      />
+    <div>
+      <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start">
+        {/* 1. SINGLE UNIFIED FUEL METRICS CARD (Clean 2x3 / 3-column Responsive Grid) */}
+        <div className="lg:col-span-6 xl:col-span-5 lg:sticky lg:top-6 min-w-0">
+          <FuelStatsSection
+            selectedMonth={selectedMonth}
+            currency={currency}
+            language={language}
+            metrics={metrics}
+            onOpenNew={handleOpenNew}
+          />
+        </div>
 
-      {/* 2. REFUELING HISTORY LIST (Swipeable Mobile Architecture) */}
-      <FuelHistorySection
-        enrichedLogsDesc={enrichedLogsDesc}
-        currency={currency}
-        language={language}
-        openRowId={openRowId}
-        onSetOpenRow={setOpenRowId}
-        onOpenNew={handleOpenNew}
-        onOpenEdit={handleOpenEdit}
-        onDeleteFuelLog={onDeleteFuelLog}
-      />
+        {/* 2. REFUELING HISTORY LIST (Swipeable Mobile Architecture) */}
+        <div className="lg:col-span-6 xl:col-span-7 min-w-0">
+          <FuelHistorySection
+            enrichedLogsDesc={enrichedLogsDesc}
+            currency={currency}
+            language={language}
+            openRowId={openRowId}
+            onSetOpenRow={setOpenRowId}
+            onOpenNew={handleOpenNew}
+            onOpenEdit={handleOpenEdit}
+            onDeleteFuelLog={onDeleteFuelLog}
+          />
+        </div>
+      </div>
 
       {/* 3. REFUELING MODAL */}
       <FuelLogModal

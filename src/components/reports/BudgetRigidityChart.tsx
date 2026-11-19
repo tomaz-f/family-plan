@@ -9,10 +9,11 @@ export interface BudgetRigidityChartProps {
   currency: string;
   language: AppLanguage;
   isOled: boolean;
+  compact?: boolean;
 }
 
 export const BudgetRigidityChart: React.FC<BudgetRigidityChartProps> = React.memo(
-  ({ summary, currency, language, isOled }) => {
+  ({ summary, currency, language, isOled, compact = false }) => {
     const isPt = language === 'pt-BR';
 
     const metrics = useMemo(() => {
@@ -104,7 +105,11 @@ export const BudgetRigidityChart: React.FC<BudgetRigidityChartProps> = React.mem
         </div>
 
         {/* Two Compact Summary Blocks */}
-        <div className="grid grid-cols-2 gap-2.5 mt-3">
+        <div
+          className={`grid gap-2.5 mt-3 ${
+            compact ? 'grid-cols-1 2xl:grid-cols-2' : 'grid-cols-2'
+          }`}
+        >
           <div className="border border-red-500/20 bg-red-500/5 dark:bg-[#161B22] rounded-xl p-3 min-w-0">
             <div className="flex items-center gap-1.5 mb-1">
               <span className="w-2 h-2 rounded-full bg-[#EF4444] shrink-0" aria-hidden="true" />

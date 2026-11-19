@@ -47,7 +47,7 @@ export const TransactionDayGroupFeed: React.FC<TransactionDayGroupFeedProps> = (
   t,
 }) => {
   return (
-    <div className="flex flex-col gap-3 w-full pb-20">
+    <div className="flex flex-col gap-3 w-full pb-20 lg:pb-2">
       {filteredTransactions.length === 0 ? (
         <div className="p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 dark:border-[#21262D] bg-white dark:bg-[#0D1117] shadow-sm transition-colors py-14 text-center space-y-2 px-4">
           <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">

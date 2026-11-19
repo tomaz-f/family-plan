@@ -31,6 +31,7 @@ export interface MobileSyncModalProps {
     theme?: AppTheme;
     initialBalance?: number;
     targetCurrentBalance?: number;
+    tankCapacity?: number;
   }) => Promise<void>;
   onAddCategory: (cat: {
     name: string;

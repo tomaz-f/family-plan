@@ -9,6 +9,7 @@ interface AppearanceAndPreferencesSectionProps {
   state: AppState;
   language: AppLanguage;
   theme: AppTheme;
+  embedded?: boolean;
   onUpdateSettings: MobileSyncModalProps['onUpdateSettings'];
 }
 
@@ -16,6 +17,7 @@ export const AppearanceAndPreferencesSection: React.FC<AppearanceAndPreferencesS
   state,
   language,
   theme,
+  embedded = false,
   onUpdateSettings,
 }) => {
   const t = TRANSLATIONS[language];
@@ -43,7 +45,10 @@ export const AppearanceAndPreferencesSection: React.FC<AppearanceAndPreferencesS
   };
 
   return (
-    <form onSubmit={handleSaveSettings} className="px-4 pt-5 pb-8 space-y-4 animate-fadeIn">
+    <form
+      onSubmit={handleSaveSettings}
+      className={embedded ? 'space-y-4 animate-fadeIn' : 'px-4 pt-5 pb-8 space-y-4 animate-fadeIn'}
+    >
       <div className="settings-group-card p-4 rounded-2xl bg-white border border-slate-200 space-y-4">
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">

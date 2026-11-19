@@ -138,7 +138,7 @@ export const CreditCardCarousel: React.FC<CreditCardCarouselProps> = ({
 
   return (
     <div className="space-y-2">
-      <div className="relative w-full max-w-[400px] mx-auto px-3.5 sm:px-4">
+      <div className="relative w-full max-w-[400px] mx-auto px-3.5 sm:px-4 lg:px-0">
         <div
           className={`relative w-full overflow-hidden touch-pan-y rounded-2xl select-none ${
             creditCards.length > 1 ? (isCarouselDragging ? 'cursor-grabbing' : 'cursor-grab') : ''
@@ -258,7 +258,7 @@ export const CreditCardCarousel: React.FC<CreditCardCarouselProps> = ({
                       </div>
                     </div>
 
-                    <div className={`pt-3 border-t flex items-center justify-between text-xs ${
+                    <div className={`pt-3 border-t flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs ${
                       isOled ? 'border-[#21262D] text-[#94A3B8]' : 'border-slate-200 text-slate-500'
                     }`}>
                       <div className="flex items-center gap-1.5 text-[11px] font-medium">

@@ -10,7 +10,7 @@ import { AppLanguage, AppTheme } from '../../types';
 import { PrumoLogoIcon } from '../PrumoLogoIcon';
 import { MonthSelector } from './MonthSelector';
 
-export type AppActiveTab = 'dashboard' | 'transactions' | 'cards' | 'fuel' | 'reports';
+export type AppActiveTab = 'dashboard' | 'transactions' | 'cards' | 'fuel' | 'reports' | 'export' | 'settings';
 export type SyncModalTab = 'mobile' | 'settings' | 'categories' | 'export' | 'backup';
 
 interface AppHeaderBarProps {
@@ -40,7 +40,7 @@ export const AppHeaderBar: React.FC<AppHeaderBarProps> = ({
   onUpdateTheme,
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-white dark:bg-[#000000] border-b border-slate-100 dark:border-[#21262D]/60 transition-colors print:hidden pt-[env(safe-area-inset-top,0px)]">
+    <header className="lg:hidden sticky top-0 z-30 bg-white dark:bg-[#000000] border-b border-slate-100 dark:border-[#21262D]/60 transition-colors print:hidden pt-[env(safe-area-inset-top,0px)]">
       <div className="w-full max-w-lg mx-auto flex items-center justify-between px-3 py-2.5 bg-white dark:bg-[#000000] border-b border-slate-100 dark:border-[#21262D]/60 transition-colors">
         {/* Left Side — Standalone Brand Logo */}
         <button

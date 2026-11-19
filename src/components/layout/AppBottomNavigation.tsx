@@ -48,7 +48,7 @@ export const AppBottomNavigation: React.FC<AppBottomNavigationProps> = ({
       {/* CONTEXTUAL FAB SPEED-DIAL OVERLAY (Home & Reports Tabs) */}
       <div
         aria-hidden={!(fabMenuOpen && (activeTab === 'dashboard' || activeTab === 'reports'))}
-        className={`fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] transition-opacity print:hidden ${
+        className={`lg:hidden fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] transition-opacity print:hidden ${
           fabMenuOpen && (activeTab === 'dashboard' || activeTab === 'reports')
             ? 'opacity-100 pointer-events-auto'
             : 'opacity-0 pointer-events-none'
@@ -57,7 +57,7 @@ export const AppBottomNavigation: React.FC<AppBottomNavigationProps> = ({
       />
 
       {/* STICKY BOTTOM NAVIGATION BAR WITH CENTRAL CONTEXTUAL FAB */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] print:hidden">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 pt-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] print:hidden">
         {/* Expanding Speed Dial Options when on Início */}
         <div
           className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 flex items-center gap-3 z-50 transition-all duration-150 ${

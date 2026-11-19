@@ -9,6 +9,7 @@ interface BalanceAdjustmentSectionProps {
   state: AppState;
   language: AppLanguage;
   currentBankBalance?: number;
+  embedded?: boolean;
   onUpdateSettings: MobileSyncModalProps['onUpdateSettings'];
 }
 
@@ -16,6 +17,7 @@ export const BalanceAdjustmentSection: React.FC<BalanceAdjustmentSectionProps> =
   state,
   language,
   currentBankBalance,
+  embedded = false,
   onUpdateSettings,
 }) => {
   const t = TRANSLATIONS[language];
@@ -69,7 +71,7 @@ export const BalanceAdjustmentSection: React.FC<BalanceAdjustmentSectionProps> =
   return (
     <form
       onSubmit={handleSaveBalanceSubScreen}
-      className="px-4 pt-5 pb-8 space-y-4 animate-fadeIn"
+      className={embedded ? 'space-y-4 animate-fadeIn' : 'px-4 pt-5 pb-8 space-y-4 animate-fadeIn'}
     >
       <div className="settings-group-card p-5 rounded-2xl bg-white border border-slate-200 space-y-4">
         <div className="flex items-center gap-3">

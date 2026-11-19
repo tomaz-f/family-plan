@@ -10,6 +10,7 @@ interface CategoryManagerSectionProps {
   categories: Category[];
   language: AppLanguage;
   theme: AppTheme;
+  embedded?: boolean;
   onAddCategory: MobileSyncModalProps['onAddCategory'];
   onCategoryCreated?: MobileSyncModalProps['onCategoryCreated'];
   onUpdateCategory: MobileSyncModalProps['onUpdateCategory'];
@@ -20,6 +21,7 @@ export const CategoryManagerSection: React.FC<CategoryManagerSectionProps> = ({
   categories,
   language,
   theme,
+  embedded = false,
   onAddCategory,
   onCategoryCreated,
   onUpdateCategory,
@@ -32,8 +34,8 @@ export const CategoryManagerSection: React.FC<CategoryManagerSectionProps> = ({
   const [catType, setCatType] = useState<TransactionType>('expense');
   const [catColor, setCatColor] = useState(PRESET_COLORS[0]);
   const [catIcon, setCatIcon] = useState<string>('etiqueta-preco');
-  const [expenseSectionOpen, setExpenseSectionOpen] = useState(true);
-  const [incomeSectionOpen, setIncomeSectionOpen] = useState(true);
+  const [expenseSectionOpen, setExpenseSectionOpen] = useState(!embedded);
+  const [incomeSectionOpen, setIncomeSectionOpen] = useState(!embedded);
 
   const expenseCategories = useMemo(() => {
     return categories
@@ -149,7 +151,7 @@ export const CategoryManagerSection: React.FC<CategoryManagerSectionProps> = ({
   };
 
   return (
-    <div className="px-4 pt-5 pb-8 space-y-5 animate-fadeIn">
+    <div className={embedded ? 'space-y-4 animate-fadeIn' : 'px-4 pt-5 pb-8 space-y-5 animate-fadeIn'}>
       <CategoryEditorForm
         language={language}
         theme={theme}

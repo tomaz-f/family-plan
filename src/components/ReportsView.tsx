@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { BarChart3 } from 'lucide-react';
 import { TransactionType } from '../types';
+import { useIsDesktop } from '../hooks/useIsDesktop';
 import { formatMonthLabel } from '../utils/format';
 import {
   aggregateBalanceCurve,
@@ -9,38 +11,17 @@ import {
   aggregateInstallmentProjections,
   aggregateMonthlyBurnRate,
 } from '../utils/reportAggregators';
-import {
-  ReportsViewProps,
-  VIRTUAL_SLIDE_MAP,
-} from './reports/reportsTypes';
+import { REPORT_SLIDES, ReportsViewProps, VIRTUAL_SLIDE_MAP } from './reports/reportsTypes';
 import { useReportsCarousel } from './reports/useReportsCarousel';
 import { useReportsData } from './reports/useReportsData';
 import { ReportsQuickSelectorBar } from './reports/ReportsQuickSelectorBar';
-import { ReportsCategorySection } from './reports/ReportsCategorySection';
-import { ReportsCardsSection } from './reports/ReportsCardsSection';
-import { CashflowEvolutionChart } from './reports/CashflowEvolutionChart';
-import { BalanceCurveChart } from './reports/BalanceCurveChart';
-import { InstallmentProjectionChart } from './reports/InstallmentProjectionChart';
-import { BurnRateChart } from './reports/BurnRateChart';
-import { BudgetRigidityChart } from './reports/BudgetRigidityChart';
-import { FuelEfficiencyChart } from './reports/FuelEfficiencyChart';
+import { ReportsCardRenderer } from './reports/ReportsCardRenderer';
 
-export type {
-  ReportsViewProps,
-  CategorySliceItem,
-  NonCardInstallmentPlan,
-  AmortizationTimelinePoint,
-  InstallmentExpenseTrackerProps,
-  MonthCommitmentProjection,
-  FutureCommitmentsForecastProps,
-} from './reports/reportsTypes';
-export { useInstallmentPlans } from './reports/useInstallmentPlans';
-export { InstallmentExpenseTracker } from './reports/InstallmentExpenseTracker';
-export { FutureCommitmentsForecast } from './reports/ReportsCashFlowSection';
+export type { ReportsViewProps };
 
 /**
- * Reports View hosting 8 financial reports inside a 60fps gesture-driven
- * infinite circular carousel synchronized with a right-aligned Quick Selector Dropdown.
+ * Reports View hosting 8 financial reports inside a 2-column desktop Bento grid
+ * (>= 1024px) or a 60fps gesture-driven infinite circular carousel on mobile.
  */
 export const ReportsView: React.FC<ReportsViewProps> = ({
   selectedMonth,
@@ -54,6 +35,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   recurringTemplates = [],
   fuelLogs = [],
 }) => {
+  const isDesktop = useIsDesktop();
   const [selectedType, setSelectedType] = useState<TransactionType>('expense');
   const [selectedCardFilter, setSelectedCardFilter] = useState<string>('all');
 
@@ -98,10 +80,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const handleSelectCardFilter = useCallback(
     (cardId: string) => {
       setSelectedCardFilter(cardId);
-      setCardCategorySelection({
-        scope: `${selectedMonth}__${cardId}`,
-        id: null,
-      });
+      setCardCategorySelection({ scope: `${selectedMonth}__${cardId}`, id: null });
     },
     [selectedMonth]
   );
@@ -121,173 +100,117 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   }, [cardScopeKey]);
 
   const data = useReportsData({
-    transactions,
-    categories,
-    creditCards,
-    selectedMonth,
-    selectedType,
-    selectedCardFilter,
-    activeCategoryId,
-    activeCardCategoryId,
-    language,
+    transactions, categories, creditCards, selectedMonth,
+    selectedType, selectedCardFilter, activeCategoryId, activeCardCategoryId, language,
   });
 
   const cashflowSummary = useMemo(
     () => aggregateCashflowEvolution(transactions, creditCards, selectedMonth, language),
     [transactions, creditCards, selectedMonth, language]
   );
-
   const balanceCurveSummary = useMemo(
-    () =>
-      aggregateBalanceCurve(
-        transactions,
-        creditCards,
-        initialBalance,
-        selectedMonth,
-        language
-      ),
+    () => aggregateBalanceCurve(transactions, creditCards, initialBalance, selectedMonth, language),
     [transactions, creditCards, initialBalance, selectedMonth, language]
   );
-
   const installmentSummary = useMemo(
-    () =>
-      aggregateInstallmentProjections(
-        transactions,
-        creditCards,
-        recurringTemplates,
-        selectedMonth,
-        language
-      ),
+    () => aggregateInstallmentProjections(transactions, creditCards, recurringTemplates, selectedMonth, language),
     [transactions, creditCards, recurringTemplates, selectedMonth, language]
   );
-
   const burnRateSummary = useMemo(
     () => aggregateMonthlyBurnRate(transactions, creditCards, selectedMonth),
     [transactions, creditCards, selectedMonth]
   );
-
   const budgetRigiditySummary = useMemo(
-    () =>
-      aggregateBudgetRigidity(
-        transactions,
-        creditCards,
-        recurringTemplates,
-        selectedMonth
-      ),
+    () => aggregateBudgetRigidity(transactions, creditCards, recurringTemplates, selectedMonth),
     [transactions, creditCards, recurringTemplates, selectedMonth]
   );
-
-  const fuelEfficiencySummary = useMemo(
-    () => aggregateFuelEfficiency(fuelLogs),
-    [fuelLogs]
-  );
+  const fuelEfficiencySummary = useMemo(() => aggregateFuelEfficiency(fuelLogs), [fuelLogs]);
 
   const monthTitle = formatMonthLabel(selectedMonth, language);
+  const isPt = language === 'pt-BR';
 
-  const renderReportCard = (logicalIdx: number) => {
-    switch (logicalIdx) {
-      case 0:
-        return (
-          <ReportsCategorySection
-            monthTitle={monthTitle}
-            totalCount={data.totalCount}
-            totalAmount={data.totalAmount}
-            selectedType={selectedType}
-            categorySlices={data.categorySlices}
-            activeCategoryId={activeCategoryId}
-            activeSlice={data.activeSlice}
-            activeCategoryTransactions={data.activeCategoryTransactions}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-            onSelectType={setSelectedType}
-            onToggleCategory={handleToggleCategory}
-            onResetCategory={handleResetCategory}
-          />
-        );
-
-      case 1:
-        return (
-          <ReportsCardsSection
-            creditCards={creditCards}
-            selectedCardFilter={selectedCardFilter}
-            cardCategorySlices={data.cardCategorySlices}
-            cardTotalAmount={data.cardTotalAmount}
-            cardTotalCount={data.cardTotalCount}
-            activeCardCategoryId={activeCardCategoryId}
-            activeCardSlice={data.activeCardSlice}
-            activeCardCategoryTransactions={data.activeCardCategoryTransactions}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-            onSelectCardFilter={handleSelectCardFilter}
-            onToggleCardCategory={handleToggleCardCategory}
-            onResetCardCategory={handleResetCardCategory}
-          />
-        );
-
-      case 2:
-        return (
-          <CashflowEvolutionChart
-            summary={cashflowSummary}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-          />
-        );
-
-      case 3:
-        return (
-          <BalanceCurveChart
-            summary={balanceCurveSummary}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-          />
-        );
-
-      case 4:
-        return (
-          <InstallmentProjectionChart
-            summary={installmentSummary}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-          />
-        );
-
-      case 5:
-        return (
-          <BurnRateChart
-            summary={burnRateSummary}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-          />
-        );
-
-      case 6:
-        return (
-          <BudgetRigidityChart
-            summary={budgetRigiditySummary}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-          />
-        );
-
-      case 7:
-      default:
-        return (
-          <FuelEfficiencyChart
-            summary={fuelEfficiencySummary}
-            currency={currency}
-            language={language}
-            isOled={isOled}
-          />
-        );
-    }
+  const rendererProps = {
+    monthTitle,
+    currency,
+    language,
+    isOled,
+    selectedType,
+    activeCategoryId,
+    creditCards,
+    selectedCardFilter,
+    activeCardCategoryId,
+    data,
+    cashflowSummary,
+    balanceCurveSummary,
+    installmentSummary,
+    burnRateSummary,
+    budgetRigiditySummary,
+    fuelEfficiencySummary,
+    onSelectType: setSelectedType,
+    onToggleCategory: handleToggleCategory,
+    onResetCategory: handleResetCategory,
+    onSelectCardFilter: handleSelectCardFilter,
+    onToggleCardCategory: handleToggleCardCategory,
+    onResetCardCategory: handleResetCardCategory,
   };
+
+  if (isDesktop) {
+    return (
+      <div className="pb-6 animate-fadeIn w-full space-y-4">
+        <div
+          className={`rounded-2xl border px-5 py-3.5 flex items-center justify-between gap-4 transition-colors ${
+            isOled
+              ? 'bg-[#0D1117] border-[#21262D] text-[#F8FAFC]'
+              : 'bg-white border-[#E2E8F0] text-slate-900 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                isOled ? 'bg-[#161B22] text-[#10B981]' : 'bg-[#F1F5F9] text-[#10B981]'
+              }`}
+            >
+              <BarChart3 size={18} />
+            </div>
+            <div className="min-w-0">
+              <h2
+                className={`text-base font-bold tracking-tight truncate ${
+                  isOled ? 'text-[#F8FAFC]' : 'text-[#0F172A]'
+                }`}
+              >
+                {isPt ? 'Relatórios Analíticos' : 'Analytical Reports'}
+              </h2>
+              <p
+                className={`text-xs capitalize truncate ${
+                  isOled ? 'text-[#94A3B8]' : 'text-[#64748B]'
+                }`}
+              >
+                {monthTitle}
+              </p>
+            </div>
+          </div>
+
+          <span
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border shrink-0 tabular-nums ${
+              isOled
+                ? 'bg-[#161B22] text-[#94A3B8] border-[#21262D]'
+                : 'bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]'
+            }`}
+          >
+            {REPORT_SLIDES.length} {isPt ? 'gráficos' : 'charts'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 items-start">
+          {REPORT_SLIDES.map((slide) => (
+            <div key={`bento-report-${slide.index}`} className="min-w-0">
+              <ReportsCardRenderer logicalIdx={slide.index} {...rendererProps} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-6 animate-fadeIn max-w-lg mx-auto w-full">
@@ -325,7 +248,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         >
           {VIRTUAL_SLIDE_MAP.map((logicalIdx, slotIdx) => (
             <div key={`virtual-slide-${slotIdx}`} className="w-full shrink-0 px-0.5">
-              {renderReportCard(logicalIdx)}
+              <ReportsCardRenderer logicalIdx={logicalIdx} {...rendererProps} />
             </div>
           ))}
         </div>

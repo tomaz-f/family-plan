@@ -47,7 +47,7 @@ export const FuelStatsSection: React.FC<FuelStatsSectionProps> = ({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 2xl:grid-cols-3 gap-2.5">
         {/* 1. Gasto no Mês */}
         <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between min-h-[72px]">
           <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">

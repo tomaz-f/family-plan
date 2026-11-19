@@ -8,8 +8,9 @@ interface FamilyVaultSyncSectionProps {
   language: AppLanguage;
   familyId?: string | null;
   masterKey?: string | null;
+  embedded?: boolean;
   onLeaveFamily?: () => void;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export const FamilyVaultSyncSection: React.FC<FamilyVaultSyncSectionProps> = ({
@@ -17,6 +18,7 @@ export const FamilyVaultSyncSection: React.FC<FamilyVaultSyncSectionProps> = ({
   language,
   familyId,
   masterKey,
+  embedded = false,
   onLeaveFamily,
   onClose,
 }) => {
@@ -66,7 +68,7 @@ export const FamilyVaultSyncSection: React.FC<FamilyVaultSyncSectionProps> = ({
   };
 
   return (
-    <div className="px-4 pt-5 pb-8 space-y-4 animate-fadeIn">
+    <div className={embedded ? 'space-y-4 animate-fadeIn' : 'px-4 pt-5 pb-8 space-y-4 animate-fadeIn'}>
       {familyId && (
         <div className="settings-group-card p-4 rounded-2xl bg-white border border-slate-200 space-y-4">
           <div className="flex items-center gap-2.5">
@@ -190,7 +192,7 @@ export const FamilyVaultSyncSection: React.FC<FamilyVaultSyncSectionProps> = ({
                       type="button"
                       onClick={() => {
                         onLeaveFamily();
-                        onClose();
+                        onClose?.();
                       }}
                       className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold active:scale-95 shadow-sm"
                     >
